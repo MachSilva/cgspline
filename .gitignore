@@ -21,3 +21,4 @@ x64/
 *.spl
 *.toc
 *.vcxproj.user
+**/imgui.ini

@@ -6,7 +6,6 @@
 #include <graph/ComponentProxy.h>
 #include <graph/PrimitiveProxy.h>
 #include "BezierPatches.h"
-#include "Singleton.h"
 
 namespace cg
 {
