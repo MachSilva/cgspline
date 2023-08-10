@@ -1,7 +1,6 @@
 .idea/
 .vs/
 .vscode/
-assets/
 cmake-build*/
 out/
 x64/
