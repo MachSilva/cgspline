@@ -156,8 +156,9 @@ static const char* _tcs = STRINGIFY(
         if (any(greaterThan(bounds0, limit)) || any(lessThan(bounds1, -limit)))
             return 0.0; // Discard patch before tessellation.
 
-        vec2 rect = (bounds1.xy - bounds0.xy) * 20.0;
-        return clamp(max(rect.x, rect.y), 2.0, 64.0);
+        vec2 factor = 0.1 * vec2(viewportMatrix[0][0], viewportMatrix[1][1]);
+        vec2 rect = (bounds1.xy - bounds0.xy) * factor;
+        return clamp(max(rect.x, rect.y), 4.0, 64.0);
     }
 
     void main()
@@ -165,11 +166,11 @@ static const char* _tcs = STRINGIFY(
         gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
         if (gl_InvocationID == 0)
         {
-            // float value = level();
+            float value = level();
 
             gl_TessLevelOuter[0] = gl_TessLevelOuter[1] =
             gl_TessLevelOuter[2] = gl_TessLevelOuter[3] = 
-            gl_TessLevelInner[0] = gl_TessLevelInner[1] = 8;
+            gl_TessLevelInner[0] = gl_TessLevelInner[1] = value;
         }
     }
 );
@@ -245,12 +246,15 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment):
 
 SurfacePipeline::~SurfacePipeline() {}
 
-bool Surface::localIntersect(const Ray3f&, Intersection&) const
+bool Surface::localIntersect(const Ray3f& ray, Intersection& hit) const
 {
+    // Bézier clipping algorithm
+    
+
     return false;
 }
 
-bool Surface::localIntersect(const Ray3f&) const
+bool Surface::localIntersect(const Ray3f& ray) const
 {
     return false;
 }
@@ -290,9 +294,14 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     pipeline->use();
     s->bind();
 
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glPatchParameteri(GL_PATCH_VERTICES, 16);
     glDrawElements(GL_PATCHES, s->indexes()->size(), GL_UNSIGNED_INT, 0);
+
+    // if (renderer.flags.isSet(GLRenderer::DrawBounds))
+    // {
+
+    // }
 
     return true;
 }

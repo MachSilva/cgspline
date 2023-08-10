@@ -14,6 +14,7 @@ add_executable(cgspline
     src/BezierPatches.cpp
     src/Main.cpp
     src/MainWindow.cpp
+    src/PatchBVH.cpp
 )
 
 target_link_libraries(cgspline cg)
