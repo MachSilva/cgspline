@@ -7,7 +7,10 @@ add_subdirectory(Ds)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
-set(CMAKE_EXECUTABLE_SUFFIX ".out")
+
+if(UNIX)
+    set(CMAKE_EXECUTABLE_SUFFIX ".out")
+endif()
 
 add_executable(cgspline
     src/Surface.cpp
