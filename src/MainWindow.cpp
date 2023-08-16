@@ -11,6 +11,7 @@
 namespace cg
 {
 
+#ifndef NDEBUG
 static
 void debugCallback(GLenum source,
     GLenum type,
@@ -45,6 +46,7 @@ void debugCallback(GLenum source,
         msg[type], msg[severity], message);
     fprintf(stderr, "\n");
 }
+#endif
 
 void MainWindow::beginInitialize()
 {
@@ -64,8 +66,10 @@ void MainWindow::beginInitialize()
 
     Assets::initialize();
 
+#ifndef NDEBUG
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(debugCallback, this);
+#endif
 }
 
 void MainWindow::initializeScene()
@@ -93,8 +97,8 @@ void MainWindow::initializeScene()
         createSurfaceObject(*p, s);
     }
 
-    //auto pipeline = new SurfacePipeline(0, *editor()->fragmentShader());
-    //editor()->setPipeline(GLRenderer::PipelineCode::Surface, pipeline);
+    auto pipeline = new SurfacePipeline(0, *editor()->fragmentShader());
+    editor()->setPipeline(GLRenderer::PipelineCode::Surface, pipeline);
 }
 
 void MainWindow::render()
