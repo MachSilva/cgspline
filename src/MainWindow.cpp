@@ -97,8 +97,14 @@ void MainWindow::initializeScene()
         createSurfaceObject(*p, s);
     }
 
-    auto pipeline = new SurfacePipeline(0, *editor()->fragmentShader());
-    editor()->setPipeline(GLRenderer::PipelineCode::Surface, pipeline);
+    editor()->setPipeline(
+        GLRenderer::PipelineCode::Surface,
+        new SurfacePipeline(0, *editor()->fragmentShader())
+    );
+    editor()->setPipeline(
+        GLRenderer::PipelineCode::Custom,
+        new SurfaceContourPipeline(0, *editor()->fragmentShader())
+    );
 }
 
 void MainWindow::render()
@@ -112,10 +118,26 @@ void MainWindow::render()
 
     if (auto obj = currentNode()->as<graph::SceneObject>())
     {
-        auto t = obj->transform();
+        const auto t = obj->transform();
         drawSelectedObject(*obj);
         editor()->drawTransform(t->position(), t->rotation());
     }
+}
+
+void MainWindow::drawSelectedObject(const graph::SceneObject& object)
+{
+    if (!object.visible()) return;
+
+    for (auto component : object.components())
+    {
+        if (auto s = dynamic_cast<const SurfaceProxy*>(component); s != nullptr)
+            s->mapper()->renderContour(*editor());
+    }
+
+    SceneWindow::drawComponents(object);
+    
+    for (auto& child : object.children())
+        drawSelectedObject(*child);
 }
 
 void MainWindow::gui()
@@ -124,6 +146,56 @@ void MainWindow::gui()
     hierarchyWindow();
     inspectorWindow();
     editorView();
+}
+
+graph::SceneObject* MainWindow::pickObject(int x, int y) const
+{
+    auto ray = makeRay(x, y);
+    auto distance = math::Limits<float>::inf();
+    return pickObject(_scene->root(), ray, distance);
+}
+
+graph::SceneObject *MainWindow::pickObject(graph::SceneObject *obj,
+    const Ray3f &ray,
+    float &distance) const
+{
+    if (!obj->visible()) return nullptr;
+
+    graph::SceneObject* nearest = nullptr;
+
+    for (graph::Component* component : obj->components())
+    {
+        Intersection hit;
+        hit.distance = math::Limits<float>::inf();
+        hit.object = nullptr;
+
+        if (auto p = dynamic_cast<graph::PrimitiveProxy*>(component))
+        {
+            auto primitive = p->mapper()->primitive();
+            if (primitive->intersect(ray, hit) == false)
+                continue;
+        }
+        else if (auto s = dynamic_cast<SurfaceProxy*>(component))
+        {
+            auto surface = s->mapper()->surface();
+            if (surface.intersect(ray, hit) == false)
+                continue;
+        }
+        else continue; // No hit => next iteration
+
+        // In case of a hit
+        if (hit.distance < distance)
+        {
+            distance = hit.distance;
+            nearest = obj;
+        }
+    }
+
+    for (auto& child : obj->children())
+        if (auto tmp = pickObject(&child, ray, distance))
+            nearest = tmp;
+
+    return nearest;
 }
 
 graph::SceneObject* MainWindow::createSurfaceObject(BezierPatches &p, const char *name)

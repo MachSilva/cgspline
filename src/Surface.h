@@ -64,14 +64,17 @@ public:
 
     void update() override;
     bool render(GLRenderer&) const override;
+    bool renderContour(GLRenderer&) const;
 
     Bounds3f bounds() const override;
     Primitive* primitive() const override;
 
     Surface& surface() { return *_surface; }
 
-private:
+protected:
     Reference<Surface> _surface;
+
+    void updateMatrixBlock(GLRenderer& renderer) const;
 };
 
 // Surface as a component
@@ -85,7 +88,10 @@ public:
     void transformChanged() override;
     void setVisible(bool value) override;
 
-private:
+    Actor* actor() const { return _actor; }
+    SurfaceMapper* mapper() const { return _object; }
+
+protected:
     Reference<Actor> _actor;
 };
 
@@ -94,6 +100,18 @@ class SurfacePipeline : public GLRenderer::Pipeline
 public:
     SurfacePipeline(GLuint vertex, GLuint fragment);
     ~SurfacePipeline() override;
+
+    GLSL::Program& tessellationProgram() { return _program; }
+
+protected:
+    GLSL::Program _program;
+};
+
+class SurfaceContourPipeline : public GLRenderer::Pipeline
+{
+public:
+    SurfaceContourPipeline(GLuint vertex, GLuint fragment);
+    ~SurfaceContourPipeline() override;
 
     GLSL::Program& tessellationProgram() { return _program; }
 

@@ -1,4 +1,5 @@
 #include "PatchBVH.h"
+#include "Spline.h"
 
 namespace cg
 {

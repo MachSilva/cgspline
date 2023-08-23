@@ -19,9 +19,15 @@ public:
     // void renderScene() override;
     void gui() override;
     // bool onResize(int width, int height) override;
+    graph::SceneObject* pickObject(int x, int y) const override;
 
-private:
+protected:
     graph::SceneObject* createSurfaceObject(BezierPatches& p, const char* name);
+    void drawSelectedObject(const graph::SceneObject& object);
+
+    graph::SceneObject* pickObject(graph::SceneObject* obj,
+        const Ray3f& ray,
+        float& distance) const;
 };
 
 } // namespace cg

@@ -30,7 +30,11 @@ private:
     GLuint _vao;
     Reference<GLStorage<vec4f>> _points {nullptr};
     Reference<GLStorage<uint32_t>> _indexes {nullptr};
-    const Index2<uint16_t> _degree {3U,3U};
+    static constexpr const struct
+    {
+        uint16_t u, v;
+    } _degree { .u = 3U, .v = 3U };
+    // const Index2<uint16_t> _degree {3U,3U};
 };
 
 } // namespace cg
