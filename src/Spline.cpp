@@ -30,10 +30,7 @@ bool doSubdivision(Intersection& hit,
     float tmin, tmax;
 
     // First iteration (no need to use `slice`)
-    auto pb = boundingbox(std::views::transform(
-        std::views::counted(patch, 16),
-        [&](uint32_t i) -> const vec4f& { return buffer[i]; }
-    ));
+    auto pb = boundingbox(buffer, patch);
     if (! pb.intersect(ray, tmin, tmax))
         return false;
 
@@ -72,14 +69,14 @@ bool doSubdivision(Intersection& hit,
                 // report hit
                 auto t = .5f * (tmin + tmax);
 
-#ifndef NDEBUG
-                fprintf(stderr,
-                    "doSubdivision: hit at (u = %.05f, v = %.05f), distance: %.02f%s best: %.02f"
-                    ", patch %04X\n",
-                    x, y, t, (t < hit.distance ? " <" : ", "), hit.distance,
-                    (reinterpret_cast<std::ptrdiff_t>(patch)) & 0xFFFF
-                );
-#endif
+// #ifndef NDEBUG
+//                 fprintf(stderr,
+//                     "doSubdivision: hit at (u = %.05f, v = %.05f), distance: %.02f%s best: %.02f"
+//                     ", patch %04X\n",
+//                     x, y, t, (t < hit.distance ? " <" : ", "), hit.distance,
+//                     (reinterpret_cast<std::ptrdiff_t>(patch)) & 0xFFFF
+//                 );
+// #endif
                 if (t < hit.distance)
                 {
                     hit.distance = t;

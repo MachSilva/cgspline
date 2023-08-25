@@ -155,9 +155,9 @@ void subpatch(
     real vmax)
 {
     for (int i = 0; i < 4; i++)
-		slice<4>(patch + i, vmin, vmax);
-	for (int i = 0; i < 4; i++)
-		slice(patch + 4*i, umin, umax);
+        slice<4>(patch + i, vmin, vmax);
+    for (int i = 0; i < 4; i++)
+        slice(patch + 4*i, umin, umax);
 }
 
 template<std::forward_iterator It>
@@ -185,6 +185,15 @@ inline
 auto boundingbox(V v) -> Bounds3<typename std::ranges::range_value_t<V>::value_type>
 {
     return boundingbox(std::begin(v), std::end(v));
+}
+
+template<typename vec, typename idx>
+auto boundingbox(const vec* buffer, const idx patch[16])
+{
+    return boundingbox(std::views::transform(
+        std::views::counted(patch, 16),
+        [&](idx i) -> const vec& { return buffer[i]; }
+    ));
 }
 
 template<typename vec, typename real, typename idx>
