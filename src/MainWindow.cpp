@@ -84,37 +84,40 @@ void MainWindow::initializeScene()
     createPrimitiveObject(*GLGraphics3::box(), "Box");
 
     // Load surfaces
-    const char* surfaces[] = {
-        "bezier/teacup",
-        "bezier/teapot",
-        "bezier/teaspoon"
+    std::pair<const char*, vec3f> surfaces[] = {
+        {"bezier/teacup", vec3f(0, 0, 0)},
+        {"bezier/teapot", vec3f(-2.5, 0, 0)},
+        {"bezier/teaspoon", vec3f(1.5, 0, 0)}
     };
 
-    for (auto& s : surfaces)
+    for (auto& [s, t] : surfaces)
     {
         auto asset = Application::assetFilePath(s);
         auto p = BezierPatches::load(asset.c_str());
-        createSurfaceObject(*p, s);
+        createSurfaceObject(*p, s)->transform()->translate(t);
     }
 
     editor()->setPipeline(
-        GLRenderer::PipelineCode::Surface,
+        GLRenderer::Surface,
         new SurfacePipeline(0, *editor()->fragmentShader())
     );
     editor()->setPipeline(
-        GLRenderer::PipelineCode::Custom,
+        "SurfCont"_ID8,
         new SurfaceContourPipeline(0, *editor()->fragmentShader())
     );
 }
 
 void MainWindow::render()
 {
+    if (_viewMode != ViewMode::Editor)
+    {
+        renderScene();
+        return;
+    }
+
     auto e = editor();
     e->render();
     e->drawXZPlane(10, 1);
-
-    // auto scene = e->scene();
-    // scene->lights();
 
     if (auto obj = currentNode()->as<graph::SceneObject>())
     {
@@ -124,13 +127,47 @@ void MainWindow::render()
     }
 }
 
+static volatile int _progress[2];
+
+static
+void progressCallback(int i, int n)
+{
+    _progress[0] = i;
+    _progress[1] = n;
+}
+
+void MainWindow::renderScene()
+{
+    if (_viewMode != ViewMode::Renderer)
+        return;
+    
+    auto camera = graph::CameraProxy::current();
+    if (!camera)
+        camera = editor()->camera();
+    
+    if (_image == nullptr)
+    {
+        // Create task
+        // if (!_renderTask.valid()) {}
+        _image = new GLImage(width(), height());
+        if (_rayTracer == nullptr)
+            _rayTracer = new RayTracer(*scene(), *camera);
+        else
+            _rayTracer->setCamera(*camera);
+        // _rayTracer->setProgressCallback(progressCallback);
+        _rayTracer->setMaxRecursionLevel(6);
+        _rayTracer->renderImage(*_image);
+    }
+    _image->draw(0, 0);
+}
+
 void MainWindow::drawSelectedObject(const graph::SceneObject& object)
 {
     if (!object.visible()) return;
 
     for (auto component : object.components())
     {
-        if (auto s = dynamic_cast<const SurfaceProxy*>(component); s != nullptr)
+        if (auto s = dynamic_cast<const SurfaceProxy*>(component))
             s->mapper()->renderContour(*editor());
     }
 
@@ -146,6 +183,25 @@ void MainWindow::gui()
     hierarchyWindow();
     inspectorWindow();
     editorView();
+    controlWindow();
+}
+
+void MainWindow::controlWindow()
+{
+    ImGui::Begin("Control Window");
+
+    if (ImGui::Button("Render"))
+    {
+        _viewMode = ViewMode::Renderer;
+        _image = nullptr;
+    }
+    if (ImGui::Button("Clear"))
+    {
+        _viewMode = ViewMode::Editor;
+        _image = nullptr;
+    }
+
+    ImGui::End();
 }
 
 graph::SceneObject* MainWindow::pickObject(int x, int y) const

@@ -13,12 +13,13 @@ if(UNIX)
 endif()
 
 add_executable(cgspline
-    src/Surface.cpp
-    src/Spline.cpp
     src/BezierPatches.cpp
     src/Main.cpp
     src/MainWindow.cpp
     src/PatchBVH.cpp
+    src/RayTracer.cpp
+    src/Spline.cpp
+    src/Surface.cpp
 )
 
 target_link_libraries(cgspline cg)

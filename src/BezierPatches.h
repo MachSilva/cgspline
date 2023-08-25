@@ -22,6 +22,9 @@ public:
 
     GLStorage<vec4f>* points() { return _points; }
     GLStorage<uint32_t>* indexes() { return _indexes; }
+
+    const GLStorage<vec4f>* points() const { return _points; }
+    const GLStorage<uint32_t>* indexes() const { return _indexes; }
     
     static
     Reference<BezierPatches> load(const char* filename);

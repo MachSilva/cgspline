@@ -6,6 +6,7 @@
 #include <graph/ComponentProxy.h>
 #include <graph/PrimitiveProxy.h>
 #include "BezierPatches.h"
+#include "PatchBVH.h"
 
 namespace cg
 {
@@ -44,7 +45,8 @@ protected:
     bool localIntersect(const Ray3f&) const override;
 
 public:
-    Surface(BezierPatches* patches) : _patches{patches} {}
+    Surface(BezierPatches* patches)
+        : _patches{patches}, _bvh{new PatchBVH(*patches)} {}
 
     BezierPatches* patches() const { return _patches; }
     void setPatches(BezierPatches* p) { _patches = p; }
@@ -54,6 +56,7 @@ public:
 
 private:
     Reference<BezierPatches> _patches;
+    Reference<PatchBVH> _bvh;
 };
 
 // Surface as some object that knows to render itself

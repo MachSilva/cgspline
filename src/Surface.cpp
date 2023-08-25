@@ -396,41 +396,19 @@ SurfaceContourPipeline::~SurfaceContourPipeline() {}
 
 bool Surface::localIntersect(const Ray3f& ray, Intersection& hit) const
 {
-    auto patches = this->patches();
-
-    uint32_t patchCount = patches->count();
-    auto points = patches->points()->map(GL_READ_ONLY);
-    auto indexes = patches->indexes()->map(GL_READ_ONLY);
-
-    bool result = false;
-
-    fprintf(stderr,
-        "localIntersect: surface 0x%08x\n",
-        this->_patches.get()
-    );
-
-    for (uint32_t i = 0; i < patchCount; i++)
-    {
-        // TODO Create BVH
-        // fprintf(stderr, "localIntersect: patch %2i\n", i);
-
-        const uint32_t* patch = indexes.get() + 16*i;
-        if (spline::doSubdivision(hit, ray, points.get(), patch))
-        {
-            result = true;
-            hit.object = this;
-            hit.triangleIndex = i;
-        }
-    }
-
-    return result;
+    _bvh->map();
+    bool b = _bvh->intersect(ray, hit);
+    _bvh->unmap();
+    if (b) hit.object = this;
+    return b;
 }
 
 bool Surface::localIntersect(const Ray3f& ray) const
 {
-    Intersection hit;
-    hit.distance = math::Limits<float>::inf();
-    return localIntersect(ray, hit);
+    _bvh->map();
+    bool b = _bvh->intersect(ray);
+    _bvh->unmap();
+    return b;
 }
 
 vec3f Surface::normal(const Intersection&) const
@@ -440,7 +418,7 @@ vec3f Surface::normal(const Intersection&) const
 
 Bounds3f Surface::bounds() const
 {
-    return {};
+    return _bvh->bounds();
 }
 
 void SurfaceMapper::update()
@@ -463,7 +441,7 @@ void SurfaceMapper::updateMatrixBlock(GLRenderer& renderer) const
 
 bool SurfaceMapper::render(GLRenderer& renderer) const
 {
-    auto pipeline = renderer.pipeline(GLRenderer::PipelineCode::Surface);
+    auto pipeline = renderer.pipeline(GLRenderer::Surface);
     if (!pipeline) return false;
 
     auto s = _surface->patches();    
@@ -481,7 +459,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
 
 bool SurfaceMapper::renderContour(GLRenderer& renderer) const
 {
-    auto pipeline = renderer.pipeline(GLRenderer::PipelineCode::Custom);
+    auto pipeline = renderer.pipeline("SurfCont"_ID8);
     if (!pipeline) return false;
 
     auto s = _surface->patches();    

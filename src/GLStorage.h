@@ -11,11 +11,18 @@ namespace cg
 template<typename T>
 class GLStorage : public SharedObject
 {
-    auto guard(T* ptr)
+    auto guard(T* ptr) //-> std::unique_ptr<T[],void(T*)>
     {
         assert(ptr);
         auto del = [this](T*) { this->unmap(); };
         return std::unique_ptr<T[],decltype(del)>(ptr, del);
+    }
+
+    auto guard(const T* ptr) const //-> std::unique_ptr<const T[],void(const T*)>
+    {
+        assert(ptr);
+        auto del = [this](const T*) { this->unmap(); };
+        return std::unique_ptr<const T[],decltype(del)>(ptr, del);
     }
 
 public:
@@ -44,7 +51,12 @@ public:
         return guard(static_cast<T*>(glMapNamedBuffer(_buffer, access)));
     }
 
-    void unmap() { glUnmapNamedBuffer(_buffer); }
+    auto map() const
+    {
+        return guard(static_cast<const T*>(glMapNamedBuffer(_buffer, GL_READ_ONLY)));
+    }
+
+    void unmap() const { glUnmapNamedBuffer(_buffer); }
 
     void resize(uint32_t size, GLenum usage = GL_DYNAMIC_DRAW)
     {
@@ -66,6 +78,8 @@ public:
 
     operator GLuint () const { return _buffer; }
     auto buffer() const { return _buffer; }
+
+    // operator GLStorage<const >
 
 private:
     GLuint _buffer;
