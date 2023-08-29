@@ -46,11 +46,15 @@ protected:
 
 public:
     Surface(BezierPatches* patches)
-        : _patches{patches}, _bvh{new PatchBVH(*patches)} {}
+        : _patches{patches}, _bvh{new PatchBVH(*patches)}
+    {
+        _material = Material::defaultMaterial();
+    }
 
     BezierPatches* patches() const { return _patches; }
     void setPatches(BezierPatches* p) { _patches = p; }
 
+    vec4f point(const Intersection&) const;
     vec3f normal(const Intersection&) const override;
     Bounds3f bounds() const override;
 

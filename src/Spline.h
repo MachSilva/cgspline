@@ -3,21 +3,30 @@
 #include <geometry/Bounds3.h>
 #include <geometry/Index3.h>
 #include <geometry/Intersection.h>
+#include <cassert>
+#include <cstdint>
 #include <algorithm>
 #include <concepts>
-#include <cstdint>
 #include <ranges>
 #include <span>
 #include <stack>
 
+#define SPL_DERIVATIVE_MAXPOINTS 8u
+#define SPL_NORMAL_FIXVALUE 0.0001f
+
+// Except where noted, the patches are assumed to be bicubic Bézier patches.
+
 namespace cg::spline
 {
+
+inline constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
 
 template<typename V, typename C>
 concept vector_component_type_check = std::same_as<C, typename V::value_type>;
 
 template<typename T>
-concept surface = requires (const T s, typename T::value_type u, typename T::value_type v, int i)
+concept surface =
+requires (const T s, typename T::value_type u, typename T::value_type v, int i)
 {
     { s(u,v) } -> std::same_as<typename T::point_type>;
     { s.normal(u,v) } -> std::same_as<typename T::point_type>;
@@ -28,27 +37,90 @@ concept surface = requires (const T s, typename T::value_type u, typename T::val
 };
 
 template<typename T>
-concept surface_cage = requires (T s, int i, int j)
+concept surface_cage = requires (const T s, int i, int j)
 {
-    { s[i] } -> std::same_as<typename T::point_type&>;
-    { s.point(i,j) } -> std::same_as<typename T::point_type&>;
+    { s[i] } -> std::same_as<const typename T::point_type&>;
+    { s.point(i,j) } -> std::same_as<const typename T::point_type&>;
     { s.shape(i) } -> std::integral;
     { s.size() } -> std::integral;
+    requires std::copy_constructible<typename T::point_type>;
+    requires requires (T t)
+    {
+        { t[i] } -> std::same_as<typename T::point_type&>;
+        { t.point(i,j) } -> std::same_as<typename T::point_type&>;
+    };
 };
 
-template<std::ranges::random_access_range V,
-    typename real = std::ranges::range_value_t<V>::value_type>
-auto& deCasteljau(V p, real u)
+template<typename vec, typename idx>
+class PatchRef
 {
-    // deCasteljau algorithm (The NURBS Book, page 24)
-    const real t = 1 - u;
+public:
+    using point_type = vec;
+    using index_type = idx;
 
-    uint32_t size = p.size();
-    for (uint32_t k = 1; k < size; ++k)
-        for (uint32_t i = 0; i < size - k; ++i)
-            p[i] = t * p[i] + u * p[i + 1];
-    return p[0];
-}
+    explicit
+    PatchRef(vec* pointBuffer, idx* patchIndexes)
+        : _points{pointBuffer}, _indexes{patchIndexes} {}
+    
+    explicit
+    PatchRef(vec* pointBuffer, idx* indexBuffer, idx patchNumber)
+        : PatchRef(pointBuffer, indexBuffer + 16*patchNumber) {}
+    
+    PatchRef(PatchRef&&) = default;
+    PatchRef(const PatchRef&) = default;
+
+    const vec& operator[] (uint32_t i) const { return _points[_indexes[i]]; }
+    vec& operator[] (uint32_t i) { return _points[_indexes[i]]; }
+
+    // ---Column-major format
+
+    // const vec& point(uint32_t i, uint32_t j) const { return (*this)[4*i + j]; }
+    // vec& point(uint32_t i, uint32_t j) { return (*this)[4*i + j]; }
+
+    const vec& point(uint32_t i, uint32_t j) const { return (*this)[4*j + i]; }
+    vec& point(uint32_t i, uint32_t j) { return (*this)[4*j + i]; }
+
+    constexpr uint32_t shape(uint32_t i) const noexcept
+    {
+        return i < 2 ? 4 : 0;
+    }
+
+    constexpr uint32_t size() const noexcept { return 16; }
+
+    auto asRange() const
+    {
+        return std::views::transform(
+            std::views::counted(_indexes, 16),
+            [&](idx i) -> const vec& { return _points[i]; }
+        );
+    }
+
+protected:
+    vec* _points {};
+    idx* _indexes {};
+
+    static_assert(surface_cage<PatchRef<vec,idx>>);
+};
+
+/**
+ * De Casteljau algorithm for computing a cubic Bézier curve.
+ */
+vec4f& deCasteljau(vec4f p[], float u);
+
+/**
+ * De Casteljau algorithm for computing a cubic Bézier curve derivative.
+ */
+vec4f& deCasteljauDx(vec4f p[], float u);
+
+// vec4f derivativeU(const PatchRef<vec4f,uint32_t> &s, float u, float v);
+// vec4f derivativeV(const PatchRef<vec4f,uint32_t> &s, float u, float v);
+
+/**
+ * Compute Bézier surface normal at coordinates ( @a u , @a v ).
+ * @warning Not tested with rational Bézier surfaces. Be careful!
+ * @warning Normal not normalized.
+ */
+vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v);
 
 /**
  * Cubic bézier curve splitting at point t.
@@ -76,6 +148,8 @@ template<typename vec, typename real>
 requires vector_component_type_check<vec,real> 
 void split0(vec C[4], real t)
 {
+    assert(0.0 <= t && t <= 1.0);
+
     const real it = 1 - t;
     vec P5, P6, P8;
 
@@ -93,6 +167,8 @@ template<typename vec, typename real>
 requires vector_component_type_check<vec,real> 
 void split1(vec C[4], real t)
 {
+    assert(0.0 <= t && t <= 1.0);
+
     const real it = 1 - t;
     vec P5, P6, P8;
 
@@ -110,7 +186,8 @@ template<uint32_t _stride = 1, typename vec, typename real>
 requires vector_component_type_check<vec,real> && (_stride > 0)
 void slice(vec *curve, real u, real v)
 {
-    if (u > v) std::swap(u, v);
+    assert(u <= v);
+    // if (u > v) std::swap(u, v);
 
     // `stride_view` is only present in C++23
     auto C = [&](uint32_t i) -> vec& { return curve[i*_stride]; };
@@ -121,7 +198,7 @@ void slice(vec *curve, real u, real v)
     vec P5, P6, P8;
 
     // split1(C, u);
-    if (u > 0)
+    // if (u > 0)
     {
         // C(3) = C(3);
         P6   = u * C(1) + iu * C(0);
@@ -133,7 +210,7 @@ void slice(vec *curve, real u, real v)
     }
 
     // split0(C, vv);
-    if (vv < 1)
+    // if (vv < 1)
     {
         // C(0) = C(0);
         P6   = ivv * C(2) + vv * C(3);
@@ -213,17 +290,149 @@ Bounds3<real> subpatchBoundingbox(
     return boundingbox(std::begin(sub), std::end(sub));
 }
 
-template<typename T>
-bool doBezierClipping(Intersection& hit, const Ray3f& ray, T patch)
-{
-    return false;
-}
+bool doBezierClipping(Intersection& hit,
+    const Ray3f& ray,
+    const vec4f buffer[],
+    const uint32_t patch[16]);
 
 bool doSubdivision(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
     const uint32_t patch[16],
-    float threshold = 0.005f);
+    float threshold = (1.0f/32.0f));
+
+/**
+ * Generic (template) definitions that deals with higher and arbitrary
+ * surface degrees.
+ */
+namespace ext
+{
+
+template<std::ranges::random_access_range V,
+    typename real = std::ranges::range_value_t<V>::value_type>
+auto& deCasteljau(V p, real u)
+{
+    // deCasteljau algorithm (The NURBS Book, page 24)
+    const real t = 1 - u;
+
+    unsigned size = p.size();
+    for (unsigned k = 1; k < size; ++k)
+        for (unsigned i = 0; i < size - k; ++i)
+            p[i] = t * p[i] + u * p[i + 1];
+    return p[0];
+}
+
+template<std::ranges::random_access_range V,
+    typename real = std::ranges::range_value_t<V>::value_type>
+auto& deCasteljauDx(V p, real u)
+{
+    const real t = 1 - u;
+    unsigned size = p.size();
+
+    for (unsigned i = 1; i < size; ++i)
+        p[i - 1] = p[i] - p[i - 1];
+
+    for (unsigned k = 2; k < size; ++k)
+        for (unsigned i = 0; i < size - k; ++i)
+            p[i] = t * p[i] + u * p[i + 1];
+    return p[0];
+}
+
+template<surface_cage S, typename real>
+requires vector_component_type_check<typename S::point_type, real>
+auto interpolate(const S& s, real u, real v) -> S::point_type
+{
+    using vec = typename S::point_type;
+    vec p[MAX_POINTS];
+    vec q[MAX_POINTS];
+
+    auto sizeU = s.shape(0);
+    auto sizeV = s.shape(1);
+    assert(sizeU <= MAX_POINTS && sizeV <= MAX_POINTS);
+
+    const real t = 1 - u;
+    for (int j = 0; j < sizeV; j++)
+    {
+        for (int i = 0; i < sizeU; ++i)
+            p[i] = s.point(i, j);
+        q[j] = deCasteljau(std::span(p, sizeU), u);
+    }
+    return deCasteljau(std::span(q, sizeV), v);
+}
+
+template<surface_cage S, typename real>
+requires vector_component_type_check<typename S::point_type,real>
+auto derivativeU(const S& s, real u, real v) -> S::point_type
+{
+    using vec = typename S::point_type;
+    vec p[MAX_POINTS];
+    vec q[MAX_POINTS];
+
+    auto sizeU = s.shape(0);
+    auto sizeV = s.shape(1);
+    assert(sizeU <= MAX_POINTS && sizeV <= MAX_POINTS);
+
+    for (auto j = 0; j < sizeV; j++)
+    {
+        for (auto i = 0; i < sizeU; i++)
+            p[i] = s.point(i, j);
+        q[j] = deCasteljauDx(std::span(p, sizeU), u);
+    }
+
+    // Normal not normalized.
+    return deCasteljau(std::span(q, sizeV), v);
+}
+
+template<surface_cage S, typename real>
+requires vector_component_type_check<typename S::point_type,real>
+auto derivativeV(const S& s, real u, real v) -> S::point_type
+{
+    using vec = typename S::point_type;
+    vec p[MAX_POINTS];
+    vec q[MAX_POINTS];
+
+    auto sizeU = s.shape(0);
+    auto sizeV = s.shape(1);
+    assert(sizeU <= MAX_POINTS && sizeV <= MAX_POINTS);
+
+    for (auto i = 0; i < sizeU; i++)
+    {
+        for (auto j = 0; j < sizeV; j++)
+            q[j] = s.point(i, j);
+        p[i] = deCasteljauDx(std::span(q, sizeV), v);
+    }
+
+    // Normal not normalized.
+    return deCasteljau(std::span(p, sizeU), u);
+}
+
+// template<surface_cage S, typename real>
+// requires std::same_as<typename S::point_type, Vector4<real>>
+// auto normal(const S& s, real u, real v) -> Vector4<real>
+// {
+//     constexpr real e = SPL_NORMAL_FIXVALUE;
+
+//     auto derU = derivativeU(s, u, v);
+//     auto derV = derivativeV(s, u, v);
+//     // Fix for degenerated patches.
+//     if (derU.x == 0 && derU.y == 0 && derU.z == 0)
+//     {
+//         derU = derivativeU(s, u, std::abs(v - e));
+//     }
+//     if (derV.x == 0 && derV.y == 0 && derV.z == 0)
+//     {
+//         derV = derivativeV(s, std::abs(u - e), v);
+//     }
+//     auto N = Vector3<real>(derU).cross(Vector3<real>(derV));
+//     // Ignoring rational patches for now.
+//     return Vector4<real>(N.x, N.y, N.z, 1.0);
+// }
+
+} // namespace ext
+
+using ext::interpolate;
+using ext::derivativeU;
+using ext::derivativeV;
 
 } // namespace cg::spline
 

@@ -63,12 +63,13 @@ void PatchBVH::intersectLeaf(uint32_t first,
     // Assert that the buffers are mapped
     assert(_points != nullptr && _indexes != nullptr);
 
-    auto& i = _primitiveIds[first];
+    uint32_t i = _primitiveIds[first];
 
     const uint32_t* patch = _indexes + 16*i;
     if (spline::doSubdivision(hit, ray, _points, patch))
     {
         hit.triangleIndex = i;
+        hit.object = this; // intersectLeaf must set hit.object
     }
 }
 

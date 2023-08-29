@@ -22,7 +22,18 @@ public:
     void renderScene() override;
     void gui() override;
     // bool onResize(int width, int height) override;
+    bool onKeyPress(int key, int) override;
+    bool onMouseLeftPress(int, int) override;
     graph::SceneObject* pickObject(int x, int y) const override;
+
+    enum CursorMode
+    {
+        Select = 0,
+        PrimitiveInspect,
+        NormalInspect,
+    };
+
+    CursorMode _cursorMode = CursorMode::Select;
 
 protected:
     graph::SceneObject* createSurfaceObject(BezierPatches& p, const char* name);
@@ -30,13 +41,14 @@ protected:
 
     graph::SceneObject* pickObject(graph::SceneObject* obj,
         const Ray3f& ray,
-        float& distance) const;
+        Intersection& hit) const;
     
     void controlWindow();
 
     std::future<void> _renderTask;
     Reference<GLImage> _image;
     Reference<RayTracer> _rayTracer;
+    Intersection _lastPickHit;
 };
 
 } // namespace cg

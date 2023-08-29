@@ -411,14 +411,37 @@ bool Surface::localIntersect(const Ray3f& ray) const
     return b;
 }
 
-vec3f Surface::normal(const Intersection&) const
+vec4f cg::Surface::point(const Intersection &hit) const
 {
-    return {};
+    auto idx = hit.triangleIndex;
+    float u = hit.p.x;
+    float v = hit.p.y;
+
+    auto points = _patches->points()->map(GL_READ_ONLY);
+    auto patchIdx = _patches->indexes()->map(GL_READ_ONLY);
+
+    spline::PatchRef patch (points.get(), patchIdx.get(), uint32_t(idx));
+    vec4f P = spline::interpolate(patch, u, v);
+    return localToWorldMatrix().transform(P);
+}
+
+vec3f Surface::normal(const Intersection &hit) const
+{
+    auto idx = hit.triangleIndex;
+    float u = hit.p.x;
+    float v = hit.p.y;
+
+    auto points = _patches->points()->map(GL_READ_ONLY);
+    auto patchIdx = _patches->indexes()->map(GL_READ_ONLY);
+
+    spline::PatchRef patch (points.get(), patchIdx.get(), uint32_t(idx));
+    vec3f N = spline::normal(patch, u, v);
+    return _normalMatrix.transform(N.versor()).versor();
 }
 
 Bounds3f Surface::bounds() const
 {
-    return _bvh->bounds();
+    return {_bvh->bounds(), _localToWorld};
 }
 
 void SurfaceMapper::update()

@@ -5,6 +5,7 @@
 #include <graph/SceneObject.h>
 #include <graph/SceneNode.h>
 #include <map>
+#include <ranges>
 #include "BezierPatches.h"
 #include "Surface.h"
 
@@ -84,17 +85,20 @@ void MainWindow::initializeScene()
     createPrimitiveObject(*GLGraphics3::box(), "Box");
 
     // Load surfaces
-    std::pair<const char*, vec3f> surfaces[] = {
-        {"bezier/teacup", vec3f(0, 0, 0)},
-        {"bezier/teapot", vec3f(-2.5, 0, 0)},
-        {"bezier/teaspoon", vec3f(1.5, 0, 0)}
+    std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {
+        {"bezier/teacup", vec3f(0, 0, 0), vec3f::null(), 1.0},
+        {"bezier/teapot", vec3f(-2.5, 0, 0), vec3f(-90, 0, 0), 0.5},
+        {"bezier/teaspoon", vec3f(1.5, 0, 0), vec3f::null(), 1.0}
     };
 
-    for (auto& [s, t] : surfaces)
+    for (auto& [s, t, r, sc] : surfaces)
     {
         auto asset = Application::assetFilePath(s);
         auto p = BezierPatches::load(asset.c_str());
-        createSurfaceObject(*p, s)->transform()->translate(t);
+        auto transform = createSurfaceObject(*p, s)->transform();
+        transform->translate(t);
+        transform->rotate(r);
+        transform->setLocalScale(sc);
     }
 
     editor()->setPipeline(
@@ -119,11 +123,35 @@ void MainWindow::render()
     e->render();
     e->drawXZPlane(10, 1);
 
+    // Draw selected object
     if (auto obj = currentNode()->as<graph::SceneObject>())
     {
         const auto t = obj->transform();
         drawSelectedObject(*obj);
-        editor()->drawTransform(t->position(), t->rotation());
+        if (_cursorMode == CursorMode::Select)
+            editor()->drawTransform(t->position(), t->rotation());
+
+        const SurfaceProxy* p = nullptr;
+        for (graph::Component* c : obj->components())
+            if (auto ptr = dynamic_cast<const SurfaceProxy*>(c))
+            {
+                p = ptr;
+                break;
+            }
+
+        if (_cursorMode == CursorMode::NormalInspect
+            && _lastPickHit.object == obj
+            && p != nullptr)
+        {
+            Surface& s = p->mapper()->surface();
+            vec3f n = s.normal(_lastPickHit);
+            vec4f P = s.point(_lastPickHit);
+            vec3f Q = vec3f(P.x / P.w, P.y / P.w, P.z / P.w);
+            auto e = editor();
+            e->setVectorColor(Color{0x9c, 0x27, 0xb0}); // Purple A500
+            e->setBasePoint(Q);
+            e->drawVector(Q, n, e->pixelsLength(100.0));
+        }
     }
 }
 
@@ -190,30 +218,101 @@ void MainWindow::controlWindow()
 {
     ImGui::Begin("Control Window");
 
+    if (_image != nullptr)
+        ImGui::Text("Image of (%d, %d).", _image->width(), _image->height());
+    else
+        ImGui::Text("No image.");
+
     if (ImGui::Button("Render"))
     {
         _viewMode = ViewMode::Renderer;
         _image = nullptr;
     }
+    ImGui::SameLine();
+
+    ImGui::BeginDisabled(_image == nullptr);
+    if (ImGui::Button("Show/Hide"))
+    {
+        if (_viewMode != ViewMode::Renderer)
+            _viewMode = ViewMode::Renderer;
+        else
+            _viewMode = ViewMode::Editor;
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
     if (ImGui::Button("Clear"))
     {
         _viewMode = ViewMode::Editor;
         _image = nullptr;
     }
 
+    ImGui::Separator();
+
+    const char* items[] = {
+        "Select",
+        "Primitive Inspect",
+        "Normal Inspect"
+    };
+    CursorMode modes[] = {
+        Select,
+        PrimitiveInspect,
+        NormalInspect,
+    };
+    int mode = _cursorMode;
+    if (ImGui::Combo("Cursor Mode", &mode, items, std::size(items)))
+        _cursorMode = modes[mode];
+
     ImGui::End();
 }
 
-graph::SceneObject* MainWindow::pickObject(int x, int y) const
+bool MainWindow::onKeyPress(int key, int p2)
 {
-    auto ray = makeRay(x, y);
-    auto distance = math::Limits<float>::inf();
-    return pickObject(_scene->root(), ray, distance);
+    if (_viewMode == ViewMode::Editor)
+    {
+        switch (key)
+        {
+        case GLFW_KEY_F1: _cursorMode = CursorMode::Select; break;
+        case GLFW_KEY_F2: _cursorMode = CursorMode::PrimitiveInspect; break;
+        case GLFW_KEY_F3: _cursorMode = CursorMode::NormalInspect; break;
+        }
+    }
+
+    return SceneWindow::onKeyPress(key, p2);
 }
 
-graph::SceneObject *MainWindow::pickObject(graph::SceneObject *obj,
+bool MainWindow::onMouseLeftPress(int x, int y)
+{
+    auto ray = makeRay(x, y);
+    _lastPickHit.distance = math::Limits<float>::inf();
+    _lastPickHit.object = nullptr;
+    auto obj = pickObject(_scene->root(), ray, _lastPickHit);
+    auto current = this->currentNode();
+    _lastPickHit.object = obj;
+
+    if (obj && obj->selectable())
+    {
+        if (auto p = current->as<graph::SceneObject>())
+            p->setSelected(false);
+        obj->setSelected(true);
+        *current = obj;
+    }
+
+    return true;
+}
+
+graph::SceneObject *MainWindow::pickObject(int x, int y) const
+{
+    auto ray = makeRay(x, y);
+    Intersection hit;
+    hit.distance = math::Limits<float>::inf();
+    hit.object = nullptr;
+    return pickObject(_scene->root(), ray, hit);
+}
+
+graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
     const Ray3f &ray,
-    float &distance) const
+    Intersection &hit) const
 {
     if (!obj->visible()) return nullptr;
 
@@ -221,34 +320,35 @@ graph::SceneObject *MainWindow::pickObject(graph::SceneObject *obj,
 
     for (graph::Component* component : obj->components())
     {
-        Intersection hit;
-        hit.distance = math::Limits<float>::inf();
-        hit.object = nullptr;
+        // XXX This should be optimized out.
+        Intersection subhit;
+        subhit.distance = math::Limits<float>::inf();
+        subhit.object = nullptr;
 
         if (auto p = dynamic_cast<graph::PrimitiveProxy*>(component))
         {
             auto primitive = p->mapper()->primitive();
-            if (primitive->intersect(ray, hit) == false)
+            if (primitive->intersect(ray, subhit) == false)
                 continue;
         }
         else if (auto s = dynamic_cast<SurfaceProxy*>(component))
         {
             auto surface = s->mapper()->surface();
-            if (surface.intersect(ray, hit) == false)
+            if (surface.intersect(ray, subhit) == false)
                 continue;
         }
-        else continue; // No hit => next iteration
+        else continue; // no component => no hit => next iteration
 
         // In case of a hit
-        if (hit.distance < distance)
+        if (subhit.distance < hit.distance)
         {
-            distance = hit.distance;
+            hit = subhit;
             nearest = obj;
         }
     }
 
     for (auto& child : obj->children())
-        if (auto tmp = pickObject(&child, ray, distance))
+        if (auto tmp = pickObject(&child, ray, hit))
             nearest = tmp;
 
     return nearest;
