@@ -39,7 +39,7 @@ public:
 
     ~GLStorage() override { glDeleteBuffers(1, &_buffer); }
 
-    auto map(uint32_t start, uint32_t count, GLenum access = GL_READ_WRITE)
+    auto map(uint32_t start, uint32_t count, GLenum access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT)
     {
         return guard(static_cast<T*>(
             glMapNamedBufferRange(_buffer, start*sizeof (T), count*sizeof (T), access)
