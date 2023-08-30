@@ -237,6 +237,13 @@ void subpatch(
         slice(patch + 4*i, umin, umax);
 }
 
+template<typename real>
+Vector3<real> project(const Vector4<real> &p)
+{
+    assert(math::isZero(p.w) == false);
+    return Vector3<real>(p.x / p.w, p.y / p.w, p.z / p.w);
+}
+
 template<std::forward_iterator It>
 auto boundingbox(It begin, It end) //-> Bounds3<typename std::iter_value_t<It>::value_type>
 {
@@ -249,7 +256,7 @@ auto boundingbox(It begin, It end) //-> Bounds3<typename std::iter_value_t<It>::
     {
         const auto& p = *it;
         if constexpr (requires (vec v) { v.w; }) // does vector component w exist?
-            bounds.inflate(p.x / p.w, p.y / p.w, p.z / p.w);
+            bounds.inflate(project(p));
         else
             bounds.inflate(p);
     }
@@ -275,6 +282,7 @@ auto boundingbox(const vec* buffer, const idx patch[16])
 
 template<typename vec, typename real, typename idx>
 Bounds3<real> subpatchBoundingbox(
+    vec subp[16],
     const vec* buffer,
     const idx patch[16],
     real umin,
@@ -282,12 +290,11 @@ Bounds3<real> subpatchBoundingbox(
     real vmin,
     real vmax)
 {
-    vec sub[16];
     for (auto i = 0u; i < 16u; i++)
-        sub[i] = buffer[patch[i]];
+        subp[i] = buffer[patch[i]];
 
-    subpatch(sub, umin, umax, vmin, vmax);
-    return boundingbox(std::begin(sub), std::end(sub));
+    subpatch(subp, umin, umax, vmin, vmax);
+    return boundingbox(subp, subp+16);
 }
 
 bool doBezierClipping(Intersection& hit,
@@ -340,9 +347,10 @@ auto& deCasteljauDx(V p, real u)
 
 template<surface_cage S, typename real>
 requires vector_component_type_check<typename S::point_type, real>
-auto interpolate(const S& s, real u, real v) -> S::point_type
+auto interpolate(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
 {
-    using vec = typename S::point_type;
+    using vec = std::remove_cvref_t<typename S::point_type>;
     vec p[MAX_POINTS];
     vec q[MAX_POINTS];
 
@@ -362,9 +370,10 @@ auto interpolate(const S& s, real u, real v) -> S::point_type
 
 template<surface_cage S, typename real>
 requires vector_component_type_check<typename S::point_type,real>
-auto derivativeU(const S& s, real u, real v) -> S::point_type
+auto derivativeU(const S& s, real u, real v)
+    -> std::remove_cvref_t<typename S::point_type>
 {
-    using vec = typename S::point_type;
+    using vec = std::remove_cvref_t<typename S::point_type>;
     vec p[MAX_POINTS];
     vec q[MAX_POINTS];
 
@@ -385,9 +394,10 @@ auto derivativeU(const S& s, real u, real v) -> S::point_type
 
 template<surface_cage S, typename real>
 requires vector_component_type_check<typename S::point_type,real>
-auto derivativeV(const S& s, real u, real v) -> S::point_type
+auto derivativeV(const S& s, real u, real v)
+    -> std::remove_cvref_t<typename S::point_type>
 {
-    using vec = typename S::point_type;
+    using vec = std::remove_cvref_t<typename S::point_type>;
     vec p[MAX_POINTS];
     vec q[MAX_POINTS];
 
