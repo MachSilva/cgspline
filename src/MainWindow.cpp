@@ -4,10 +4,10 @@
 #include <graphics/Assets.h>
 #include <graph/SceneObject.h>
 #include <graph/SceneNode.h>
+#include <format>
 #include <map>
 #include <ranges>
-#include "BezierPatches.h"
-#include "Surface.h"
+#include "SceneReaderExt.h"
 
 namespace cg
 {
@@ -71,6 +71,15 @@ void MainWindow::beginInitialize()
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(debugCallback, this);
 #endif
+
+    _sceneFileList.clear();
+    auto sceneDir = Application::assetFilePath("scenes");
+    if (std::filesystem::exists(sceneDir))
+        for (auto entry : std::filesystem::directory_iterator(sceneDir))
+        {
+            if (entry.is_regular_file())
+                _sceneFileList.emplace_back(entry.path());
+        }
 }
 
 void MainWindow::initializeScene()
@@ -109,6 +118,8 @@ void MainWindow::initializeScene()
         "SurfCont"_ID8,
         new SurfaceContourPipeline(0, *editor()->fragmentShader())
     );
+
+    registerInspectFunction(inspectSurface);
 }
 
 void MainWindow::render()
@@ -207,11 +218,62 @@ void MainWindow::drawSelectedObject(const graph::SceneObject& object)
 
 void MainWindow::gui()
 {
+    mainMenu();
     assetWindow();
     hierarchyWindow();
     inspectorWindow();
     editorView();
     controlWindow();
+}
+
+inline
+void MainWindow::fileMenu()
+{
+    if (ImGui::BeginMenu("File"))
+    {
+        if (ImGui::MenuItem("New Scene"))
+            newScene();
+        openSceneMenu("Open");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit", "Alt+F4"))
+            shutdown();
+
+        ImGui::EndMenu();
+    }
+}
+
+inline
+void MainWindow::openSceneMenu(std::string_view label)
+{
+    if (ImGui::BeginMenu("Open", !_sceneFileList.empty()))
+    {
+        for (auto& file : _sceneFileList)
+            if (ImGui::MenuItem(file.filename().c_str()))
+                readScene(file);
+        ImGui::EndMenu();
+    }
+}
+
+inline
+void MainWindow::helpMenu()
+{
+    if (ImGui::BeginMenu("Help"))
+    {
+        if (ImGui::MenuItem("Keybindings"))
+            0;
+        ImGui::EndMenu();
+    }
+}
+
+inline
+void MainWindow::mainMenu()
+{
+    if (ImGui::BeginMainMenuBar())
+    {
+        fileMenu();
+        helpMenu();
+        ImGui::EndMainMenuBar();
+    }
 }
 
 void MainWindow::controlWindow()
@@ -264,6 +326,13 @@ void MainWindow::controlWindow()
         _cursorMode = modes[mode];
 
     ImGui::End();
+}
+
+void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
+{
+    ImGui::inputText("Surface", s.sceneObject()->name());
+
+    window.inspectMaterial(s.mapper()->surface());
 }
 
 bool MainWindow::onKeyPress(int key, int p2)
@@ -354,7 +423,31 @@ graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
     return nearest;
 }
 
-graph::SceneObject* MainWindow::createSurfaceObject(BezierPatches &p, const char *name)
+void MainWindow::readScene(std::filesystem::path scenefile)
+{
+    util::SceneReaderExt reader {};
+
+    reader.setInput(scenefile.c_str());
+    try
+    {
+        reader.execute();
+        if (reader.scene() == nullptr)
+            throw std::runtime_error("Scene is null");
+        setScene(*reader.scene());
+
+        auto& materials = Assets::materials();
+        for (auto& [name, m] : reader.materials)
+            materials[name] = m;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << std::format("Failed to load scene '{}'. Reason:\n{}\n",
+            scenefile.filename().c_str(), e.what());
+    }
+}
+
+graph::SceneObject*
+MainWindow::createSurfaceObject(BezierPatches &p, const char *name)
 {
     auto object = graph::SceneObject::New(*_scene);
 

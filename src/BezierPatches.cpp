@@ -80,7 +80,8 @@ Reference<BezierPatches> BezierPatches::load(const char* filename)
     std::ifstream file (filename, std::ios::in);
 
     if (!file)
-        throw std::runtime_error(std::string("Failed to open file ")+filename);
+        return nullptr;
+        // throw std::runtime_error(std::string("Failed to open file ")+filename);
 
     return new BezierPatches(file);
 }

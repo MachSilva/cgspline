@@ -23,8 +23,21 @@ add_executable(cgspline
     src/MainWindow.cpp
     src/PatchBVH.cpp
     src/RayTracer.cpp
+    src/SceneReaderExt.cpp
     src/Spline.cpp
     src/Surface.cpp
 )
+
+target_sources(cgspline PRIVATE
+    ${cgdemo_SOURCE_DIR}/reader/AbstractParser.cpp
+    ${cgdemo_SOURCE_DIR}/reader/Buffer.cpp
+    ${cgdemo_SOURCE_DIR}/reader/ErrorHandler.cpp
+    ${cgdemo_SOURCE_DIR}/reader/Expression.cpp
+    ${cgdemo_SOURCE_DIR}/reader/FileBuffer.cpp
+    ${cgdemo_SOURCE_DIR}/reader/ReaderBase.cpp
+    ${cgdemo_SOURCE_DIR}/reader/SceneReader.cpp
+    ${cgdemo_SOURCE_DIR}/reader/Scope.cpp
+)
+target_include_directories(cgspline PRIVATE ${cgdemo_SOURCE_DIR})
 
 target_link_libraries(cgspline cg)

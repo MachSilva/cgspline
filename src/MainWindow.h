@@ -1,11 +1,14 @@
 #pragma once
 
+#include <filesystem>
 #include <future>
+#include <vector>
 #include <graph/SceneWindow.h>
 #include <graph/SceneObject.h>
 #include <graphics/GLImage.h>
 #include "BezierPatches.h"
 #include "RayTracer.h"
+#include "Surface.h"
 
 namespace cg
 {
@@ -43,12 +46,21 @@ protected:
         const Ray3f& ray,
         Intersection& hit) const;
     
+    void readScene(std::filesystem::path scenefile);
+    
     void controlWindow();
+    void fileMenu();
+    void mainMenu();
+    void openSceneMenu(std::string_view label);
+    void helpMenu();
+    static void inspectSurface(MainWindow&, SurfaceProxy&);
 
     std::future<void> _renderTask;
     Reference<GLImage> _image;
     Reference<RayTracer> _rayTracer;
     Intersection _lastPickHit;
+
+    std::vector<std::filesystem::path> _sceneFileList;
 };
 
 } // namespace cg

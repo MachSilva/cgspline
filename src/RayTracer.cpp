@@ -29,7 +29,7 @@
 //
 // Author: Paulo Pagliosa
 // Modified by: Felipe Silva
-// Last revision: 24/08/2023
+// Last revision: 30/08/2023
 
 #include "graphics/Camera.h"
 #include "utils/Stopwatch.h"
@@ -191,7 +191,7 @@ RayTracer::scan(Image &image)
         {
             auto y = (float)j + 0.5f;
 
-            printf("Scanning line %d of %d\r", j + 1, _viewport.h);
+            fprintf(stderr, "Scanning line %d of %d\r", j + 1, _viewport.h);
             for (auto i = 0; i < _viewport.w; i++)
                 scanLine[i] = shoot((float)i + 0.5f, y);
             image.setData(0, j, scanLine);

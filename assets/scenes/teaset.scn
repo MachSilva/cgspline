@@ -1,0 +1,125 @@
+include "colors.inc"
+
+material "SilverSpecular"
+{
+  ambient  Silver * 0.5
+  diffuse  Black
+  spot     Silver
+  shine    100
+  specular Silver * 0.5
+}
+
+scene
+{
+  environment
+  {
+    background DarkGray
+    ambient VeryLightGray
+  }
+
+  object "Main Camera"
+  {
+    define pos <3,3.3,6>
+
+    transform
+    {
+      position pos
+      rotation <-25,20,0>
+    }
+    camera
+    {
+      perspective
+      angle 40
+    }
+  }
+
+  object "Lights"
+  {
+    object
+    {
+      transform
+      {
+        position <-10, 5, +5>
+      }
+      light
+      {
+        point
+        color White
+        falloff 1
+      }
+    }
+
+    object
+    {
+      transform
+      {
+        position <-10, 5, -5>
+      }
+      light
+      {
+        point
+        color White
+        falloff 1
+      }
+    }
+
+    object
+    {
+      transform
+      {
+        position <5, 5, +10>
+      }
+      light
+      {
+        point
+        color White
+        falloff 1
+      }
+    }
+
+    object
+    {
+      transform
+      {
+        position <5, 5, -10>
+      }
+      light
+      {
+        point
+        color White
+        falloff 1
+      }
+    }
+  }
+
+  object "Teaset"
+  {
+    object "Teapot"
+    {
+      transform
+      {
+        rotation <-90,0,0>
+        scale vec3(0.5)
+      }
+      surface "../bezier/teapot" material "SilverSpecular"
+    }
+
+    object "Teacup"
+    {
+      transform
+      {
+        position <2.4,0,0>
+      }
+      surface "../bezier/teacup" material "SilverSpecular"
+    }
+
+    object "Teaspoon"
+    {
+      transform
+      {
+        position <3.5,1,0>
+      }
+      surface "../bezier/teaspoon" material "SilverSpecular"
+    }
+  }
+}
