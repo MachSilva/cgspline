@@ -81,7 +81,6 @@ Reference<BezierPatches> BezierPatches::load(const char* filename)
 
     if (!file)
         return nullptr;
-        // throw std::runtime_error(std::string("Failed to open file ")+filename);
 
     return new BezierPatches(file);
 }

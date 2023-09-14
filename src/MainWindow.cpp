@@ -110,14 +110,19 @@ void MainWindow::initializeScene()
         transform->setLocalScale(sc);
     }
 
-    editor()->setPipeline(
-        GLRenderer::Surface,
-        new SurfacePipeline(0, *editor()->fragmentShader())
-    );
-    editor()->setPipeline(
-        "SurfCont"_ID8,
-        new SurfaceContourPipeline(0, *editor()->fragmentShader())
-    );
+    GLuint fs = *editor()->fragmentShader();
+    auto setFragmentUniforms = [](GLRenderer& ctx)
+    {
+        ctx.defaultFragmentSubroutines();
+    };
+
+    auto p0 = new SurfacePipeline(0, fs, SurfacePipeline::Mode::Standard3D);
+    p0->beforeDrawing = setFragmentUniforms;
+    editor()->setPipeline(GLRenderer::Surface, p0);
+
+    auto p1 = new SurfacePipeline(0, fs, SurfacePipeline::Mode::ContourCurves);
+    p1->beforeDrawing = setFragmentUniforms;
+    editor()->setPipeline("SurfCont"_ID8, p1);
 
     registerInspectFunction(inspectSurface);
 }
@@ -224,6 +229,7 @@ void MainWindow::gui()
     inspectorWindow();
     editorView();
     controlWindow();
+    ImGui::ShowMetricsWindow();
 }
 
 inline

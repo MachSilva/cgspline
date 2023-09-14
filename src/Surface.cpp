@@ -330,21 +330,43 @@ static const char* _tesContour = STRINGIFY(
     }
 );
 
-SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment):
-    _program{"Bézier Tessellation"}
+SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode)
+    : _program{mode == Standard3D
+        ? "Bézier Tessellation"
+        : "Bézier Contour Curves Tessellation"}
 {
     _program.setShader(GL_VERTEX_SHADER, {_glslVersion, _vs});
-    _program.setShader(GL_TESS_CONTROL_SHADER, {
-        _glslVersion,
-        GLSL::MATRIX_BLOCK_DECLARATION,
-        _tcs
-    });
-    _program.setShader(GL_TESS_EVALUATION_SHADER, {
-        _glslVersion,
-        GLSL::MATRIX_BLOCK_DECLARATION,
-        GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
-        _tes
-    });
+
+    switch (mode)
+    {
+    case ContourCurves:
+        _program.setShader(GL_TESS_CONTROL_SHADER, {
+            _glslVersion,
+            GLSL::MATRIX_BLOCK_DECLARATION,
+            _tcsContour
+        });
+        _program.setShader(GL_TESS_EVALUATION_SHADER, {
+            _glslVersion,
+            GLSL::MATRIX_BLOCK_DECLARATION,
+            // GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
+            _tesContour
+        });
+        break;
+    default:
+    case Standard3D:
+        _program.setShader(GL_TESS_CONTROL_SHADER, {
+            _glslVersion,
+            GLSL::MATRIX_BLOCK_DECLARATION,
+            _tcs
+        });
+        _program.setShader(GL_TESS_EVALUATION_SHADER, {
+            _glslVersion,
+            GLSL::MATRIX_BLOCK_DECLARATION,
+            GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
+            _tes
+        });
+        break;
+    }
     _program.setSeparable(true);
     // _program.link();
     _program.use();
@@ -361,38 +383,6 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment):
 }
 
 SurfacePipeline::~SurfacePipeline() {}
-
-SurfaceContourPipeline::SurfaceContourPipeline(GLuint vertex, GLuint fragment):
-    _program{"Bézier Contours Tessellation"}
-{
-    _program.setShader(GL_VERTEX_SHADER, {_glslVersion, _vs});
-    _program.setShader(GL_TESS_CONTROL_SHADER, {
-        _glslVersion,
-        GLSL::MATRIX_BLOCK_DECLARATION,
-        _tcsContour
-    });
-    _program.setShader(GL_TESS_EVALUATION_SHADER, {
-        _glslVersion,
-        GLSL::MATRIX_BLOCK_DECLARATION,
-        // GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
-        _tesContour
-    });
-    _program.setSeparable(true);
-    // _program.link();
-    _program.use();
-
-    glUseProgramStages(_pipeline, GL_VERTEX_SHADER_BIT, vertex ? vertex : _program);
-    glUseProgramStages(_pipeline, GL_FRAGMENT_SHADER_BIT, fragment);
-    glUseProgramStages(
-        _pipeline,
-        GL_TESS_CONTROL_SHADER_BIT | GL_TESS_EVALUATION_SHADER_BIT,
-        _program
-    );
-
-    glActiveShaderProgram(_pipeline, _program);
-}
-
-SurfaceContourPipeline::~SurfaceContourPipeline() {}
 
 bool Surface::localIntersect(const Ray3f& ray, Intersection& hit) const
 {
@@ -411,7 +401,7 @@ bool Surface::localIntersect(const Ray3f& ray) const
     return b;
 }
 
-vec4f cg::Surface::point(const Intersection &hit) const
+vec4f Surface::point(const Intersection &hit) const
 {
     auto idx = hit.triangleIndex;
     float u = hit.p.x;
@@ -452,7 +442,9 @@ void SurfaceMapper::update()
 void SurfaceMapper::updateMatrixBlock(GLRenderer& renderer) const
 {
     auto c = renderer.camera();
-    auto b = static_cast<GLSL::MatrixBlock*>(glMapNamedBuffer(renderer.matrixBlock(), GL_WRITE_ONLY));
+    auto b = static_cast<GLSL::MatrixBlock*>(
+        glMapNamedBuffer(renderer.matrixBlock(), GL_WRITE_ONLY)
+    );
 
     mat4f mv = c->worldToCameraMatrix() * _surface->localToWorldMatrix();
     b->mvMatrix = mv;
@@ -470,8 +462,10 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     auto s = _surface->patches();    
 
     pipeline->use();
-    s->bind();
+    // TODO Review if this function call is `SurfaceMapper`'s responsability.
+    pipeline->beforeDrawing(renderer);
 
+    s->bind();
     updateMatrixBlock(renderer);
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);
@@ -488,8 +482,9 @@ bool SurfaceMapper::renderContour(GLRenderer& renderer) const
     auto s = _surface->patches();    
 
     pipeline->use();
-    s->bind();
+    pipeline->beforeDrawing(renderer);
 
+    s->bind();
     updateMatrixBlock(renderer);
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);

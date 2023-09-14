@@ -105,20 +105,14 @@ protected:
 class SurfacePipeline : public GLRenderer::Pipeline
 {
 public:
-    SurfacePipeline(GLuint vertex, GLuint fragment);
+    enum Mode
+    {
+        Standard3D,
+        ContourCurves,
+    };
+
+    SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode = Standard3D);
     ~SurfacePipeline() override;
-
-    GLSL::Program& tessellationProgram() { return _program; }
-
-protected:
-    GLSL::Program _program;
-};
-
-class SurfaceContourPipeline : public GLRenderer::Pipeline
-{
-public:
-    SurfaceContourPipeline(GLuint vertex, GLuint fragment);
-    ~SurfaceContourPipeline() override;
 
     GLSL::Program& tessellationProgram() { return _program; }
 
