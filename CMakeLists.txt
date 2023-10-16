@@ -4,11 +4,11 @@ project(cgspline)
 
 if(UNIX)
     set(CMAKE_EXECUTABLE_SUFFIX ".out")
-    if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        add_compile_options(-fsanitize=address -g3 -fno-fast-math)
-        add_link_options(-fsanitize=address)
-        message(STATUS "Address sanitizer enabled")
-    endif()
+    # if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    #     add_compile_options(-fsanitize=address -g3 -fno-fast-math)
+    #     add_link_options(-fsanitize=address)
+    #     message(STATUS "Address sanitizer enabled")
+    # endif()
 endif()
 
 add_subdirectory(Ds)
@@ -19,6 +19,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(cgspline
     src/BezierPatches.cpp
+    src/Framebuffer.cpp
     src/Main.cpp
     src/MainWindow.cpp
     src/PatchBVH.cpp

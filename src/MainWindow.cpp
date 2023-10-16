@@ -7,7 +7,10 @@
 #include <format>
 #include <map>
 #include <ranges>
+#include "Framebuffer.h"
 #include "SceneReaderExt.h"
+
+#include <imgui_internal.h>
 
 namespace cg
 {
@@ -57,7 +60,7 @@ void MainWindow::beginInitialize()
 
     glGetIntegerv(GL_MAJOR_VERSION, version);
     glGetIntegerv(GL_MINOR_VERSION, version+1);
-    
+
     std::cerr << "CG Spline Project\n"
         << "OpenGL version " << version[0] << "." << version[1] << "\n"
         << "Renderer: " << renderer << "\n"
@@ -71,6 +74,54 @@ void MainWindow::beginInitialize()
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(debugCallback, this);
 #endif
+
+    glEnable(GL_FRAMEBUFFER_SRGB);
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_FRONT,
+        GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING,
+        &_data.windowColorEncoding);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_FRONT,
+        GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE,
+        &_data.windowComponentType);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_FRONT,
+        GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+        &_data.windowRedBits);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_FRONT,
+        GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+        &_data.windowGreenBits);
+    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_FRONT,
+        GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+        &_data.windowBlueBits);
+
+    glGetFramebufferParameteriv(GL_DRAW_FRAMEBUFFER, GL_SAMPLES,
+        &_data.windowSamples);
+    glGetFramebufferParameteriv(GL_DRAW_FRAMEBUFFER, GL_SAMPLE_BUFFERS,
+        &_data.windowSampleBuffers);
+
+    ext::AttachmentDescription color
+    {
+        .attachment = GL_COLOR_ATTACHMENT0,
+        .format = GL_RGBA8
+    };
+    ext::AttachmentDescription depthStencil
+    {
+        .attachment = GL_DEPTH_STENCIL_ATTACHMENT,
+        .format = GL_DEPTH24_STENCIL8
+    };
+    ext::FramebufferDescription description
+    {
+        .width = (uint32_t) framebufferWidth,
+        .height = (uint32_t) framebufferHeight,
+        .samples = (uint32_t) _data.windowSamples,
+        .pRenderbuffers = &depthStencil,
+        .renderbufferCount = 1,
+        .pTextures = &color,
+        .textureCount = 1
+    };
+
+    // _state.renderFramebuffer = new ext::Framebuffer(&description);
+    _state.cameraFramebuffer = new ext::Framebuffer(&description);
 
     _sceneFileList.clear();
     auto sceneDir = Application::assetFilePath("scenes");
@@ -135,16 +186,23 @@ void MainWindow::render()
         return;
     }
 
+    // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
     auto e = editor();
+    auto& v = _state.renderViewport;
+    e->setImageSize(v.w, v.h);
+    glViewport(v.x, v.y, v.w, v.h);
+
     e->render();
-    e->drawXZPlane(10, 1);
+
+    if (e->showGround)
+        e->drawXZPlane(10, 1);
 
     // Draw selected object
     if (auto obj = currentNode()->as<graph::SceneObject>())
     {
         const auto t = obj->transform();
         drawSelectedObject(*obj);
-        if (_cursorMode == CursorMode::Select)
+        if (_state.cursorMode == CursorMode::Select)
             editor()->drawTransform(t->position(), t->rotation());
 
         const SurfaceProxy* p = nullptr;
@@ -155,7 +213,7 @@ void MainWindow::render()
                 break;
             }
 
-        if (_cursorMode == CursorMode::NormalInspect
+        if (_state.cursorMode == CursorMode::NormalInspect
             && _lastPickHit.object == obj
             && p != nullptr)
         {
@@ -163,12 +221,13 @@ void MainWindow::render()
             vec3f n = s.normal(_lastPickHit);
             vec4f P = s.point(_lastPickHit);
             vec3f Q = vec3f(P.x / P.w, P.y / P.w, P.z / P.w);
-            auto e = editor();
             e->setVectorColor(Color{0x9c, 0x27, 0xb0}); // Purple A500
             e->setBasePoint(Q);
             e->drawVector(Q, n, e->pixelsLength(100.0));
         }
     }
+
+    // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
 }
 
 static volatile int _progress[2];
@@ -184,11 +243,11 @@ void MainWindow::renderScene()
 {
     if (_viewMode != ViewMode::Renderer)
         return;
-    
+
     auto camera = graph::CameraProxy::current();
     if (!camera)
         camera = editor()->camera();
-    
+
     if (_image == nullptr)
     {
         // Create task
@@ -216,13 +275,35 @@ void MainWindow::drawSelectedObject(const graph::SceneObject& object)
     }
 
     SceneWindow::drawComponents(object);
-    
+
     for (auto& child : object.children())
         drawSelectedObject(*child);
 }
 
 void MainWindow::gui()
 {
+    auto dockId = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(),
+        ImGuiDockNodeFlags_PassthruCentralNode
+        | ImGuiDockNodeFlags_NoDockingInCentralNode);
+    auto node = ImGui::DockBuilderGetCentralNode(dockId);
+
+    if (_state.renderOnCentralNode)
+        _state.renderViewport =
+        {
+            .x = (int) node->Pos.x,
+            .y = framebufferHeight - (int(node->Pos.y) + int(node->Size.y)),
+            .w = (int) node->Size.x,
+            .h = (int) node->Size.y
+        };
+    else
+        _state.renderViewport =
+        {
+            .x = 0,
+            .y = 0,
+            .w = framebufferWidth,
+            .h = framebufferHeight
+        };
+
     mainMenu();
     assetWindow();
     hierarchyWindow();
@@ -230,6 +311,59 @@ void MainWindow::gui()
     editorView();
     controlWindow();
     ImGui::ShowMetricsWindow();
+}
+
+struct BlitFBCallbackData
+{
+    GLuint framebuffer;
+};
+
+static
+void BlitFramebufferImGuiWindow(const ImDrawList* parentList,
+    const ImDrawCmd* cmd)
+{
+    // Not tested
+    // Save
+    GLuint lastReadFramebuffer;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, (GLint*) &lastReadFramebuffer);
+
+    // Draw framebuffer
+    auto data = (const BlitFBCallbackData*) cmd->UserCallbackData;
+    // Not tested with multiple viewports branch (it may not work)
+    // For multiple viewports ClipRect must be subtracted by DisplayPos
+    auto x0 = cmd->ClipRect.x;
+    auto y0 = cmd->ClipRect.y;
+    auto x1 = cmd->ClipRect.z;
+    auto y1 = cmd->ClipRect.w;
+    // glScissor(x0, y0, x1, y1);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, data->framebuffer);
+    glBlitFramebuffer(
+        0, 0, x1 - x0, y1 - y0,
+        x0, y0, x1, y1,
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+    );
+
+    // Restore
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, lastReadFramebuffer);
+}
+
+void MainWindow::cameraPreview()
+{
+    if (ImGui::Begin("Camera", nullptr, 0))
+    {
+        auto& fbo = _state.cameraFramebuffer;
+        auto viewport = ImGui::GetWindowViewport();
+        fbo->resize(
+            uint32_t(viewport->WorkSize.x),
+            uint32_t(viewport->WorkSize.y)
+        );
+
+        static BlitFBCallbackData data { .framebuffer = fbo->handle() };
+        ImGui::GetWindowDrawList()
+            ->AddCallback(BlitFramebufferImGuiWindow, &data);
+    }
+    ImGui::End(); // Always call end
 }
 
 inline
@@ -261,6 +395,17 @@ void MainWindow::openSceneMenu(std::string_view label)
 }
 
 inline
+void MainWindow::viewMenu()
+{
+    if (ImGui::BeginMenu("View"))
+    {
+        (void)ImGui::MenuItem("Render on central node", nullptr,
+            &_state.renderOnCentralNode);
+        ImGui::EndMenu();
+    }
+}
+
+inline
 void MainWindow::helpMenu()
 {
     if (ImGui::BeginMenu("Help"))
@@ -277,9 +422,53 @@ void MainWindow::mainMenu()
     if (ImGui::BeginMainMenuBar())
     {
         fileMenu();
+        viewMenu();
         helpMenu();
         ImGui::EndMainMenuBar();
     }
+}
+
+static
+const char* componentTypeString(GLint type)
+{
+    const char* s = "<unknown>";
+    switch (type)
+    {
+    case GL_FLOAT:                  s = "FLOAT";
+    case GL_INT:                    s = "INT";
+    case GL_UNSIGNED_INT:           s = "UNSIGNED INT";
+    case GL_SIGNED_NORMALIZED:      s = "SIGNED NORMALIZED";
+    case GL_UNSIGNED_NORMALIZED:    s = "UNSIGNED NORMALIZED";
+    }
+    return s;
+}
+
+static
+const char* framebufferStatusString(GLenum status)
+{
+    const char* s = "Incomplete";
+    switch (status)
+    {
+        case GL_FRAMEBUFFER_COMPLETE:
+            s = "Complete"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+            s = "Incomplete attachment"; break;
+        case GL_FRAMEBUFFER_UNDEFINED:
+            s = "Undefined"; break;
+        case GL_FRAMEBUFFER_UNSUPPORTED:
+            s = "Unsupported"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+            s = "Incomplete Draw buffer"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+            s = "Incomplete Read buffer"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+            s = "Incomplete Multisample"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+            s = "Incomplete layer targets"; break;
+        case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+            s = "Incomplete (missing attachment)"; break;
+    };
+    return s;
 }
 
 void MainWindow::controlWindow()
@@ -327,9 +516,25 @@ void MainWindow::controlWindow()
         PrimitiveInspect,
         NormalInspect,
     };
-    int mode = _cursorMode;
+    int mode = _state.cursorMode;
     if (ImGui::Combo("Cursor Mode", &mode, items, std::size(items)))
-        _cursorMode = modes[mode];
+        _state.cursorMode = modes[mode];
+
+    ImGui::Separator();
+
+    ImGui::Text("Color Encoding: %s",
+        _data.windowColorEncoding == GL_SRGB ? "sRGB" : "Linear");
+    ImGui::Text("Component Type: %s",
+        componentTypeString(_data.windowComponentType));
+    ImGui::Text("Red Channel:   %d bits", _data.windowRedBits);
+    ImGui::Text("Green Channel: %d bits", _data.windowGreenBits);
+    ImGui::Text("Blue Channel:  %d bits", _data.windowBlueBits);
+
+    ImGui::Text("Alternative framebuffer: %s",
+        framebufferStatusString(_state.cameraFramebuffer->status()));
+
+    ImGui::Text("Samples: %d", _data.windowSamples);
+    ImGui::Text("Sample Buffers: %d", _data.windowSampleBuffers);
 
     ImGui::End();
 }
@@ -347,9 +552,12 @@ bool MainWindow::onKeyPress(int key, int p2)
     {
         switch (key)
         {
-        case GLFW_KEY_F1: _cursorMode = CursorMode::Select; break;
-        case GLFW_KEY_F2: _cursorMode = CursorMode::PrimitiveInspect; break;
-        case GLFW_KEY_F3: _cursorMode = CursorMode::NormalInspect; break;
+        case GLFW_KEY_F1:
+            _state.cursorMode = CursorMode::Select; break;
+        case GLFW_KEY_F2:
+            _state.cursorMode = CursorMode::PrimitiveInspect; break;
+        case GLFW_KEY_F3:
+            _state.cursorMode = CursorMode::NormalInspect; break;
         }
     }
 
@@ -376,9 +584,16 @@ bool MainWindow::onMouseLeftPress(int x, int y)
     return true;
 }
 
+bool MainWindow::onResize(int width, int height)
+{
+    // _state.framebuffer->resize(width, height);
+    return true;
+}
+
 graph::SceneObject *MainWindow::pickObject(int x, int y) const
 {
-    auto ray = makeRay(x, y);
+    auto& v = _state.renderViewport;
+    auto ray = makeRay(x - v.x, y - v.y);
     Intersection hit;
     hit.distance = math::Limits<float>::inf();
     hit.object = nullptr;

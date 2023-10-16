@@ -6,7 +6,9 @@
 #include <graph/SceneWindow.h>
 #include <graph/SceneObject.h>
 #include <graphics/GLImage.h>
+#include <graphics/Renderer.h>
 #include "BezierPatches.h"
+#include "Framebuffer.h"
 #include "RayTracer.h"
 #include "Surface.h"
 
@@ -15,6 +17,8 @@ namespace cg
 
 class MainWindow : public graph::SceneWindow
 {
+    using Base = graph::SceneWindow;
+
 public:
     MainWindow(int width, int height)
         : SceneWindow("CG::SPLINE", width, height) {}
@@ -24,7 +28,7 @@ public:
     void render() override;
     void renderScene() override;
     void gui() override;
-    // bool onResize(int width, int height) override;
+    bool onResize(int width, int height) override;
     bool onKeyPress(int key, int) override;
     bool onMouseLeftPress(int, int) override;
     graph::SceneObject* pickObject(int x, int y) const override;
@@ -36,7 +40,33 @@ public:
         NormalInspect,
     };
 
-    CursorMode _cursorMode = CursorMode::Select;
+    enum ShadingMode
+    {
+        CookTorrance = 0,
+        Phong,
+    };
+
+    struct State
+    {
+        bool renderOnCentralNode = true;
+        CursorMode cursorMode = CursorMode::Select;
+        ShadingMode shadingMode = ShadingMode::CookTorrance;
+        Reference<ext::Framebuffer> renderFramebuffer;
+        Reference<ext::Framebuffer> cameraFramebuffer;
+        Viewport renderViewport;
+        Viewport cameraViewport;
+    };
+
+    struct Data
+    {
+        GLint windowColorEncoding;
+        GLint windowComponentType;
+        GLint windowRedBits;
+        GLint windowGreenBits;
+        GLint windowBlueBits;
+        GLint windowSamples;
+        GLint windowSampleBuffers;
+    };
 
 protected:
     graph::SceneObject* createSurfaceObject(BezierPatches& p, const char* name);
@@ -48,10 +78,12 @@ protected:
     
     void readScene(std::filesystem::path scenefile);
     
+    void cameraPreview();
     void controlWindow();
     void fileMenu();
     void mainMenu();
     void openSceneMenu(std::string_view label);
+    void viewMenu();
     void helpMenu();
     static void inspectSurface(MainWindow&, SurfaceProxy&);
 
@@ -61,6 +93,9 @@ protected:
     Intersection _lastPickHit;
 
     std::vector<std::filesystem::path> _sceneFileList;
+
+    State _state {};
+    Data _data {};
 };
 
 } // namespace cg
