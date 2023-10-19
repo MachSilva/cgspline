@@ -503,36 +503,4 @@ Primitive* SurfaceMapper::primitive() const
     return _surface;
 }
 
-// Same as PrimitiveProxy
-
-void SurfaceProxy::afterAdded()
-{
-    assert(sceneObject() != nullptr);
-    _actor = new Actor{*_object};
-    sceneObject()->scene()->addActor(_actor);
-}
-
-void SurfaceProxy::beforeRemoved()
-{
-    if (_actor != nullptr)
-    {
-        assert(sceneObject() != nullptr);
-        sceneObject()->scene()->removeActor(_actor);
-        _actor = nullptr;
-    }
-}
-
-void SurfaceProxy::transformChanged()
-{
-    if (auto t = transform(); t->changed())
-        if (auto p = _object->primitive())
-            p->setTransform(t->localToWorldMatrix(), t->worldToLocalMatrix());
-}
-
-void SurfaceProxy::setVisible(bool value)
-{
-    if (_actor != nullptr)
-        _actor->visible = value;
-}
-
 } // namespace cg

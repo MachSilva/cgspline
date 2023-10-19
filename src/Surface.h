@@ -85,18 +85,17 @@ protected:
 };
 
 // Surface as a component
-class SurfaceProxy : public graph::ComponentProxy<SurfaceMapper>
+class SurfaceProxy : public graph::PrimitiveProxy
 {
 public:
-    SurfaceProxy(BezierPatches* p) : ComponentProxy{"Surface", *new SurfaceMapper(p)} {}
-
-    void afterAdded() override;
-    void beforeRemoved() override;
-    void transformChanged() override;
-    void setVisible(bool value) override;
+    SurfaceProxy(BezierPatches* p)
+        : graph::PrimitiveProxy{*new SurfaceMapper(p)} {}
 
     Actor* actor() const { return _actor; }
-    SurfaceMapper* mapper() const { return _object; }
+    SurfaceMapper* mapper() const
+    {
+        return (SurfaceMapper*) _object.get();
+    }
 
 protected:
     Reference<Actor> _actor;
