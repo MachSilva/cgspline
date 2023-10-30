@@ -15,7 +15,7 @@
 namespace cg
 {
 
-#ifndef NDEBUG
+#ifdef CG_GL_DEBUG
 static
 void debugCallback(GLenum source,
     GLenum type,
@@ -70,7 +70,7 @@ void MainWindow::beginInitialize()
 
     Assets::initialize();
 
-#ifndef NDEBUG
+#ifdef CG_GL_DEBUG
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(debugCallback, this);
 #endif
@@ -99,17 +99,17 @@ void MainWindow::beginInitialize()
     glGetFramebufferParameteriv(GL_DRAW_FRAMEBUFFER, GL_SAMPLE_BUFFERS,
         &_data.windowSampleBuffers);
 
-    ext::AttachmentDescription color
+    gl::AttachmentDescription color
     {
         .attachment = GL_COLOR_ATTACHMENT0,
         .format = GL_RGBA8
     };
-    ext::AttachmentDescription depthStencil
+    gl::AttachmentDescription depthStencil
     {
         .attachment = GL_DEPTH_STENCIL_ATTACHMENT,
         .format = GL_DEPTH24_STENCIL8
     };
-    ext::FramebufferDescription description
+    gl::FramebufferDescription description
     {
         .width = (uint32_t) framebufferWidth,
         .height = (uint32_t) framebufferHeight,
@@ -120,8 +120,8 @@ void MainWindow::beginInitialize()
         .textureCount = 1
     };
 
-    // _state.renderFramebuffer = new ext::Framebuffer(&description);
-    _state.cameraFramebuffer = new ext::Framebuffer(&description);
+    // _state.renderFramebuffer = new gl::Framebuffer(&description);
+    _state.cameraFramebuffer = new gl::Framebuffer(&description);
 
     _sceneFileList.clear();
     auto sceneDir = Application::assetFilePath("scenes");
@@ -131,6 +131,9 @@ void MainWindow::beginInitialize()
             if (entry.is_regular_file())
                 _sceneFileList.emplace_back(entry.path());
         }
+
+    _sceneMaterials = Assets::materials();
+    _sceneMeshes = Assets::meshes();
 }
 
 void MainWindow::initializeScene()
@@ -217,7 +220,7 @@ void MainWindow::render()
             && _lastPickHit.object == obj
             && p != nullptr)
         {
-            Surface& s = p->mapper()->surface();
+            SurfacePrimitive& s = p->mapper()->surface();
             vec3f n = s.normal(_lastPickHit);
             vec4f P = s.point(_lastPickHit);
             vec3f Q = vec3f(P.x / P.w, P.y / P.w, P.z / P.w);
@@ -471,6 +474,89 @@ const char* framebufferStatusString(GLenum status)
     return s;
 }
 
+void MainWindow::assetWindow()
+{
+    if (!_showAssets) return;
+
+    ImGui::Begin("Assets");
+
+    auto flags = ImGuiTreeNodeFlags_DefaultOpen;
+
+    if (ImGui::CollapsingHeader("Materials", flags))
+    {
+        for (auto& [name, m] : _sceneMaterials)
+        {
+            auto d = "Diffuse##"+name;
+            auto s = "Specular##"+name;
+            bool selected = false;
+
+            ImGui::ColorButton(d.c_str(), *(ImVec4*)&m->diffuse);
+            ImGui::SameLine();
+            ImGui::ColorButton(s.c_str(), *(ImVec4*)&m->specular);
+            ImGui::SameLine();
+
+            ImGui::Selectable(name.c_str(), &selected);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Meshes", flags))
+    {
+        for (auto& [name, m] : _sceneMeshes)
+        {
+            bool selected = false;
+            ImGui::Selectable(name.c_str(), &selected);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("PBR Materials", flags))
+    {
+        for (auto& [name, m] : _scenePBRMaterials)
+        {
+            auto d = "Diffuse##"+name;
+            auto s = "Specular##"+name;
+            bool selected = false;
+
+            ImGui::ColorButton(d.c_str(), *(ImVec4*)&m->diffuse);
+            ImGui::SameLine();
+            ImGui::ColorButton(s.c_str(), *(ImVec4*)&m->specular);
+            ImGui::SameLine();
+
+            ImGui::Selectable(name.c_str(), &selected);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Textures", flags))
+    {
+        static bool view {true};
+        static gl::Texture* selected {nullptr};
+
+        ImGui::Checkbox("View Texture", &view);
+        ImGui::Spacing();
+
+        for (auto& [name, t] : _sceneTextures)
+        {
+            if (ImGui::Selectable(name.c_str(), t.get() == selected))
+            {
+                selected = t.get() == selected ? nullptr : t;
+            }
+        }
+
+        if (selected && view)
+        {
+            if (ImGui::Begin("Texture", &view))
+            {
+                auto id = reinterpret_cast<ImTextureID>(selected->handle());
+                auto max = ImGui::GetContentRegionMax();
+                auto min = ImGui::GetWindowContentRegionMin();
+                ImGui::Image(id, {max.x - min.x, max.y - min.y});
+            }
+            ImGui::End();
+        }
+    }
+
+    ImGui::End();
+}
+
 void MainWindow::controlWindow()
 {
     ImGui::Begin("Control Window");
@@ -542,7 +628,7 @@ void MainWindow::controlWindow()
 void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
 {
     ImGui::inputText("Surface", s.sceneObject()->name());
-
+    ImGui::Separator();
     window.inspectMaterial(s.mapper()->surface());
 }
 
@@ -656,9 +742,14 @@ void MainWindow::readScene(std::filesystem::path scenefile)
             throw std::runtime_error("Scene is null");
         setScene(*reader.scene());
 
-        auto& materials = Assets::materials();
-        for (auto& [name, m] : reader.materials)
-            materials[name] = m;
+        // auto& materials = Assets::materials();
+        // for (auto& [name, m] : reader.materials)
+        //     materials[name] = m;
+
+        _sceneMaterials = std::move(reader.materials);
+        _scenePBRMaterials = std::move(reader.pbrMaterials);
+        _sceneSurfaces = std::move(reader.surfaces);
+        _sceneTextures = std::move(reader.textures);
     }
     catch (const std::exception& e)
     {
@@ -673,7 +764,7 @@ MainWindow::createSurfaceObject(BezierPatches &p, const char *name)
     auto object = graph::SceneObject::New(*_scene);
 
     object->setName("%s", name);
-    object->addComponent(new SurfaceProxy(&p));
+    object->addComponent(new SurfaceProxy(new SurfacePrimitive(&p)));
 
     return object;
 }

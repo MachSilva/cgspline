@@ -8,7 +8,13 @@
 namespace cg
 {
 
-class BezierPatches : public SharedObject
+// maybe for some future extension...
+class Surface : public SharedObject
+{
+    // nothing
+};
+
+class BezierPatches : public Surface
 {
 public:
     BezierPatches();

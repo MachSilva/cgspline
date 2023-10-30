@@ -1,6 +1,6 @@
 #include "Framebuffer.h"
 
-namespace cg::ext
+namespace cg::gl
 {
 
 struct GLStateGuard
@@ -87,10 +87,6 @@ Framebuffer::Framebuffer(const FramebufferDescription* d)
         const auto& a = d->pTextures[i];
         // glActiveTexture(GL_TEXTURE0);
         glBindTexture(_textureTarget, _textures[i]);
-        glTexParameteri(_textureTarget, GL_TEXTURE_MIN_FILTER,
-            d->textureMinFilter);
-        glTexParameteri(_textureTarget, GL_TEXTURE_MAG_FILTER,
-            d->textureMagFilter);
         if (_description.samples > 1)
         {
             glTexStorage2DMultisample(_textureTarget,
@@ -103,6 +99,10 @@ Framebuffer::Framebuffer(const FramebufferDescription* d)
         else
         {
             glTexStorage2D(_textureTarget, 1, a.format, d->width, d->height);
+            glTexParameteri(_textureTarget, GL_TEXTURE_MIN_FILTER,
+                d->textureMinFilter);
+            glTexParameteri(_textureTarget, GL_TEXTURE_MAG_FILTER,
+                d->textureMagFilter);
         }
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,
             a.attachment,
@@ -131,7 +131,7 @@ Framebuffer::~Framebuffer()
 }
 
 void Framebuffer::resize(uint32_t width, uint32_t height)
-{
+{ // FIXME storage is immutable
     GLStateGuard _g; // Save state util the end of scope
 
     _description.width = width;
@@ -172,4 +172,4 @@ void Framebuffer::resize(uint32_t width, uint32_t height)
     _status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
 }
 
-} // namespace cg::ext
+} // namespace cg::gl

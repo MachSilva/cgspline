@@ -1,0 +1,216 @@
+= Extended Scene Grammar Definition
+
+The source file link:../src/SceneReaderExt.h[SceneReaderExt.h] parses an extended grammar derived from link:../Ds/apps/cgdemo/reader/grammar.txt[].
+
+== Extended grammar
+
+// Before presenting the grammar let's define some conventions:
+// * Tokens are written in `UPPERCASE` and 
+// * Whitespace in parsed file delimits grammar tokens except for the token `STRING`
+// * Grammar rules are written in `CamelCase`
+
+The extended grammar redefines some rules:
+
+* Declaration
+* Component
+* Material
+* Mesh
+* Light
+
+.Rules with some semantic meaning
+----
+Filename:
+  STRING
+
+ResourceName:
+  STRING
+
+Integer:
+  Expression
+
+Float:
+  Expression
+
+Vec2:
+  Expression
+
+Vec3:
+  Expression
+
+Color:
+  Vec3
+----
+
+The Texture for a PBR Material contains values for the surface metalness and
+roughness for each pixel at the channels Green and Blue respectively. It is
+arranged this way to allow a straightforward material exchange with objects in
+glTF files.
+
+.Extended grammar
+----
+Start:
+  Preamble
+  Scene?
+  EOF
+
+Preamble:
+  (Include | Declaration | Asset)*
+
+Include:
+  INCLUDE Filename
+
+Declaration:
+  DEFINE NAME "="? Expression
+
+Asset:
+  Material
+| PbrMaterial
+| Mesh
+| Surface
+| Texture
+
+Material:
+  MATERIAL ResourceName? MaterialDef?
+
+MaterialDef:
+  "{" MaterialItem* "}"
+
+MaterialItem:
+  AMBIENT Color
+| DIFFUSE Color
+| SPOT Color
+| SHINE Float
+| SPECULAR Color
+| IOR Float
+| TRANSPARENCY Color
+
+PbrMaterial:
+  PBRMATERIAL ResourceName? PbrMaterialDef?
+
+PbrMaterialDef:
+  "{" PbrMaterialItem* "}"
+
+PbrMaterialItem:
+  DIFFUSE (Color | Texture)
+| SPECULAR (Color | Texture)
+| METALNESS Float
+| ROUGHNESS Float
+| Texture
+
+Mesh:
+  MESH ResourceName MeshDef?
+
+MeshDef:
+  "{" Filename "}"
+
+Surface:
+  SURFACE ResourceName SurfaceDef?
+
+SurfaceDef:
+  "{" SurfaceType Filename "}"
+
+SurfaceType:
+  BEZIER
+
+Texture:
+  TEXTURE ResourceName TextureDef?
+
+TextureDef:
+  "{" Filename "}"
+
+Scene:
+  SCENE ResourceName?
+  "{"
+      Declaration*
+      Environment?
+      ObjectBlock
+  "}"
+
+Environment:
+  ENVIRONMENT "{" EnvironmentItem* "}"
+
+EnvironmentItem:
+  AMBIENT Color
+| BACKGROUND Color
+| Texture
+
+ObjectBlock:
+  (Object | Declaration)* "}"
+
+Object:
+  OBJECT STRING? ("{" ChildObjectBlock | Component)
+
+ChildObjectBlock:
+  Declaration*
+  Transform?
+  Component*
+  ObjectBlock
+
+Transform:
+  TRANSFORM "{" TransformItem* "}"
+
+TransformItem:
+  POSITION Vec3
+| ROTATION Vec3
+| SCALE Vec3
+
+Component:
+  Camera
+| Light
+| Primitive
+
+Camera:
+  CAMERA "{" ProjectionType? CameraItem* "}"
+
+ProjectionType:
+  PARALLEL 
+| PERSPECTIVE
+
+CameraItem:
+  ASPECT Float
+| ANGLE Float
+| HEIGHT Float
+| DEPTH Vec2
+
+Light:
+  LIGHT "{" LightType LightItem* "}"
+
+LightType:
+  POINT
+| DIRECTIONAL
+| SPOT
+
+LightItem:
+  COLOR Color
+| RANGE Float
+| ANGLE Float
+| FALLOFF Integer
+| NITS Float
+
+Primitive:
+  (MESH | SURFACE) ResourceName (Material | PbrMaterial)?
+
+Expression:
+  Term ("+" Term | "-" Term)*
+
+Term:
+  Factor ("*" Factor | "/" Factor)*
+
+Factor:
+  "(" Expression ")"
+| "+" Expression
+| "-" Expression
+| NAME
+| INTEGER
+| FLOAT
+| RGB "(" Float "," Float "," Float ")"
+| "<" Float "," Float "," Float ">"
+| VEC2 "(" Float "," Float ")"
+| VEC3 "(" Float "," Float "," Float ")"
+| VEC4 "(" Float "," Float "," Float "," Float ")"
+| LENGTH "(" Vec3 ")"
+| NORMALIZE "(" Vec3 ")"
+| DOT "(" Vec3 "," Vec3 ")"
+| CROSS "(" Vec3 "," Vec3 ")"
+| AXES "(" Vec3 "," Vec3 ")"
+----

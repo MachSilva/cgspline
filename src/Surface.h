@@ -7,6 +7,7 @@
 #include <graph/PrimitiveProxy.h>
 #include "BezierPatches.h"
 #include "PatchBVH.h"
+#include "PBRMaterial.h"
 
 namespace cg
 {
@@ -38,36 +39,43 @@ extern const char * const BICUBIC_DECASTELJAU_FUNCTIONS;
 } // namespace GLSL
 
 // The surface itself
-class Surface : public Primitive
+class SurfacePrimitive : public Primitive
 {
 protected:
     bool localIntersect(const Ray3f&, Intersection&) const override;
     bool localIntersect(const Ray3f&) const override;
 
 public:
-    Surface(BezierPatches* patches)
-        : _patches{patches}, _bvh{new PatchBVH(*patches)}
+    SurfacePrimitive() = default;
+
+    SurfacePrimitive(BezierPatches* patches)
     {
-        _material = Material::defaultMaterial();
+        setPatches(patches);
     }
 
     BezierPatches* patches() const { return _patches; }
-    void setPatches(BezierPatches* p) { _patches = p; }
+    void setPatches(BezierPatches* p)
+    {
+        _patches = p;
+        _bvh = new PatchBVH(*p);
+    }
 
     vec4f point(const Intersection&) const;
     vec3f normal(const Intersection&) const override;
     Bounds3f bounds() const override;
 
+    Ref<PBRMaterial> pbrMaterial {nullptr};
+
 private:
-    Reference<BezierPatches> _patches;
-    Reference<PatchBVH> _bvh;
+    Ref<BezierPatches> _patches;
+    Ref<PatchBVH> _bvh;
 };
 
 // Surface as some object that knows to render itself
 class SurfaceMapper : public PrimitiveMapper
 {
 public:
-    SurfaceMapper(BezierPatches* patches) : _surface{new Surface(patches)} {}
+    SurfaceMapper(SurfacePrimitive* surface) : _surface{surface} {}
 
     void update() override;
     bool render(GLRenderer&) const override;
@@ -76,10 +84,10 @@ public:
     Bounds3f bounds() const override;
     Primitive* primitive() const override;
 
-    Surface& surface() { return *_surface; }
+    SurfacePrimitive& surface() { return *_surface; }
 
 protected:
-    Reference<Surface> _surface;
+    Ref<SurfacePrimitive> _surface;
 
     void updateMatrixBlock(GLRenderer& renderer) const;
 };
@@ -88,8 +96,8 @@ protected:
 class SurfaceProxy : public graph::PrimitiveProxy
 {
 public:
-    SurfaceProxy(BezierPatches* p)
-        : graph::PrimitiveProxy{*new SurfaceMapper(p)} {}
+    SurfaceProxy(SurfacePrimitive* s)
+        : graph::PrimitiveProxy{*new SurfaceMapper(s)} {}
 
     Actor* actor() const { return _actor; }
     SurfaceMapper* mapper() const
@@ -98,7 +106,7 @@ public:
     }
 
 protected:
-    Reference<Actor> _actor;
+    Ref<Actor> _actor;
 };
 
 class SurfacePipeline : public GLRenderer::Pipeline

@@ -10,6 +10,7 @@
 #include "BezierPatches.h"
 #include "Framebuffer.h"
 #include "RayTracer.h"
+#include "SceneReaderExt.h"
 #include "Surface.h"
 
 namespace cg
@@ -51,8 +52,8 @@ public:
         bool renderOnCentralNode = true;
         CursorMode cursorMode = CursorMode::Select;
         ShadingMode shadingMode = ShadingMode::CookTorrance;
-        Reference<ext::Framebuffer> renderFramebuffer;
-        Reference<ext::Framebuffer> cameraFramebuffer;
+        Ref<gl::Framebuffer> renderFramebuffer;
+        Ref<gl::Framebuffer> cameraFramebuffer;
         Viewport renderViewport;
         Viewport cameraViewport;
     };
@@ -77,7 +78,8 @@ protected:
         Intersection& hit) const;
     
     void readScene(std::filesystem::path scenefile);
-    
+
+    void assetWindow();
     void cameraPreview();
     void controlWindow();
     void fileMenu();
@@ -88,11 +90,16 @@ protected:
     static void inspectSurface(MainWindow&, SurfaceProxy&);
 
     std::future<void> _renderTask;
-    Reference<GLImage> _image;
-    Reference<RayTracer> _rayTracer;
+    Ref<GLImage> _image;
+    Ref<RayTracer> _rayTracer;
     Intersection _lastPickHit;
 
     std::vector<std::filesystem::path> _sceneFileList;
+    MaterialMap _sceneMaterials;
+    util::TriangleMeshMap _sceneMeshes;
+    util::PBRMaterialMap _scenePBRMaterials;
+    util::SurfaceMap _sceneSurfaces;
+    util::TextureMap _sceneTextures;
 
     State _state {};
     Data _data {};

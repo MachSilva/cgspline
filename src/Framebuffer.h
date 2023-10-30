@@ -4,7 +4,7 @@
 #include <graphics/GLBuffer.h>
 #include <memory>
 
-namespace cg::ext
+namespace cg::gl
 {
 
 struct AttachmentDescription
@@ -53,4 +53,4 @@ public:
     operator GLuint () const { return _handle; }
 };
 
-} // namespace cg::ext
+} // namespace cg::gl

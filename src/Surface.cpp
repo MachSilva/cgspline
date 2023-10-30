@@ -211,7 +211,7 @@ static const char* _tes = STRINGIFY(
         vec4 Q = mvMatrix * P;
         v_position = Q.xyz / Q.w;
         v_normal = N;
-        v_uv = vec4(gl_TessCoord.xy, 0, 0);
+        v_uv = vec4(gl_TessCoord.xy, 0, 1);
     }
 );
 
@@ -326,7 +326,7 @@ static const char* _tesContour = STRINGIFY(
         gl_Position = mvpMatrix * P;
         vec4 Q = mvMatrix * P;
         v_position = Q.xyz / Q.w;
-        v_uv = mix(vec4(1,0,0,0), vec4(0,1,0,0), gl_TessCoord.x);
+        v_uv = mix(vec4(1,0,0,1), vec4(0,1,0,1), gl_TessCoord.x);
     }
 );
 
@@ -384,7 +384,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode)
 
 SurfacePipeline::~SurfacePipeline() {}
 
-bool Surface::localIntersect(const Ray3f& ray, Intersection& hit) const
+bool SurfacePrimitive::localIntersect(const Ray3f& ray, Intersection& hit) const
 {
     _bvh->map();
     bool b = _bvh->intersect(ray, hit);
@@ -393,7 +393,7 @@ bool Surface::localIntersect(const Ray3f& ray, Intersection& hit) const
     return b;
 }
 
-bool Surface::localIntersect(const Ray3f& ray) const
+bool SurfacePrimitive::localIntersect(const Ray3f& ray) const
 {
     _bvh->map();
     bool b = _bvh->intersect(ray);
@@ -401,7 +401,7 @@ bool Surface::localIntersect(const Ray3f& ray) const
     return b;
 }
 
-vec4f Surface::point(const Intersection &hit) const
+vec4f SurfacePrimitive::point(const Intersection &hit) const
 {
     auto idx = hit.triangleIndex;
     float u = hit.p.x;
@@ -415,7 +415,7 @@ vec4f Surface::point(const Intersection &hit) const
     return localToWorldMatrix().transform(P);
 }
 
-vec3f Surface::normal(const Intersection &hit) const
+vec3f SurfacePrimitive::normal(const Intersection &hit) const
 {
     auto idx = hit.triangleIndex;
     float u = hit.p.x;
@@ -429,7 +429,7 @@ vec3f Surface::normal(const Intersection &hit) const
     return _normalMatrix.transform(N.versor()).versor();
 }
 
-Bounds3f Surface::bounds() const
+Bounds3f SurfacePrimitive::bounds() const
 {
     return {_bvh->bounds(), _localToWorld};
 }
@@ -459,14 +459,46 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     auto pipeline = renderer.pipeline(GLRenderer::Surface);
     if (!pipeline) return false;
 
-    auto s = _surface->patches();    
+    updateMatrixBlock(renderer);
+
+    // Update texture info to ConfigBlock
+    int v[3] { 0, 0, 0 };
+    if (auto pbr = _surface->pbrMaterial.get())
+    {
+        auto s = renderer.fragmentShader()->samplers();
+        if (pbr->diffuseTexture != nullptr)
+        {
+            v[0] = 1;
+            glActiveTexture(GL_TEXTURE0 + s.sDiffuse.textureUnit);
+            glBindTexture(GL_TEXTURE_2D, *pbr->diffuseTexture);
+        }
+        if (pbr->specularTexture != nullptr)
+        {
+            v[1] = 1;
+            glActiveTexture(GL_TEXTURE0 + s.sSpecular.textureUnit);
+            glBindTexture(GL_TEXTURE_2D, *pbr->specularTexture);
+        }
+        if (pbr->textureMetalRough != nullptr)
+        {
+            v[2] = 1;
+            glActiveTexture(GL_TEXTURE0 + s.sMetalRough.textureUnit);
+            glBindTexture(GL_TEXTURE_2D, *pbr->textureMetalRough);
+        }
+    }
+    glNamedBufferSubData(
+        renderer.configBlock(),
+        offsetof (GLSL::ConfigBlock, hasDiffuseTexture),
+        sizeof (v),
+        v
+    );
+
+    auto s = _surface->patches();
 
     pipeline->use();
     // TODO Review if this function call is `SurfaceMapper`'s responsability.
     pipeline->beforeDrawing(renderer);
 
     s->bind();
-    updateMatrixBlock(renderer);
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);
     glDrawElements(GL_PATCHES, s->indexes()->size(), GL_UNSIGNED_INT, 0);
@@ -479,13 +511,14 @@ bool SurfaceMapper::renderContour(GLRenderer& renderer) const
     auto pipeline = renderer.pipeline("SurfCont"_ID8);
     if (!pipeline) return false;
 
+    updateMatrixBlock(renderer);
+
     auto s = _surface->patches();    
 
     pipeline->use();
     pipeline->beforeDrawing(renderer);
 
     s->bind();
-    updateMatrixBlock(renderer);
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);
     glDrawElements(GL_PATCHES, s->indexes()->size(), GL_UNSIGNED_INT, 0);

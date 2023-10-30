@@ -11,6 +11,7 @@ if(UNIX)
     # endif()
 endif()
 
+add_subdirectory(external/stb)
 add_subdirectory(Ds)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -27,6 +28,7 @@ add_executable(cgspline
     src/SceneReaderExt.cpp
     src/Spline.cpp
     src/Surface.cpp
+    src/Texture.cpp
 )
 
 target_sources(cgspline PRIVATE
@@ -41,4 +43,8 @@ target_sources(cgspline PRIVATE
 )
 target_include_directories(cgspline PRIVATE ${cgdemo_SOURCE_DIR})
 
-target_link_libraries(cgspline cg)
+if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
+    target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)
+endif()
+
+target_link_libraries(cgspline cg stb)

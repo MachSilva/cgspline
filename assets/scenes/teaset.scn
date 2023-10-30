@@ -9,12 +9,28 @@ material "SilverSpecular"
   specular Silver * 0.5
 }
 
+texture "tex:ScratchedIron:BaseColor" { "../textures/ScratchedIron_BaseColor.png" }
+texture "tex:ScratchedIron:MR" { "../textures/ScratchedIron_MetalRoughness.png" }
+
+pbrmaterial "ScratchedIron"
+{
+  diffuse   texture "tex:ScratchedIron:BaseColor"
+  specular  texture "tex:ScratchedIron:BaseColor"
+  metalness 1
+  roughness 1
+  texture   "tex:ScratchedIron:MR"
+}
+
+surface "teacup"    { bezier "../bezier/teacup" }
+surface "teapot"    { bezier "../bezier/teapot" }
+surface "teaspoon"  { bezier "../bezier/teaspoon" }
+
 scene
 {
   environment
   {
-    background DarkGray
-    ambient VeryLightGray
+    background VeryLightGray
+    ambient DarkGray
   }
 
   object "Main Camera"
@@ -45,7 +61,7 @@ scene
       {
         point
         color White
-        falloff 1
+        falloff 0
       }
     }
 
@@ -59,7 +75,7 @@ scene
       {
         point
         color White
-        falloff 1
+        falloff 0
       }
     }
 
@@ -73,7 +89,7 @@ scene
       {
         point
         color White
-        falloff 1
+        falloff 0
       }
     }
 
@@ -101,7 +117,7 @@ scene
         rotation <-90,0,0>
         scale vec3(0.5)
       }
-      surface "../bezier/teapot" material "SilverSpecular"
+      surface "teapot" pbrmaterial "ScratchedIron"
     }
 
     object "Teacup"
@@ -110,7 +126,7 @@ scene
       {
         position <2.4,0,0>
       }
-      surface "../bezier/teacup" material "SilverSpecular"
+      surface "teacup" material "SilverSpecular"
     }
 
     object "Teaspoon"
@@ -119,7 +135,7 @@ scene
       {
         position <3.5,1,0>
       }
-      surface "../bezier/teaspoon" material "SilverSpecular"
+      surface "teaspoon" material "SilverSpecular"
     }
   }
 }
