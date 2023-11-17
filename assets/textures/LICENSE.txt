@@ -1,0 +1,8 @@
+Here are a list of the files in this directory along with their licenses:
+
+`je_gray_park_4k.hdr`:
+    License: CC0
+    Source: https://polyhaven.com/a/je_gray_park
+
+The contributors of this repository would like to thank the authors of the
+assets listed here for their work.

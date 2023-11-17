@@ -195,6 +195,15 @@ void MainWindow::render()
     e->setImageSize(v.w, v.h);
     glViewport(v.x, v.y, v.w, v.h);
 
+    if (_sceneEnvironment)
+    {
+        auto& s = renderer()->fragmentShader()->samplers();
+        int unit = s.sEnvironment.textureUnit;
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glBindTexture(GL_TEXTURE_2D, _sceneEnvironment->handle());
+        renderer()->setEnvironmentTextureUnit(unit);
+    }
+
     e->render();
 
     if (e->showGround)
@@ -512,13 +521,10 @@ void MainWindow::assetWindow()
     {
         for (auto& [name, m] : _scenePBRMaterials)
         {
-            auto d = "Diffuse##"+name;
-            auto s = "Specular##"+name;
+            auto d = "Base Color##"+name;
             bool selected = false;
 
-            ImGui::ColorButton(d.c_str(), *(ImVec4*)&m->diffuse);
-            ImGui::SameLine();
-            ImGui::ColorButton(s.c_str(), *(ImVec4*)&m->specular);
+            ImGui::ColorButton(d.c_str(), *(ImVec4*)&m->baseColor);
             ImGui::SameLine();
 
             ImGui::Selectable(name.c_str(), &selected);
@@ -621,6 +627,15 @@ void MainWindow::controlWindow()
 
     ImGui::Text("Samples: %d", _data.windowSamples);
     ImGui::Text("Sample Buffers: %d", _data.windowSampleBuffers);
+
+    ImGui::Separator();
+
+    static float depthValue = 0.99999f;
+    ImGui::DragFloat("Environment Depth", &depthValue, 0.0001);
+    auto p = editor()->__environmentProg();
+    p->disuse();
+    p->use();
+    p->setDepth(depthValue);
 
     ImGui::End();
 }
@@ -746,6 +761,7 @@ void MainWindow::readScene(std::filesystem::path scenefile)
         // for (auto& [name, m] : reader.materials)
         //     materials[name] = m;
 
+        _sceneEnvironment = reader.environment;
         _sceneMaterials = std::move(reader.materials);
         _scenePBRMaterials = std::move(reader.pbrMaterials);
         _sceneSurfaces = std::move(reader.surfaces);

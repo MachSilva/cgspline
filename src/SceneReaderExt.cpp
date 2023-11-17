@@ -276,23 +276,14 @@ SceneReaderExt::Parser::parsePBRMaterialDefinition()
     for (;;)
         switch (_token)
         {
-        case _DIFFUSE:
+        case _COLOR:
         {
             advance();
             auto result = matchColorOrTexture();
             if (std::holds_alternative<Color>(result))
-                material->diffuse = std::get<Color>(result);
+                material->baseColor = std::get<Color>(result);
             else
-                material->diffuseTexture = std::get<Ref<gl::Texture>>(result);
-        } break;
-        case _SPECULAR:
-        {
-            advance();
-            auto result = matchColorOrTexture();
-            if (std::holds_alternative<Color>(result))
-                material->specular = std::get<Color>(result);
-            else
-                material->specularTexture = std::get<Ref<gl::Texture>>(result);
+                material->texBaseColor = std::get<Ref<gl::Texture>>(result);
         } break;
         case _METALNESS:
             advance();
@@ -309,7 +300,7 @@ SceneReaderExt::Parser::parsePBRMaterialDefinition()
             material->roughness= value;
             break;
         case _TEXTURE:
-            material->textureMetalRough = matchTexture()->second;
+            material->texMetalRough = matchTexture()->second;
             break;
         default:
             return material;
@@ -541,8 +532,8 @@ SceneReaderExt::Parser::parseSceneEnvironment()
         }
         else if (_token == _TEXTURE)
         {
-            advance();
-            (void)matchTexture();
+            // advance();
+            _reader->environment = matchTexture()->second;
         }
         else
             break;

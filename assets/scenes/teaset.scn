@@ -9,13 +9,14 @@ material "SilverSpecular"
   specular Silver * 0.5
 }
 
+texture "tex:env" { "../textures/je_gray_park_4k.hdr" }
+
 texture "tex:ScratchedIron:BaseColor" { "../textures/ScratchedIron_BaseColor.png" }
 texture "tex:ScratchedIron:MR" { "../textures/ScratchedIron_MetalRoughness.png" }
 
 pbrmaterial "ScratchedIron"
 {
-  diffuse   texture "tex:ScratchedIron:BaseColor"
-  specular  texture "tex:ScratchedIron:BaseColor"
+  color     texture "tex:ScratchedIron:BaseColor"
   metalness 1
   roughness 1
   texture   "tex:ScratchedIron:MR"
@@ -31,6 +32,7 @@ scene
   {
     background VeryLightGray
     ambient DarkGray
+    texture "tex:env"
   }
 
   object "Main Camera"

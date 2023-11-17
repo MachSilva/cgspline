@@ -100,6 +100,7 @@ protected:
     util::PBRMaterialMap _scenePBRMaterials;
     util::SurfaceMap _sceneSurfaces;
     util::TextureMap _sceneTextures;
+    Ref<gl::Texture> _sceneEnvironment;
 
     State _state {};
     Data _data {};

@@ -58,6 +58,7 @@ public:
     TriangleMeshMap meshes;
     SurfaceMap surfaces;
     TextureMap textures;
+    Ref<gl::Texture> environment;
 
     graph::Scene* scene() const
     {

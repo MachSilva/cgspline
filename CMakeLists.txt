@@ -25,10 +25,11 @@ add_executable(cgspline
     src/MainWindow.cpp
     src/PatchBVH.cpp
     src/RayTracer.cpp
-    src/SceneReaderExt.cpp
     src/Spline.cpp
     src/Surface.cpp
     src/Texture.cpp
+
+    src/SceneReaderExt.cpp
 )
 
 target_sources(cgspline PRIVATE

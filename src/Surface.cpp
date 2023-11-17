@@ -466,23 +466,18 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     if (auto pbr = _surface->pbrMaterial.get())
     {
         auto s = renderer.fragmentShader()->samplers();
-        if (pbr->diffuseTexture != nullptr)
+        if (pbr->texBaseColor != nullptr)
         {
             v[0] = 1;
             glActiveTexture(GL_TEXTURE0 + s.sDiffuse.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->diffuseTexture);
+            glBindTexture(GL_TEXTURE_2D, *pbr->texBaseColor);
         }
-        if (pbr->specularTexture != nullptr)
-        {
-            v[1] = 1;
-            glActiveTexture(GL_TEXTURE0 + s.sSpecular.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->specularTexture);
-        }
-        if (pbr->textureMetalRough != nullptr)
+        // no specular, only base color
+        if (pbr->texMetalRough != nullptr)
         {
             v[2] = 1;
             glActiveTexture(GL_TEXTURE0 + s.sMetalRough.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->textureMetalRough);
+            glBindTexture(GL_TEXTURE_2D, *pbr->texMetalRough);
         }
     }
     glNamedBufferSubData(

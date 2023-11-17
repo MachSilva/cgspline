@@ -91,8 +91,7 @@ PbrMaterialDef:
   "{" PbrMaterialItem* "}"
 
 PbrMaterialItem:
-  DIFFUSE (Color | Texture)
-| SPECULAR (Color | Texture)
+  COLOR (Color | Texture)
 | METALNESS Float
 | ROUGHNESS Float
 | Texture
