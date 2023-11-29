@@ -1,0 +1,49 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglfw3-dev
+
+    - name: Configure CMake
+      run: |
+        mkdir cmake-build
+        cmake -B cmake-build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: make -C cmake-build -j`nproc`
+
+  windows:
+    runs-on: windows-2022
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install MSBuild
+      uses: microsoft/setup-msbuild@v1
+    
+    - name: Build cgspline
+      run: |
+        msbuild build\v
+
+  # windows-msbuild:
+  #   runs-on: windows-2022
+
+  #   steps:
+  #   - uses: actions/checkout@v3
+
+  #   - name: Install MSBuild
+  #     uses: microsoft/setup-msbuild@v1
+    
+  #   - name: Build cgspline
+  #     run: |
+  #       msbuild build\vs2022\cgspline.sln -m -t:cgspline:rebuild -property:Configuration=Release

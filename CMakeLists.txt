@@ -26,6 +26,8 @@ add_executable(cgspline
     src/PatchBVH.cpp
     src/RayTracer.cpp
     src/Spline.cpp
+    src/Spline_Subdivision.cpp
+    src/Spline_BezierClipping.cpp
     src/Surface.cpp
     src/Texture.cpp
 
