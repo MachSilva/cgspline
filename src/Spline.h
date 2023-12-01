@@ -19,10 +19,11 @@
 namespace cg::spline
 {
 
-inline constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
+static constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
 
 template<typename V, typename C>
-concept vector_component_type_check = std::same_as<C, typename V::value_type>;
+concept is_vector_component_type =
+    std::same_as<C, typename V::value_type> || std::same_as<C, V>;
 
 template<typename T>
 concept surface =
@@ -61,11 +62,11 @@ public:
     explicit
     PatchRef(vec* pointBuffer, idx* patchIndexes)
         : _points{pointBuffer}, _indexes{patchIndexes} {}
-    
+
     explicit
     PatchRef(vec* pointBuffer, idx* indexBuffer, idx patchNumber)
         : PatchRef(pointBuffer, indexBuffer + 16*patchNumber) {}
-    
+
     PatchRef(PatchRef&&) = default;
     PatchRef(const PatchRef&) = default;
 
@@ -124,28 +125,28 @@ vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v);
 
 /**
  * Cubic bézier curve splitting at point t.
- * 
+ *
  * Let C0 and C1 be two curves derived from an original curve C = B(P0,P1,P2,P3),
  * where C0 represents the curve in the interval [0,t] of C and C1 is represents
  * the curve in the interval [t,1].
- * 
+ *
  * Compute the following points:
- * 
+ *
  *   P4 = (1-t)P0 + tP1
  *   P5 = (1-t)P1 + tP2
  *   P6 = (1-t)P2 + tP3
- * 
+ *
  *   P7 = (1-t)P4 + tP5
  *   P8 = (1-t)P5 + tP6
- * 
+ *
  *   P9 = (1-t)P7 + tP8
- * 
+ *
  * Therefore, C0 = B(P0,P4,P7,P9) and C1 = B(P9,P8,P6,P3).
  */
 
 // Curve equivalent: [0, t]
 template<typename vec, typename real>
-requires vector_component_type_check<vec,real> 
+requires is_vector_component_type<vec,real>
 void split0(vec C[4], real t)
 {
     assert(0.0 <= t && t <= 1.0);
@@ -164,7 +165,7 @@ void split0(vec C[4], real t)
 
 // Curve equivalent: [t, 1]
 template<typename vec, typename real>
-requires vector_component_type_check<vec,real> 
+requires is_vector_component_type<vec,real>
 void split1(vec C[4], real t)
 {
     assert(0.0 <= t && t <= 1.0);
@@ -183,7 +184,7 @@ void split1(vec C[4], real t)
 
 // Curve equivalent: [u, v]
 template<uint32_t _stride = 1, typename vec, typename real>
-requires vector_component_type_check<vec,real> && (_stride > 0)
+requires is_vector_component_type<vec,real> && (_stride > 0)
 void slice(vec *curve, real u, real v)
 {
     assert(u <= v);
@@ -223,7 +224,7 @@ void slice(vec *curve, real u, real v)
 }
 
 template<typename vec, typename real>
-// requires vector_component_type_check<vec,real>
+// requires is_vector_component_type<vec,real>
 void subpatch(
     vec patch[16],
     real umin,
@@ -346,7 +347,7 @@ auto& deCasteljauDx(V p, real u)
 }
 
 template<surface_cage S, typename real>
-requires vector_component_type_check<typename S::point_type, real>
+requires is_vector_component_type<typename S::point_type, real>
 auto interpolate(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -369,7 +370,7 @@ auto interpolate(const S& s, real u, real v) ->
 }
 
 template<surface_cage S, typename real>
-requires vector_component_type_check<typename S::point_type,real>
+requires is_vector_component_type<typename S::point_type,real>
 auto derivativeU(const S& s, real u, real v)
     -> std::remove_cvref_t<typename S::point_type>
 {
@@ -393,7 +394,7 @@ auto derivativeU(const S& s, real u, real v)
 }
 
 template<surface_cage S, typename real>
-requires vector_component_type_check<typename S::point_type,real>
+requires is_vector_component_type<typename S::point_type,real>
 auto derivativeV(const S& s, real u, real v)
     -> std::remove_cvref_t<typename S::point_type>
 {
