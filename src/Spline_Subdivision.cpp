@@ -24,12 +24,12 @@ bool doSubdivision(Intersection& hit,
 
     // First iteration (no need to use `slice`)
     auto pb = boundingbox(buffer, patch);
-    if (! pb.intersect(ray, tmin, tmax))
+    if (pb.intersect(ray, tmin, tmax) == false)
         return false;
 
     // Areas of interest
-    st.push({ .min = vec2f( 0, 0), .max = vec2f(.5, 1), .cutside = 0});
-    st.push({ .min = vec2f(.5, 0), .max = vec2f( 1, 1), .cutside = 0});
+    st.push({ .min = vec2f( 0, 0), .max = vec2f(.5, 1), .cutside = 0 });
+    st.push({ .min = vec2f(.5, 0), .max = vec2f( 1, 1), .cutside = 0 });
 
     bool found = false;
     while (!st.empty())
