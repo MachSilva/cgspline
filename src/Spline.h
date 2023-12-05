@@ -23,7 +23,8 @@ static constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
 
 template<typename V, typename C>
 concept is_vector_component_type =
-    std::same_as<C, typename V::value_type> || std::same_as<C, V>;
+    std::same_as<C, std::remove_cvref_t<typename V::value_type>> ||
+    std::same_as<C, std::remove_cvref_t<V>>;
 
 template<typename T>
 concept surface =
@@ -52,10 +53,58 @@ concept surface_cage = requires (const T s, int i, int j)
     };
 };
 
+/// Reference to a bicubic Bézier patch.
+template<typename vec>
+class Patch
+{
+public:
+    using point_type = vec;
+
+    explicit
+    Patch(vec* controlPoints) : _points{controlPoints} {}
+
+    Patch() = default;
+    Patch(Patch&&) = default;
+    Patch(const Patch&) = default;
+
+    Patch& operator= (Patch&&) = default;
+    Patch& operator= (const Patch&) = default;
+
+    const vec& operator[] (uint32_t i) const { return _points[i]; }
+    vec& operator[] (uint32_t i) { return _points[i]; }
+
+    const vec& point(uint32_t i, uint32_t j) const { return (*this)[4*j + i]; }
+    vec& point(uint32_t i, uint32_t j) { return (*this)[4*j + i]; }
+
+    constexpr uint32_t shape(uint32_t i) const noexcept
+    {
+        return i < 2 ? 4 : 0;
+    }
+
+    constexpr uint32_t size() const noexcept { return 16; }
+
+protected:
+    vec* _points {};
+};
+
+/**
+ * Reference to a bicubic Bézier patch with control points located anywhere
+ * inside a Vertex/Point buffer/array. The addresses of the points are not
+ * assumed to be in a sequence, so it needed to provide an index array, that
+ * references the control points, representing the patch.
+ * 
+ * @tparam vec Control point array element type 
+ * @tparam idx Index array element type
+ */
 template<typename vec, typename idx>
 class PatchRef
 {
 public:
+    // TODO Breaking change to support more use cases:
+    //   using point_type = std::ranges::range_value_t<vec>;
+    // in case of [vec = vec3f*] or [vec = std::array<vec3f, 16>].
+    // Maybe rename vec.
+
     using point_type = vec;
     using index_type = idx;
 
@@ -67,6 +116,7 @@ public:
     PatchRef(vec* pointBuffer, idx* indexBuffer, idx patchNumber)
         : PatchRef(pointBuffer, indexBuffer + 16*patchNumber) {}
 
+    PatchRef() = default;
     PatchRef(PatchRef&&) = default;
     PatchRef(const PatchRef&) = default;
 
@@ -225,6 +275,22 @@ void slice(vec *curve, real u, real v)
 
 template<typename vec, typename real>
 // requires is_vector_component_type<vec,real>
+void subpatchU(vec *patch, real umin, real umax)
+{
+    for (int i = 0; i < 4; i++)
+        slice(patch + 4*i, umin, umax);
+}
+
+template<typename vec, typename real>
+// requires is_vector_component_type<vec,real>
+void subpatchV(vec *patch, real vmin, real vmax)
+{
+    for (int i = 0; i < 4; i++)
+        slice<4>(patch + i, vmin, vmax);
+}
+
+template<typename vec, typename real>
+// requires is_vector_component_type<vec,real>
 void subpatch(
     vec patch[16],
     real umin,
@@ -232,10 +298,8 @@ void subpatch(
     real vmin,
     real vmax)
 {
-    for (int i = 0; i < 4; i++)
-        slice<4>(patch + i, vmin, vmax);
-    for (int i = 0; i < 4; i++)
-        slice(patch + 4*i, umin, umax);
+    subpatchV(patch, vmin, vmax);
+    subpatchU(patch, umin, umax);
 }
 
 template<typename real>
@@ -371,8 +435,8 @@ auto interpolate(const S& s, real u, real v) ->
 
 template<surface_cage S, typename real>
 requires is_vector_component_type<typename S::point_type,real>
-auto derivativeU(const S& s, real u, real v)
-    -> std::remove_cvref_t<typename S::point_type>
+auto derivativeU(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
 {
     using vec = std::remove_cvref_t<typename S::point_type>;
     vec p[MAX_POINTS];
@@ -395,8 +459,8 @@ auto derivativeU(const S& s, real u, real v)
 
 template<surface_cage S, typename real>
 requires is_vector_component_type<typename S::point_type,real>
-auto derivativeV(const S& s, real u, real v)
-    -> std::remove_cvref_t<typename S::point_type>
+auto derivativeV(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
 {
     using vec = std::remove_cvref_t<typename S::point_type>;
     vec p[MAX_POINTS];
@@ -446,4 +510,3 @@ using ext::derivativeU;
 using ext::derivativeV;
 
 } // namespace cg::spline
-
