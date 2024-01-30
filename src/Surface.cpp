@@ -493,6 +493,8 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     // TODO Review if this function call is `SurfaceMapper`'s responsability.
     pipeline->beforeDrawing(renderer);
 
+    renderer.renderMaterial(*_surface->material());
+
     s->bind();
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);

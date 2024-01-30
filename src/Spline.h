@@ -10,6 +10,7 @@
 #include <ranges>
 #include <span>
 #include <stack>
+#include <vector>
 
 #define SPL_DERIVATIVE_MAXPOINTS 8u
 #define SPL_NORMAL_FIXVALUE 0.0001f
@@ -362,10 +363,24 @@ Bounds3<real> subpatchBoundingbox(
     return boundingbox(subp, subp+16);
 }
 
+/**
+ * @brief Performs Bézier clipping on an already projected non-rational patch.
+ *        Intersection points lie in the origin (0,0) of the projected space.
+ * 
+ * @param [out] hits Output vector to store all the intersection coordinates.
+ * @param patch Bézier patch in 2D with control points (x, y).
+ * @param tol Required precision for each dimension.
+ * @retval Returns if an intersection was found.
+ */
+bool doBezierClipping2D(std::vector<vec2f>& hits,
+    const vec2f patch[16],
+    float tol = 1e-4);
+
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
-    const uint32_t patch[16]);
+    const uint32_t patch[16],
+    float tol = 1e-4);
 
 bool doSubdivision(Intersection& hit,
     const Ray3f& ray,
