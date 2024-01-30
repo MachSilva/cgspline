@@ -51,7 +51,8 @@ bool PatchBVH::intersectLeaf(uint32_t first, uint32_t count, const Ray3f& ray) c
 
     auto& i = _primitiveIds[first];
     const uint32_t* patch = _indexes + 16*i;
-    return spline::doSubdivision(hit, ray, _points, patch);
+    // return spline::doSubdivision(hit, ray, _points, patch);
+    return spline::doBezierClipping(hit, ray, _points, patch);
 }
 
 void PatchBVH::intersectLeaf(uint32_t first,
@@ -66,7 +67,8 @@ void PatchBVH::intersectLeaf(uint32_t first,
     uint32_t i = _primitiveIds[first];
 
     const uint32_t* patch = _indexes + 16*i;
-    if (spline::doSubdivision(hit, ray, _points, patch))
+    // if (spline::doSubdivision(hit, ray, _points, patch))
+    if (spline::doBezierClipping(hit, ray, _points, patch))
     {
         hit.triangleIndex = i;
         hit.object = this; // intersectLeaf must set hit.object

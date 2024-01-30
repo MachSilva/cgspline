@@ -145,7 +145,7 @@ void MainWindow::initializeScene()
     obj = createLightObject(Light::Type::Directional, "The Light");
     obj->transform()->setLocalEulerAngles({50,130,0});
 
-    createPrimitiveObject(*GLGraphics3::box(), "Box");
+    // createPrimitiveObject(*GLGraphics3::box(), "Box");
 
     // Load surfaces
     std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {
