@@ -12,6 +12,7 @@
 #include "RayTracer.h"
 #include "SceneReaderExt.h"
 #include "Surface.h"
+#include "Spline.h"
 
 namespace cg
 {
@@ -104,6 +105,10 @@ protected:
 
     State _state {};
     Data _data {};
+
+    Ref<graph::SceneObject> _debugObject;
+    Ref<BezierPatches> _debugPatch2D;
+    uint32_t _debugPatchIndex {};
 };
 
 } // namespace cg

@@ -149,7 +149,7 @@ void MainWindow::initializeScene()
 
     // Load surfaces
     std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {
-        {"bezier/teacup", vec3f(0, 0, 0), vec3f::null(), 1.0},
+        {"bezier/teacup", vec3f(0, 0, -2), vec3f::null(), 1.0},
         {"bezier/teapot", vec3f(-2.5, 0, 0), vec3f(-90, 0, 0), 0.5},
         {"bezier/teaspoon", vec3f(1.5, 0, 0), vec3f::null(), 1.0}
     };
@@ -179,6 +179,26 @@ void MainWindow::initializeScene()
     editor()->setPipeline("SurfCont"_ID8, p1);
 
     registerInspectFunction(inspectSurface);
+
+    // debug code
+    {
+        const uint32_t indexArray[]
+        {
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+        };
+        vec4f vertexArray[16];
+        for (auto& v : vertexArray)
+            v = {0,0,0,1};
+
+        _debugPatch2D = new BezierPatches();
+        auto idxs = _debugPatch2D->indexes();
+        idxs->resize(16);
+        idxs->setData(indexArray);
+        auto points = _debugPatch2D->points();
+        points->resize(16);
+        points->setData(vertexArray);
+        _debugObject = createSurfaceObject(*_debugPatch2D, "Debug Object");
+    }
 }
 
 void MainWindow::render()
@@ -188,6 +208,21 @@ void MainWindow::render()
         renderScene();
         return;
     }
+
+    // begin debug code
+    auto n = spline::g_DebugData.size();
+    if (n > 1 && _debugPatchIndex < n)
+    {
+        vec4f buffer[16];
+        auto& patch2D = spline::g_DebugData[_debugPatchIndex].patch2D;
+        for (int i = 0; i < 16; i++)
+        {
+            auto& v = patch2D[i];
+            buffer[i] = {v.x, 0, v.y, 1};
+        }
+        _debugPatch2D->points()->setData(buffer);
+    }
+    // end debug code
 
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
     auto e = editor();
@@ -226,8 +261,8 @@ void MainWindow::render()
             }
 
         if (_state.cursorMode == CursorMode::NormalInspect
-            && _lastPickHit.object == obj
-            && p != nullptr)
+            && p != nullptr
+            && _lastPickHit.object == obj)
         {
             SurfacePrimitive& s = p->mapper()->surface();
             vec3f n = s.normal(_lastPickHit);
@@ -238,6 +273,9 @@ void MainWindow::render()
             e->drawVector(Q, n, e->pixelsLength(100.0));
         }
     }
+
+    // draw debug object
+    drawSelectedObject(*_debugObject);
 
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
 }
@@ -637,6 +675,70 @@ void MainWindow::controlWindow()
     p->use();
     p->setDepth(depthValue);
 
+    // begin debug code
+    ImGui::Separator();
+    char label[128];
+    const auto& patches = spline::g_DebugData;
+    ImGui::Text("Patch intersection test data (%d)", patches.size());
+    if (ImGui::BeginListBox("##PatchList", {-FLT_MIN, -FLT_MIN}))
+    {
+        for (int i = 0; i < patches.size(); i++)
+        {
+            const auto& p = patches[i];
+            const bool selected = i == _debugPatchIndex;
+            const uint32_t flags = ImGuiTreeNodeFlags_DefaultOpen
+                | ImGuiTreeNodeFlags_OpenOnArrow
+                | ImGuiTreeNodeFlags_OpenOnDoubleClick
+                | ImGuiTreeNodeFlags_SpanAvailWidth
+                | (selected ? ImGuiTreeNodeFlags_Selected : 0);
+
+            snprintf(label, sizeof (label),
+                "%d (max depth = %d)", i, p.maxStackDepth);
+
+            auto open = ImGui::TreeNodeEx(label, flags);
+            if (ImGui::IsItemClicked())
+                _debugPatchIndex = i;
+            if (open)
+            {
+                for (auto& hit : p.hits)
+                {
+                    snprintf(label, sizeof (label), "(%.4f, %.4f) d=%f",
+                        hit.coord.x, hit.coord.y, hit.distance);
+                    ImGui::Selectable(label);
+                    // ImGui::SetItemAllowOverlap();
+                }
+
+                if (ImGui::TreeNode("Steps"))
+                {
+                    for (auto& s : p.steps)
+                    {
+                        snprintf(label, sizeof (label),
+                            "u = [%.4f, %.4f]\n"
+                            "v = [%.4f, %.4f]\n"
+                            "clip = [%.4f, %.4f]\n"
+                            "%2.2f%% reduction\n"
+                            "cutside = '%c'",
+                            s.min.x, s.max.x,
+                            s.min.y, s.max.y,
+                            s.lower, s.upper,
+                            100 * ((s.upper - s.lower) - 1),
+                            s.cutside
+                        );
+                        ImGui::Selectable(label);
+                    }
+                    ImGui::TreePop();
+                }
+
+                ImGui::TreePop();
+            }
+
+            if (selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndListBox();
+    }
+    // end debug code
+
     ImGui::End();
 }
 
@@ -667,6 +769,9 @@ bool MainWindow::onKeyPress(int key, int p2)
 
 bool MainWindow::onMouseLeftPress(int x, int y)
 {
+    // debug code
+    spline::g_DebugData.clear();
+
     auto ray = makeRay(x, y);
     _lastPickHit.distance = math::Limits<float>::inf();
     _lastPickHit.object = nullptr;

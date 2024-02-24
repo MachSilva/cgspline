@@ -524,4 +524,32 @@ using ext::interpolate;
 using ext::derivativeU;
 using ext::derivativeV;
 
+// begin debug code
+struct SearchStep
+{
+    vec2f L; // midline
+    vec2f min;
+    vec2f max;
+    char cutside; // "U" or "V"
+    float lower;
+    float upper;
+};
+
+struct SearchHit
+{
+    float distance;
+    vec2f coord;
+};
+
+struct DebugData
+{
+    std::array<vec2f,16> patch2D;
+    std::vector<SearchStep> steps {};
+    std::vector<SearchHit> hits {};
+    int maxStackDepth = 0;
+};
+
+extern std::vector<DebugData> g_DebugData;
+// end debug code
+
 } // namespace cg::spline

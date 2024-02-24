@@ -4,11 +4,12 @@
 namespace cg::spline
 {
 
+std::vector<DebugData> g_DebugData;
+
 mat3f rotation(const vec3f& v, float angle)
 {
-    using std::cos, std::sin;
-    const auto c = cos(angle);
-    const auto s = sin(angle);
+    const auto c = std::cos(angle);
+    const auto s = std::sin(angle);
     const auto c1 = 1.0f - c;
     const auto xx = v.x * v.x;
     const auto yy = v.y * v.y;
@@ -27,61 +28,117 @@ mat3f rotation(const vec3f& v, float angle)
     };
 }
 
+/**
+ * @brief Computes the distance between a point P and a plane represented by the
+ *        normal vector N and origin O.
+ * 
+ * @param N The plane normal vector (must be unit length)
+ * @param O The plane origin point
+ * @param P The point whose distance is being measured
+ * @return float The computed distance
+ */
+static inline
+float distance(const vec3f& N, const vec3f& O, const vec3f& P)
+{
+    return N.dot(P - O);
+}
+
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
     const uint32_t patch[16],
     float tol)
 {
-    using std::acos, std::cos, std::sin;
-    // static thread_local
-    std::vector<vec2f> hits;
+    thread_local std::vector<vec2f> hits;
+    hits.clear();
 
-    // Project patch and call doBezierClipping2D
-    const vec3f d = ray.direction;
-    const vec3f axis = d.cross({0,0,-1}).versor();
-    // const float a = 0.5f * acos(d.dot({0,0,-1}));
-    // const quatf q (axis * sin(a), cos(a));
-    // projection matrix
-    // const mat4f M = mat4f(q) * mat4f(mat3f(1.0f), -ray.origin);
-    const mat3f R = rotation(axis, acos(d.dot({0,0,-1})));
-    const mat4f M = mat4f(R) * mat4f(mat3f(1.0f), -ray.origin);
+    // project patch into a 2D plane perpendicular to the ray direction
+    // vec2f patch2D[16];
+    std::array<vec2f,16> patch2D;
 
-    auto projectedP0 = M.transform3x4(ray.origin);
-    auto projectedP1 = M.transform3x4(ray.origin + d);
+    // find two planes whose intersection is a line that contains the ray
+    const auto& d = ray.direction;
+    const vec3f axis0 = d.cross(d + vec3f{0, 0, 10.f}).versor();
+    const vec3f axis1 = d.cross(axis0).versor();
 
-    vec2f projectedpatch[16];
     for (int i = 0; i < 16; i++)
     {
-        vec4f p = M * buffer[patch[i]];
-        projectedpatch[i] = {p.x / p.w, p.y / p.w};
+        const auto& P = buffer[patch[i]];
+        const vec3f Q {P.x, P.y, P.z};
+        patch2D[i] =
+        {
+            distance(axis0, ray.origin, Q),
+            distance(axis1, ray.origin, Q)
+        };
     }
 
-    bool found = false;
-    if (doBezierClipping2D(hits, projectedpatch))
+    g_DebugData.push_back({ .patch2D = patch2D });
+    auto& data = g_DebugData.back();
+
+    if (doBezierClipping2D(hits, patch2D.data()))
     {
         PatchRef S (buffer, patch);
-        for (auto& e : hits)
+        data.hits.reserve(hits.size());
+        for (auto &e : hits)
         {
-            vec4f p = interpolate(S, e.x, e.y);
-            float t = (project(p) - ray.origin).length();
-            if (t < hit.distance && t > 0)
+            auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
+            float t = V.length();
+            data.hits.push_back({ .distance = t, .coord = e});
+            if (t < hit.distance)
             {
-                hit.p = {e.x, e.y, 0};
                 hit.distance = t;
-                found = true;
+                hit.p = e;
+                hit.userData = nullptr;
+                hit.triangleIndex = 0;
             }
         }
+
+        return true;
     }
-    return found;
+
+    return false;
 }
 
-// Just for reference:
-// static inline
-// float distanceFromLine(const vec2f& p, float a, float b, float c)
-// {
-//     return p.dot({a,b}) + c;
-// }
+/**
+ * @brief Find where does the x-axis intersects with points @a A and @a B
+ *        and store the result in @a s.
+ * 
+ * @note If A.x <= B.x then s.x <= s.y.
+ * @param result The range of the intersection relative to the x-axis.
+ * @param A Point A
+ * @param B Point B
+ * @return true  Intersection found
+ * @return false No intersection
+ */
+static
+bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
+{
+    constexpr float eps = std::numeric_limits<float>::epsilon();
+    // find where does the x-axis intersects with points A and B
+    // (1-t)A + tB = 0
+    // A - tA + tB = 0
+    // A + (B - A)t = 0
+    // (By - Ay)t = -Ay
+    // t = - Ay / (By - Ay), Ay != By
+    // t = Ay / (Ay - By), Ay != By
+    float q = A.y - B.y;
+    if (std::abs(q) > eps)
+    { // not zero
+        float t = A.y / q;
+        if (0.0f <= t && t <= 1.0f)
+        {
+            float s = (1.0f-t)*A.x+ t*B.x;
+            result = {s, s};
+            return true;
+        }
+    }
+    else if (std::abs(A.y) <= eps)
+    {
+        result = {A.x, B.x};
+        return true;
+    }
+    return false;
+}
 
 bool doBezierClipping2D(std::vector<vec2f>& hits,
     const vec2f patch[16],
@@ -92,162 +149,199 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         vec2f patch[16];
         vec2f min;
         vec2f max;
-        vec2f size; // state.max - state.min
-        bool cutside; // 0: u dimension; 1: v dimension
+        vec2f size;
+        enum Side
+        {
+            eU = 0,
+            eV = 1
+        } cutside;
     };
 
-    // static thread_local
-    std::stack<State> st;
+    std::deque<State> S; // a stack
 
-    st.emplace(State{.min = {0,0}, .max = {1,1}, .size = {1,1},
-        .cutside = 0});
-    std::copy(patch, patch+16, st.top().patch);
-    hits.clear();
+    S.push_back({
+        .min = {0,0}, .max = {1,1},
+        .size = {1,1}, .cutside = State::eU
+    });
+    std::copy_n(patch, 16, S.back().patch);
 
     float distancePatch[16];
-    auto D = Patch(distancePatch);
+    Patch d (distancePatch);
 
-    const auto eps = std::numeric_limits<float>::epsilon();
-    const auto subdivision_threshold = 0.8f;
-    while (!st.empty())
+    // debug code
+    auto& searchData = g_DebugData.back();
+
+    do
     {
-        State &e = st.top();
+        auto &e = S.back();
         auto p = Patch(e.patch);
-        vec2f V0, V1, L;
-        if (e.cutside)
+
+        vec2f L0, L1;
+        // find line L
+        if (e.cutside == State::eU)
         {
-            V0 = p.point(0,3) - p.point(0,0);
-            V1 = p.point(3,3) - p.point(3,0);
+            L0 = p.point(0,3) - p.point(0,0);
+            L1 = p.point(3,3) - p.point(3,0);
         }
-        else
+        else // State::eV
         {
-            V0 = p.point(3,0) - p.point(0,0);
-            V1 = p.point(3,3) - p.point(0,3);
+            L0 = p.point(3,0) - p.point(0,0);
+            L1 = p.point(3,3) - p.point(0,3);
         }
-        // consider a line ax + by + c = 0, L represents a line that intersects
-        // the plane origin, therefore c = 0.
-        // L = (a, b)
-        L = (V0 + V1).versor(); // middle line
+        // vector parallel to the line L
+        const vec2f L = (L0 + L1).versor();
+        // vector perpendicular to the line L
+        const vec2f N = {-L.y, L.x};
 
-        // create distance patch
-        for (int i = 0; i < D.size(); i++)
-            // distance between the control point P_i and line L
-            D[i] = p[i].dot(L);
+        // compute the distance patch
+        for (int i = 0; i < 16; i++)
+            d[i] = N.dot(p[i]);
 
-        constexpr float over3[] { 0.0, 1.0/3.0, 2.0/3.0, 1.0 };
-
-        // compute the region to be clipped
-        float lower = 1, upper = 0;
-        for (int i = 0; i < 4; i++)
+        // find regions to clip
+        constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
+        float lower = 1.0f, upper = 0.0f;
+        // one branch instead of one per iteration (4*3 = 12)
+        if (e.cutside == State::eU)
         {
-            for (int j = 0; j < 3; j++)
+            vec2f A, B, s;
+            for (int j = 0; j < 4; j++)
             {
-                const float da = e.cutside
-                    ? D.point(i, j)
-                    : D.point(j, i);
-                const float db = e.cutside
-                    ? D.point(i, j+1)
-                    : D.point(j+1, i);
-                vec2f A { over3[j], da };
-                vec2f B { over3[j+1], db };
-                // find where distance is zero
-                // L: A + Vt,   V = (B - A)
-                // Ay + Vy*t = 0 => t = Ay / (Ay - By), Ay != By
-                if (std::abs(A.y - B.y) <= eps)
-                { // what is the best we could do here?
-                    if (std::abs(A.y) <= eps)
-                    {
-                        lower = std::min(lower, A.x);
-                        upper = std::max(upper, B.x);
-                    }
-                }
-                else
+                for (int i = 0; i < 3; i++)
                 {
-                    const float t = A.y / (A.y - B.y);
-                    if (t >= 0.0f && t <= 1.0f)
+                    A = {over3[  i], d.point(  i,j)};
+                    B = {over3[i+1], d.point(i+1,j)};
+                    if (xAxisIntersection(s, A, B))
                     {
-                        const float s = (1 - t)*A.x + t*B.x;
-                        lower = std::min(lower, s);
-                        upper = std::max(upper, s);
+                        lower = std::min(lower, s.x);
+                        upper = std::max(upper, s.y);
                     }
+                }
+                // A.x <= B.x => s.x <= s.y
+                A = {over3[0], d.point(0,j)};
+                B = {over3[3], d.point(3,j)};
+                if (xAxisIntersection(s, A, B))
+                {
+                    lower = std::min(lower, s.x);
+                    upper = std::max(upper, s.y);
+                }
+            }
+        }
+        else // State::eV
+        {
+            vec2f A, B, s;
+            for (int j = 0; j < 4; j++)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    A = {over3[  i], d.point(j,  i)};
+                    B = {over3[i+1], d.point(j,i+1)};
+                    if (xAxisIntersection(s, A, B))
+                    {
+                        lower = std::min(lower, s.x);
+                        upper = std::max(upper, s.y);
+                    }
+                }
+                A = {over3[0], d.point(j,0)};
+                B = {over3[3], d.point(j,3)};
+                if (xAxisIntersection(s, A, B))
+                {
+                    lower = std::min(lower, s.x);
+                    upper = std::max(upper, s.y);
                 }
             }
         }
 
-        const float d = upper - lower;
-        if (d < 0)
-        { // clipping failed; no intersection
-            st.pop();
-            // this iteration is already over
-            // we must not allow the code to access an invalid memory
-            continue;
+        // debug code
+        searchData.steps.push_back({
+            .L = L,
+            .min = e.min,
+            .max = e.max,
+            .cutside = e.cutside == State::eU ? 'U' : 'V',
+            .lower = lower,
+            .upper = upper
+        });
+
+        float delta = upper - lower;
+        assert(delta <= 1.0f);
+        assert(lower >= 0.0f && upper <= 1.0f);
+        if (delta < 0)
+        { // no intersection
+            S.pop_back();
         }
-        else if (d > subdivision_threshold)
-        { // clipped region too small; subdivide
+        else if (delta > 0.8f)
+        { // clipping too small; thus, subdivide
+            // ...
             State s1;
-            std::copy(e.patch, e.patch+16, s1.patch);
-            if (e.cutside)
+            std::copy_n(e.patch, 16, s1.patch);
+            if (e.cutside == State::eU)
             {
-                // e: first half; s1: second half of the patch
-                const auto hy = 0.5f * (e.max.y + e.min.y);
-                s1.min = {e.min.x, hy};
+                float hs = 0.5f * e.size.x;
+                float hx = e.min.x + hs;
                 s1.max = e.max;
-                e.max = {e.max.x, hy};
+                s1.min = { hx, e.min.y };
+                e.max = { hx, e.max.y };
                 // e.min = e.min;
-                subpatchV(e.patch, 0.0f, 0.5f);
-                subpatchV(s1.patch, 0.5f, 1.0f);
-            }
-            else
-            {
-                const auto hx = 0.5f * (e.max.x + e.min.x);
-                s1.min = {hx, e.min.y};
-                s1.max = e.max;
-                e.max = {hx, e.max.y};
+                s1.size = e.size = { hs, e.size.y };
+                s1.cutside = e.cutside = State::eV;
                 subpatchU(e.patch, 0.0f, 0.5f);
                 subpatchU(s1.patch, 0.5f, 1.0f);
             }
-            s1.cutside = e.cutside = !e.cutside;
-            s1.size = s1.max - s1.min;
-            e.size = e.max - e.min;
-            // st.push(std::move(e)); // already in stack
-            st.push(std::move(s1));
-        }
-        else // just continue clipping
-        {
-            // lower = 0.99f * lower;
-            // upper = 0.99f * upper + 0.01f;
-            // continue clipping
-            if (e.cutside)
+            else // State::eV
             {
-                // recompute active region coordinates
-                e.min.y = e.min.y + (lower * e.size.y);
-                e.max.y = e.max.y - ((1 - upper) * e.size.y);
-                e.size.y = e.max.y - e.min.y;
-                // clip
-                subpatchV(e.patch, lower, upper);
+                float hs = 0.5f * e.size.y;
+                float hy = e.min.y + hs;
+                s1.max = e.max;
+                s1.min = { e.min.x, hy };
+                e.max = { e.max.x, hy };
+                // e.min = e.min;
+                s1.size = e.size = { e.size.x, hs };
+                s1.cutside = e.cutside = State::eU;
+                subpatchV(e.patch, 0.0f, 0.5f);
+                subpatchV(s1.patch, 0.5f, 1.0f);
             }
-            else
+            S.push_back(std::move(s1));
+        }
+        else
+        { // clip
+            if (e.cutside == State::eU)
             {
-                e.min.x = e.min.x + (lower * e.size.x);
-                e.max.x = e.max.x - ((1 - upper) * e.size.x);
-                e.size.x = e.max.x - e.min.x;
+                float u0 = e.min.x + e.size.x * lower;
+                float u1 = e.max.x - e.size.x * (1.0f - upper);
                 subpatchU(e.patch, lower, upper);
+                e.min.x = u0;
+                e.max.x = u1;
+                e.size.x = u1 - u0;
+                e.cutside = State::eV;
             }
-            e.cutside = !e.cutside;
+            else // State::eV
+            {
+                float v0 = e.min.y + e.size.y * lower;
+                float v1 = e.max.y - e.size.y * (1.0f - upper);
+                subpatchV(e.patch, lower, upper);
+                e.min.y = v0;
+                e.max.y = v1;
+                e.size.y = v1 - v0;
+                e.cutside = State::eU;
+            }
+
+            // check tolerance
+            // float d0 = (p.point(3,0) - p.point(0,3)).length();
+            // float d1 = (p.point(3,3) - p.point(0,0)).length();
+            float d0 = e.size.x, d1 = e.size.y;
+            if (d0 <= tol && d1 <= tol)
+            { // report hit
+                hits.push_back(0.5f * (e.min + e.max));
+                S.pop_back();
+            }
         }
 
-        float sx = (p.point(3,0) - p.point(0,0)).length();
-        float sy = (p.point(0,3) - p.point(0,0)).length();
-        if (sx <= tol && sy <= tol)
-        { // intersection found
-            const auto x = 0.5f * (e.max.x + e.min.x);
-            const auto y = 0.5f * (e.max.y + e.min.y);
-            hits.emplace_back(vec2f{x, y});
-            st.pop();
-        }
+        // debug code
+        auto& m = searchData.maxStackDepth;
+        m = std::max(m, (int) S.size());
     }
+    while (!S.empty() && S.size() < 128);
 
-    return hits.empty() == false;
+    return !hits.empty();
 }
 
 } // namespace cg::spline
