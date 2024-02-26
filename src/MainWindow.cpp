@@ -180,7 +180,7 @@ void MainWindow::initializeScene()
 
     registerInspectFunction(inspectSurface);
 
-    // debug code
+#if SPL_BC_STATS
     {
         const uint32_t indexArray[]
         {
@@ -199,6 +199,7 @@ void MainWindow::initializeScene()
         points->setData(vertexArray);
         _debugObject = createSurfaceObject(*_debugPatch2D, "Debug Object");
     }
+#endif
 }
 
 void MainWindow::render()
@@ -209,20 +210,30 @@ void MainWindow::render()
         return;
     }
 
-    // begin debug code
-    auto n = spline::g_DebugData.size();
+#if SPL_BC_STATS
+    vec3f __debugLine {};
+    auto n = spline::stats::g_BezierClippingData.size();
     if (n > 1 && _debugPatchIndex < n)
     {
         vec4f buffer[16];
-        auto& patch2D = spline::g_DebugData[_debugPatchIndex].patch2D;
+        auto& data = spline::stats::g_BezierClippingData[_debugPatchIndex];
+        auto& step = data.steps[_debugStep];
+        auto patch2D = data.patch2D;
+        if (_debugStep > 0)
+        {
+            auto [u0, v0] = step.min;
+            auto [u1, v1] = step.max;
+            spline::subpatch(patch2D.data(), u0, u1, v0, v1);
+        }
         for (int i = 0; i < 16; i++)
         {
             auto& v = patch2D[i];
             buffer[i] = {v.x, 0, v.y, 1};
         }
         _debugPatch2D->points()->setData(buffer);
+        __debugLine = {step.L.x, 0, step.L.y};
     }
-    // end debug code
+#endif
 
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
     auto e = editor();
@@ -274,8 +285,15 @@ void MainWindow::render()
         }
     }
 
+#if SPL_BC_STATS
     // draw debug object
     drawSelectedObject(*_debugObject);
+    auto t = _debugObject->transform();
+    vec3f P = t->position();
+    vec3f L = t->transformVector(__debugLine);
+    e->setLineColor(Color::red);
+    e->drawLine(P - 10.0f * L, P + 10.0f * L);
+#endif
 
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
 }
@@ -675,10 +693,10 @@ void MainWindow::controlWindow()
     p->use();
     p->setDepth(depthValue);
 
-    // begin debug code
+#if SPL_BC_STATS
     ImGui::Separator();
     char label[128];
-    const auto& patches = spline::g_DebugData;
+    const auto& patches = spline::stats::g_BezierClippingData;
     ImGui::Text("Patch intersection test data (%d)", patches.size());
     if (ImGui::BeginListBox("##PatchList", {-FLT_MIN, -FLT_MIN}))
     {
@@ -697,7 +715,7 @@ void MainWindow::controlWindow()
 
             auto open = ImGui::TreeNodeEx(label, flags);
             if (ImGui::IsItemClicked())
-                _debugPatchIndex = i;
+                _debugPatchIndex = i, _debugStep = 0;
             if (open)
             {
                 for (auto& hit : p.hits)
@@ -710,8 +728,9 @@ void MainWindow::controlWindow()
 
                 if (ImGui::TreeNode("Steps"))
                 {
-                    for (auto& s : p.steps)
+                    for (int j = 0; j < p.steps.size(); j++)
                     {
+                        auto& s = p.steps[j];
                         snprintf(label, sizeof (label),
                             "u = [%.4f, %.4f]\n"
                             "v = [%.4f, %.4f]\n"
@@ -724,7 +743,9 @@ void MainWindow::controlWindow()
                             100 * ((s.upper - s.lower) - 1),
                             s.cutside
                         );
-                        ImGui::Selectable(label);
+                        const bool selected2 = selected && _debugStep == j;
+                        if (ImGui::Selectable(label, selected2))
+                            _debugPatchIndex = i, _debugStep = j;
                     }
                     ImGui::TreePop();
                 }
@@ -737,7 +758,7 @@ void MainWindow::controlWindow()
         }
         ImGui::EndListBox();
     }
-    // end debug code
+#endif
 
     ImGui::End();
 }
@@ -769,8 +790,9 @@ bool MainWindow::onKeyPress(int key, int p2)
 
 bool MainWindow::onMouseLeftPress(int x, int y)
 {
-    // debug code
-    spline::g_DebugData.clear();
+#if SPL_BC_STATS
+    spline::stats::g_BezierClippingData.clear();
+#endif
 
     auto ray = makeRay(x, y);
     _lastPickHit.distance = math::Limits<float>::inf();

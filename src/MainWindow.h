@@ -106,9 +106,12 @@ protected:
     State _state {};
     Data _data {};
 
+#if SPL_BC_STATS
     Ref<graph::SceneObject> _debugObject;
     Ref<BezierPatches> _debugPatch2D;
     uint32_t _debugPatchIndex {};
+    uint32_t _debugStep {};
+#endif
 };
 
 } // namespace cg

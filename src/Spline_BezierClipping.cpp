@@ -4,7 +4,12 @@
 namespace cg::spline
 {
 
-std::vector<DebugData> g_DebugData;
+#ifdef SPL_BC_STATS
+namespace stats
+{
+std::vector<BCData> g_BezierClippingData;
+} // namespace stats
+#endif
 
 mat3f rotation(const vec3f& v, float angle)
 {
@@ -72,28 +77,34 @@ bool doBezierClipping(Intersection& hit,
         };
     }
 
-    g_DebugData.push_back({ .patch2D = patch2D });
-    auto& data = g_DebugData.back();
+#ifdef SPL_BC_STATS
+    stats::g_BezierClippingData.push_back({ .patch2D = patch2D });
+    auto& data = stats::g_BezierClippingData.back();
+#endif
 
     if (doBezierClipping2D(hits, patch2D.data()))
     {
         PatchRef S (buffer, patch);
-        data.hits.reserve(hits.size());
+        bool found = false;
         for (auto &e : hits)
         {
             auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
             float t = V.length();
-            data.hits.push_back({ .distance = t, .coord = e});
             if (t < hit.distance)
             {
+                found = true;
                 hit.distance = t;
                 hit.p = e;
                 hit.userData = nullptr;
                 hit.triangleIndex = 0;
             }
+
+#ifdef SPL_BC_STATS
+            data.hits.push_back({ .distance = t, .coord = e});
+#endif
         }
 
-        return true;
+        return found;
     }
 
     return false;
@@ -118,16 +129,16 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
     // (1-t)A + tB = 0
     // A - tA + tB = 0
     // A + (B - A)t = 0
-    // (By - Ay)t = -Ay
-    // t = - Ay / (By - Ay), Ay != By
-    // t = Ay / (Ay - By), Ay != By
+    // Ay + (By - Ay)t = 0
+    // Ay = (Ay - By)t, Ay != By
+    // Ay / (Ay - By) = t, Ay != By
     float q = A.y - B.y;
     if (std::abs(q) > eps)
     { // not zero
         float t = A.y / q;
         if (0.0f <= t && t <= 1.0f)
         {
-            float s = (1.0f-t)*A.x+ t*B.x;
+            float s = (1.0f-t)*A.x + t*B.x;
             result = {s, s};
             return true;
         }
@@ -138,6 +149,12 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
         return true;
     }
     return false;
+}
+
+static inline
+float isCCW(const vec2f P, const vec2f Q)
+{
+    return P.x*Q.y - P.y*Q.x;
 }
 
 bool doBezierClipping2D(std::vector<vec2f>& hits,
@@ -168,8 +185,9 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
     float distancePatch[16];
     Patch d (distancePatch);
 
-    // debug code
-    auto& searchData = g_DebugData.back();
+#ifdef SPL_BC_STATS
+    auto& searchData = stats::g_BezierClippingData.back();
+#endif
 
     do
     {
@@ -200,58 +218,85 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         // find regions to clip
         constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
         float lower = 1.0f, upper = 0.0f;
-        // one branch instead of one per iteration (4*3 = 12)
+        // compute where does the convex hull intersect the x-axis
+        float ytop[4]; // y top
+        float ybot[4]; // y bottom
+        // one branch instead of 16
         if (e.cutside == State::eU)
         {
-            vec2f A, B, s;
-            for (int j = 0; j < 4; j++)
+            for (int i = 0; i < 4; i++)
             {
-                for (int i = 0; i < 3; i++)
+                ybot[i] = ytop[i] = d.point(i,0);
+                for (int k = 1; k < 4; k++)
                 {
-                    A = {over3[  i], d.point(  i,j)};
-                    B = {over3[i+1], d.point(i+1,j)};
-                    if (xAxisIntersection(s, A, B))
-                    {
-                        lower = std::min(lower, s.x);
-                        upper = std::max(upper, s.y);
-                    }
-                }
-                // A.x <= B.x => s.x <= s.y
-                A = {over3[0], d.point(0,j)};
-                B = {over3[3], d.point(3,j)};
-                if (xAxisIntersection(s, A, B))
-                {
-                    lower = std::min(lower, s.x);
-                    upper = std::max(upper, s.y);
+                    float y = d.point(i,k);
+                    ytop[i] = std::max(ytop[i], y);
+                    ybot[i] = std::min(ybot[i], y);
                 }
             }
         }
         else // State::eV
         {
-            vec2f A, B, s;
-            for (int j = 0; j < 4; j++)
+            for (int i = 0; i < 4; i++)
             {
-                for (int i = 0; i < 3; i++)
+                ybot[i] = ytop[i] = d.point(0,i);
+                for (int k = 1; k < 4; k++)
                 {
-                    A = {over3[  i], d.point(j,  i)};
-                    B = {over3[i+1], d.point(j,i+1)};
-                    if (xAxisIntersection(s, A, B))
-                    {
-                        lower = std::min(lower, s.x);
-                        upper = std::max(upper, s.y);
-                    }
-                }
-                A = {over3[0], d.point(j,0)};
-                B = {over3[3], d.point(j,3)};
-                if (xAxisIntersection(s, A, B))
-                {
-                    lower = std::min(lower, s.x);
-                    upper = std::max(upper, s.y);
+                    float y = d.point(k,i);
+                    ytop[i] = std::max(ytop[i], y);
+                    ybot[i] = std::min(ybot[i], y);
                 }
             }
         }
+        // find convex hull and its intersection
+        // graham scan
+        vec2f hull[9];
+        int len = 0;
+        // first and second points
+        hull[len++] = {over3[0], ybot[0]};
+        hull[len++] = {over3[1], ybot[1]};
+        // bottom points
+        for (int i = 2; i < 4; i++)
+        {
+            vec2f P3 {over3[i], ybot[i]};
+            auto& P2 = hull[len-1];
+            auto& P1 = hull[len-2];
+            if (isCCW(P2 - P1, P3 - P1) >= 0)
+                hull[len++] = P3;
+            else
+                hull[len-1] = P3;
+        }
+        // first top point (right to left)
+        hull[len++] = {over3[3], ytop[3]};
+        // top points
+        for (int i = 2; i >= 0; i--)
+        {
+            vec2f P3 = {over3[i], ytop[i]};
+            auto& P2 = hull[len-1];
+            auto& P1 = hull[len-2];
+            if (isCCW(P2 - P1, P3 - P1) >= 0)
+                hull[len++] = P3;
+            else
+                hull[len-1] = P3;
+        }
+        // duplicate the first point to close the cycle
+        hull[len++] = hull[0];
+        // find intersection and the clip range
+        for (int i = 1; i < len; i++)
+        {
+            vec2f A = hull[i-1];
+            vec2f B = hull[i];
+            vec2f s;
+            if (A.x >= B.x)
+                std::swap(A, B);
+            if (xAxisIntersection(s, A, B))
+            {
+                lower = std::min(lower, s.x);
+                upper = std::max(upper, s.y);
+            }
+        }
 
-        // debug code
+#ifdef SPL_BC_STATS
         searchData.steps.push_back({
             .L = L,
             .min = e.min,
@@ -260,6 +305,7 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             .lower = lower,
             .upper = upper
         });
+#endif
 
         float delta = upper - lower;
         assert(delta <= 1.0f);
@@ -335,9 +381,10 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             }
         }
 
-        // debug code
+#ifdef SPL_BC_STATS
         auto& m = searchData.maxStackDepth;
         m = std::max(m, (int) S.size());
+#endif
     }
     while (!S.empty() && S.size() < 128);
 

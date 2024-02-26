@@ -15,6 +15,9 @@
 #define SPL_DERIVATIVE_MAXPOINTS 8u
 #define SPL_NORMAL_FIXVALUE 0.0001f
 
+// Enable this do enable Bézier Clipping statistics
+// #define SPL_BC_STATS
+
 // Except where noted, the patches are assumed to be bicubic Bézier patches.
 
 namespace cg::spline
@@ -524,8 +527,11 @@ using ext::interpolate;
 using ext::derivativeU;
 using ext::derivativeV;
 
-// begin debug code
-struct SearchStep
+// Used once as debug code
+#ifdef SPL_BC_STATS
+namespace stats
+{
+struct BCSearchStep
 {
     vec2f L; // midline
     vec2f min;
@@ -535,21 +541,22 @@ struct SearchStep
     float upper;
 };
 
-struct SearchHit
+struct BCSearchHit
 {
     float distance;
     vec2f coord;
 };
 
-struct DebugData
+struct BCData
 {
     std::array<vec2f,16> patch2D;
-    std::vector<SearchStep> steps {};
-    std::vector<SearchHit> hits {};
+    std::vector<BCSearchStep> steps {};
+    std::vector<BCSearchHit> hits {};
     int maxStackDepth = 0;
 };
 
-extern std::vector<DebugData> g_DebugData;
-// end debug code
+extern std::vector<BCData> g_BezierClippingData;
+} // namespace stats
+#endif
 
 } // namespace cg::spline
