@@ -377,19 +377,19 @@ Bounds3<real> subpatchBoundingbox(
  */
 bool doBezierClipping2D(std::vector<vec2f>& hits,
     const vec2f patch[16],
-    float tol = 1.0f/64.0f);
+    float tol = 0x1p-12f);
 
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
     const uint32_t patch[16],
-    float tol = 1.0f/64.0f);
+    float tol = 0x1p-12f);
 
 bool doSubdivision(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
     const uint32_t patch[16],
-    float threshold = 1.0f/64.0f);
+    float threshold = 0x1p-4f);
 
 /**
  * Generic (template) definitions that deals with higher and arbitrary

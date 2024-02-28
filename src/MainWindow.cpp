@@ -139,8 +139,9 @@ void MainWindow::beginInitialize()
 void MainWindow::initializeScene()
 {
     float aspect = float(width()) / height();
-    auto obj = createCameraObject(aspect, "Main Camera");
-    obj->transform()->setLocalPosition({0,0,10});
+    graph::SceneObject* obj {};
+    // auto obj = createCameraObject(aspect, "Main Camera");
+    // obj->transform()->setLocalPosition({0,0,10});
 
     obj = createLightObject(Light::Type::Directional, "The Light");
     obj->transform()->setLocalEulerAngles({50,130,0});
@@ -704,6 +705,17 @@ void MainWindow::controlWindow()
 
 #if SPL_BC_STATS
     ImGui::Separator();
+    auto t = _debugObject->transform();
+    float scale = std::log10(t->localScale().x);
+    float slidermin = -3;
+    float slidermax = 20;
+    if (ImGui::SliderScalar("Debug Zoom", ImGuiDataType_Float, &scale,
+        &slidermin, &slidermax))
+    {
+        t->setLocalScale(std::pow(10, scale));
+    }
+
+    ImGui::Separator();
     char label[128];
     const auto& patches = spline::stats::g_BezierClippingData;
     ImGui::Text("Patch intersection test data (%d)", patches.size());
@@ -740,16 +752,23 @@ void MainWindow::controlWindow()
                     for (int j = 0; j < p.steps.size(); j++)
                     {
                         auto& s = p.steps[j];
+                        float delta = std::max(s.max.x - s.min.x,
+                            s.max.y - s.min.y);
+                        float reduction = s.lower > s.upper
+                            ? NAN
+                            : 100 * ((s.upper - s.lower) - 1);
                         snprintf(label, sizeof (label),
-                            "u = [%.4f, %.4f]\n"
-                            "v = [%.4f, %.4f]\n"
-                            "clip = [%.4f, %.4f]\n"
+                            "u = [%f, %f]\n"
+                            "v = [%f, %f]\n"
+                            "Δ = %f\n"
+                            "clip = [%f, %f]\n"
                             "%2.2f%% reduction\n"
                             "cutside = '%c'",
                             s.min.x, s.max.x,
                             s.min.y, s.max.y,
+                            delta,
                             s.lower, s.upper,
-                            100 * ((s.upper - s.lower) - 1),
+                            reduction,
                             s.cutside
                         );
                         const bool selected2 = selected && _debugStep == j;

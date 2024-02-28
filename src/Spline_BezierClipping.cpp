@@ -202,13 +202,13 @@ bool triangleContainsOrigin(vec2f A, vec2f B, vec2f C)
 static inline
 bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
 {
-    constexpr float eps = std::numeric_limits<float>::epsilon();
-
     vec2f p = A - P;
     vec2f q = B - P;
     float det = p.x*q.y - q.x*p.y;
 
-    if (math::isZero(det))
+    // `det` will be often small (< 1e-7) but not zero
+    // and the intersection should not be discarded
+    if (std::abs(det) < 0x1p-80f) // ~ 1e-24f (not a subnormal number)
         return false;
 
     det = 1.0f / det;
@@ -283,8 +283,9 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
 #endif
     
         // check tolerance
-        // float d0 = (p.point(3,0) - p.point(0,3)).length();
-        // float d1 = (p.point(3,3) - p.point(0,0)).length();
+        float d0 = (p.point(3,0) - p.point(0,3)).length();
+        float d1 = (p.point(3,3) - p.point(0,0)).length();
+        // if ((d0 < tol && d1 < tol) || (e.size.x < 1/64.0f && e.size.y < 1/64.0f))
         if (e.size.x < tol && e.size.y < tol)
         {
             // there are cases where is impossible to clip the patch because
