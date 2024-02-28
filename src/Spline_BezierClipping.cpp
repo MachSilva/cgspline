@@ -8,6 +8,7 @@ namespace cg::spline
 namespace stats
 {
 std::vector<BCData> g_BezierClippingData;
+bool g_BezierClippingEnable = true;
 } // namespace stats
 #endif
 
@@ -48,6 +49,21 @@ float distance(const vec3f& N, const vec3f& O, const vec3f& P)
     return N.dot(P - O);
 }
 
+/**
+ * @brief Computes the distance between a point P and a line represented by the
+ *        normal vector N and origin O.
+ * 
+ * @param N The line normal vector (must be unit length)
+ * @param O The line origin point
+ * @param P The point whose distance is being measured
+ * @return float The computed distance
+ */
+static inline
+float distance(const vec2f& N, const vec2f& O, const vec2f& P)
+{
+    return N.dot(P - O);
+}
+
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
@@ -78,11 +94,15 @@ bool doBezierClipping(Intersection& hit,
     }
 
 #ifdef SPL_BC_STATS
-    stats::g_BezierClippingData.push_back({ .patch2D = patch2D });
-    auto& data = stats::g_BezierClippingData.back();
+    stats::BCData* data = nullptr;
+    if (stats::g_BezierClippingEnable)
+    {
+        stats::g_BezierClippingData.push_back({ .patch2D = patch2D });
+        data = &stats::g_BezierClippingData.back();
+    }
 #endif
 
-    if (doBezierClipping2D(hits, patch2D.data()))
+    if (doBezierClipping2D(hits, patch2D.data(), tol))
     {
         PatchRef S (buffer, patch);
         bool found = false;
@@ -90,17 +110,16 @@ bool doBezierClipping(Intersection& hit,
         {
             auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
             float t = V.length();
-            if (t < hit.distance)
+            if (t < hit.distance && V.dot(ray.direction) > 0)
             {
                 found = true;
                 hit.distance = t;
                 hit.p = e;
-                hit.userData = nullptr;
-                hit.triangleIndex = 0;
             }
 
 #ifdef SPL_BC_STATS
-            data.hits.push_back({ .distance = t, .coord = e});
+            if (data)
+                data->hits.push_back({ .distance = t, .coord = e});
 #endif
         }
 
@@ -151,16 +170,70 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
     return false;
 }
 
+// Returns a positive value if Q is a vector obtained by rotating P counter
+// clockwise by less than 180º; otherwise, returns a negative value; or zero
+// if both vectors are parallel.
 static inline
-float isCCW(const vec2f P, const vec2f Q)
+float isCCW(vec2f P, vec2f Q)
 {
     return P.x*Q.y - P.y*Q.x;
+}
+
+// Returns a vector perpendicular to the segment AB. A and B are points.
+static inline // constexpr
+vec2f perpendicular(vec2f A, vec2f B)
+{
+    return {A.y - B.y, B.x - A.x}; // rotate (B - A) by 90° degrees ccw
+}
+
+static inline
+bool triangleContainsOrigin(vec2f A, vec2f B, vec2f C)
+{
+    vec2f p = perpendicular(A, B);
+    vec2f q = perpendicular(B, C);
+    vec2f r = perpendicular(C, A);
+
+    if (std::signbit(isCCW(p, -r))) // isCCW(AB, AC)
+        return p.dot(A) >= 0 && q.dot(B) >= 0 && r.dot(C) >= 0;
+
+    return p.dot(-A) >= 0 && q.dot(-B) >= 0 && r.dot(-C) >= 0;
+}
+
+static inline
+bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
+{
+    constexpr float eps = std::numeric_limits<float>::epsilon();
+
+    vec2f p = A - P;
+    vec2f q = B - P;
+    float det = p.x*q.y - q.x*p.y;
+
+    if (math::isZero(det))
+        return false;
+
+    det = 1.0f / det;
+
+    // 2x2 inversion matrix
+    vec2f m0 = vec2f( q.y, -q.x); // first line
+    vec2f m1 = vec2f(-p.y,  p.x); // second line
+
+    auto u = det * m0.dot(-P);
+    if (u < 0 || u > 1)
+        return false;
+
+    auto v = det * m1.dot(-P);
+    if (v < 0 || u + v > 1)
+        return false;
+
+    coord.set(u, v);
+    return true;
 }
 
 bool doBezierClipping2D(std::vector<vec2f>& hits,
     const vec2f patch[16],
     float tol)
 {
+    constexpr float eps = std::numeric_limits<float>::epsilon();
     struct State
     {
         vec2f patch[16];
@@ -174,6 +247,7 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         } cutside;
     };
 
+    bool stackFreeze = false;
     std::deque<State> S; // a stack
 
     S.push_back({
@@ -186,13 +260,68 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
     Patch d (distancePatch);
 
 #ifdef SPL_BC_STATS
-    auto& searchData = stats::g_BezierClippingData.back();
+    stats::BCData* searchData = nullptr;
+    if (stats::g_BezierClippingEnable)
+        searchData = &stats::g_BezierClippingData.back();
 #endif
 
     do
     {
         auto &e = S.back();
         auto p = Patch(e.patch);
+
+#ifdef SPL_BC_STATS
+        if (searchData)
+            searchData->steps.push_back({
+                .L = {0, 0},
+                .min = e.min,
+                .max = e.max,
+                .cutside = e.cutside == State::eU ? 'U' : 'V',
+                .lower = NAN,
+                .upper = NAN
+            });
+#endif
+    
+        // check tolerance
+        // float d0 = (p.point(3,0) - p.point(0,3)).length();
+        // float d1 = (p.point(3,3) - p.point(0,0)).length();
+        if (e.size.x < tol && e.size.y < tol)
+        {
+            // there are cases where is impossible to clip the patch because
+            // it is already so small that it is a plane and the intersection
+            // has been already found
+            // thus, the infinite subdivision must be stopped
+
+            // intersect triangles to avoid multiple intersection problem
+            auto p00 = p.point(0,0);   // (u,v) = (0,0)
+            auto p10 = p.point(3,0);   // (1,0)
+            auto p01 = p.point(0,3);   // (0,1)
+            auto p11 = p.point(3,3);   // (1,1)
+
+            vec2f coord;
+            // if (triangleOriginIntersection(coord, p10, p01, p00)
+            //     || triangleOriginIntersection(coord, p01, p10, p11))
+            // {
+            //     hits.push_back(0.5f * (e.min + e.max));
+            // }
+
+            if (triangleOriginIntersection(coord, p00, p10, p01))
+            {
+                hits.push_back(e.min + coord * e.size);
+            }
+            if (triangleOriginIntersection(coord, p11, p01, p10))
+            {
+                hits.push_back(e.max - coord * e.size);
+            }
+
+            // if (triangleContainsOrigin(p10, p01, p00)
+            //     || triangleContainsOrigin(p01, p10, p11))
+            // {
+            //     hits.push_back(0.5f * (e.min + e.max));
+            // }
+            S.pop_back();
+            continue;
+        }
 
         vec2f L0, L1;
         // find line L
@@ -287,24 +416,35 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             vec2f A = hull[i-1];
             vec2f B = hull[i];
             vec2f s;
-            if (A.x >= B.x)
-                std::swap(A, B);
             if (xAxisIntersection(s, A, B))
             {
+                if (s.x > s.y)
+                    std::swap(s.x, s.y);
                 lower = std::min(lower, s.x);
                 upper = std::max(upper, s.y);
             }
         }
 
+        // TODO Improve this step
+        if (lower <= upper)
+        { // preventing the algorithm from creating long and narrow subpatches
+            constexpr float minspan = 0.1f;
+            auto mid = 0.5f * (lower + upper);
+            if (upper - lower < minspan)
+            {
+                lower = mid - 0.5f * minspan;
+                upper = mid + 0.5f * minspan;
+            }
+        }
+
 #ifdef SPL_BC_STATS
-        searchData.steps.push_back({
-            .L = L,
-            .min = e.min,
-            .max = e.max,
-            .cutside = e.cutside == State::eU ? 'U' : 'V',
-            .lower = lower,
-            .upper = upper
-        });
+        if (searchData)
+        {
+            auto& step = searchData->steps.back();
+            step.L = L;
+            step.lower = lower;
+            step.upper = upper;
+        }
 #endif
 
         float delta = upper - lower;
@@ -316,7 +456,6 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         }
         else if (delta > 0.8f)
         { // clipping too small; thus, subdivide
-            // ...
             State s1;
             std::copy_n(e.patch, 16, s1.patch);
             if (e.cutside == State::eU)
@@ -346,6 +485,13 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
                 subpatchV(s1.patch, 0.5f, 1.0f);
             }
             S.push_back(std::move(s1));
+
+            if (S.size() > 127)
+            {
+                fprintf(stderr,
+                    "warning: the stack has too many elements (%llu)\n", S.size());
+                break;
+            }
         }
         else
         { // clip
@@ -369,24 +515,17 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
                 e.size.y = v1 - v0;
                 e.cutside = State::eU;
             }
-
-            // check tolerance
-            // float d0 = (p.point(3,0) - p.point(0,3)).length();
-            // float d1 = (p.point(3,3) - p.point(0,0)).length();
-            float d0 = e.size.x, d1 = e.size.y;
-            if (d0 <= tol && d1 <= tol)
-            { // report hit
-                hits.push_back(0.5f * (e.min + e.max));
-                S.pop_back();
-            }
         }
 
 #ifdef SPL_BC_STATS
-        auto& m = searchData.maxStackDepth;
-        m = std::max(m, (int) S.size());
+        if (searchData)
+        {
+            auto& m = searchData->maxStackDepth;
+            m = std::max(m, (int) S.size());
+        }
 #endif
     }
-    while (!S.empty() && S.size() < 128);
+    while (!S.empty());
 
     return !hits.empty();
 }

@@ -318,6 +318,11 @@ void MainWindow::renderScene()
 
     if (_image == nullptr)
     {
+#if SPL_BC_STATS
+        spline::stats::g_BezierClippingData.clear();
+        spline::stats::g_BezierClippingEnable = false;
+#endif
+
         // Create task
         // if (!_renderTask.valid()) {}
         _image = new GLImage(width(), height());
@@ -328,6 +333,10 @@ void MainWindow::renderScene()
         // _rayTracer->setProgressCallback(progressCallback);
         _rayTracer->setMaxRecursionLevel(6);
         _rayTracer->renderImage(*_image);
+
+#if SPL_BC_STATS
+        spline::stats::g_BezierClippingEnable = true;
+#endif
     }
     _image->draw(0, 0);
 }

@@ -46,6 +46,8 @@ target_sources(cgspline PRIVATE
 )
 target_include_directories(cgspline PRIVATE ${cgdemo_SOURCE_DIR})
 
+# target_compile_definitions(cgspline PRIVATE SPL_BC_STATS)
+
 if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
     target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)
 endif()
