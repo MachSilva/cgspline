@@ -326,7 +326,7 @@ try
     if (std::filesystem::exists(file) == false)
         error(FILE_DOESNT_EXIST, file.c_str());
 
-    return BezierPatches::load(file.c_str());
+    return BezierPatches::load(file.string().c_str());
 }
 catch (const std::runtime_error& e)
 {
@@ -343,7 +343,7 @@ SceneReaderExt::Parser::parseTextureDefinition()
     if (std::filesystem::exists(file) == false)
         error(FILE_DOESNT_EXIST, file);
 
-    return gl::Texture::from(file.c_str());
+    return gl::Texture::from(file.string().c_str());
 }
 
 MaterialMap::iterator

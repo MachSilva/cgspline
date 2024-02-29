@@ -466,7 +466,7 @@ void MainWindow::openSceneMenu(std::string_view label)
     if (ImGui::BeginMenu("Open", !_sceneFileList.empty()))
     {
         for (auto& file : _sceneFileList)
-            if (ImGui::MenuItem(file.filename().c_str()))
+            if (ImGui::MenuItem(file.filename().string().c_str()))
                 readScene(file);
         ImGui::EndMenu();
     }
@@ -617,7 +617,7 @@ void MainWindow::assetWindow()
         {
             if (ImGui::Begin("Texture", &view))
             {
-                auto id = reinterpret_cast<ImTextureID>(selected->handle());
+                auto id = reinterpret_cast<ImTextureID>((uintptr_t) selected->handle());
                 auto max = ImGui::GetContentRegionMax();
                 auto min = ImGui::GetWindowContentRegionMin();
                 ImGui::Image(id, {max.x - min.x, max.y - min.y});
@@ -904,7 +904,7 @@ void MainWindow::readScene(std::filesystem::path scenefile)
 {
     util::SceneReaderExt reader {};
 
-    reader.setInput(scenefile.c_str());
+    reader.setInput(scenefile.string());
     try
     {
         reader.execute();
@@ -925,7 +925,7 @@ void MainWindow::readScene(std::filesystem::path scenefile)
     catch (const std::exception& e)
     {
         std::cerr << std::format("Failed to load scene '{}'. Reason:\n{}\n",
-            scenefile.filename().c_str(), e.what());
+            scenefile.filename().string().c_str(), e.what());
     }
 }
 

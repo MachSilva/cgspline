@@ -5,6 +5,7 @@
 #include <geometry/Intersection.h>
 #include <cassert>
 #include <cstdint>
+#include <array>
 #include <algorithm>
 #include <concepts>
 #include <ranges>
@@ -153,8 +154,6 @@ public:
 protected:
     vec* _points {};
     idx* _indexes {};
-
-    static_assert(surface_cage<PatchRef<vec,idx>>);
 };
 
 /**

@@ -465,7 +465,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     int v[3] { 0, 0, 0 };
     if (auto pbr = _surface->pbrMaterial.get())
     {
-        auto s = renderer.fragmentShader()->samplers();
+        auto& s = renderer.fragmentShader()->samplers();
         if (pbr->texBaseColor != nullptr)
         {
             v[0] = 1;
