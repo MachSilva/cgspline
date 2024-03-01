@@ -75,6 +75,17 @@ void MainWindow::beginInitialize()
     glDebugMessageCallback(debugCallback, this);
 #endif
 
+    cuda::initialize();
+    _cuda.device = cuda::currentDevice();
+    checkCudaError(cudaGetDeviceProperties(&_cuda.properties, _cuda.device));
+
+    auto& p = _cuda.properties;
+    std::cerr <<
+        "CUDA device name:  " << p.name <<
+      "\nMemory Bus Width:  " << p.memoryBusWidth << " bits"
+      "\nMemory Clock Rate: " << (p.memoryClockRate / 1024.0) << " MHz"
+      "\n\n";
+
     glEnable(GL_FRAMEBUFFER_SRGB);
 
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
@@ -146,7 +157,7 @@ void MainWindow::initializeScene()
     obj = createLightObject(Light::Type::Directional, "The Light");
     obj->transform()->setLocalEulerAngles({50,130,0});
 
-    // createPrimitiveObject(*GLGraphics3::box(), "Box");
+    createPrimitiveObject(*GLGraphics3::box(), "Box");
 
     // Load surfaces
     std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {

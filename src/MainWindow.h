@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <future>
 #include <vector>
+#include <CUDAHelper.h>
 #include <graph/SceneWindow.h>
 #include <graph/SceneObject.h>
 #include <graphics/GLImage.h>
@@ -105,6 +106,12 @@ protected:
 
     State _state {};
     Data _data {};
+
+    struct
+    {
+      int device = -1;
+      cudaDeviceProp properties;
+    } _cuda;
 
 #if SPL_BC_STATS
     Ref<graph::SceneObject> _debugObject;
