@@ -92,7 +92,7 @@ Ref<Texture> Texture::from(const char* filename)
     else
         data = stbi_load(filename, &x, &y, &components, components);
 
-    auto tex = Ref(new Texture(GL_TEXTURE_2D));
+    Ref<Texture> tex = new Texture(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, *tex);
     glTexStorage2D(GL_TEXTURE_2D, 3, (GLenum) internalformat, x, y);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, x, y, format, type, data);

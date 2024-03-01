@@ -190,15 +190,19 @@ try
 {
     preamble();
     if (_token == _SCENE)
+    {
         if (_scene != nullptr)
             error(MULTIPLE_SCENE_DEFINITION);
         else
             parseScene();
+    }
     if (_token != _EOF)
+    {
         if (_token < 256)
             error(UNEXPECTED_CHAR, _token);
         else
             error(SYNTAX);
+    }
 }
 catch (const std::exception &)
 {
@@ -222,7 +226,7 @@ SceneReaderExt::Parser::declaration()
 inline Ref<Material>
 SceneReaderExt::Parser::parseMaterialDefinition()
 {
-    auto material = Ref(new Material(Color::black));
+    Ref<Material> material = new Material(Color::black);
     for (;;)
         switch (_token)
         {
@@ -341,7 +345,7 @@ SceneReaderExt::Parser::parseTextureDefinition()
     auto file = _reader->_currentPath / filename;
 
     if (std::filesystem::exists(file) == false)
-        error(FILE_DOESNT_EXIST, file);
+        error(FILE_DOESNT_EXIST, file.c_str());
 
     return gl::Texture::from(file.string().c_str());
 }
@@ -765,7 +769,7 @@ SceneReaderExt::Parser::matchPrimitive(int type)
         auto it = _reader->meshes.find(name);
 
         if (it == _reader->meshes.end())
-            error(COULD_NOT_FIND_MESH, name);
+            error(COULD_NOT_FIND_MESH, name.c_str());
 
         auto mesh = it->second;
         proxy = makePrimitive(*mesh, name);
@@ -787,8 +791,8 @@ SceneReaderExt::Parser::matchPrimitive(int type)
         Ref<SurfaceProxy> proxy {};
 
         auto [name, surface] = *matchSurface();
-        auto primitive = Ref(new SurfacePrimitive(
-            dynamic_cast<BezierPatches*>(surface.get())));
+        Ref<SurfacePrimitive> primitive = new SurfacePrimitive(
+            dynamic_cast<BezierPatches*>(surface.get()));
 
         if (_token == _MATERIAL)
         {
