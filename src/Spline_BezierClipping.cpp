@@ -285,8 +285,7 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         // check tolerance
         float d0 = (p.point(3,0) - p.point(0,3)).length();
         float d1 = (p.point(3,3) - p.point(0,0)).length();
-        // if ((d0 < tol && d1 < tol) || (e.size.x < 1/64.0f && e.size.y < 1/64.0f))
-        if (e.size.x < tol && e.size.y < tol)
+        if (d0 < tol && d1 < tol)
         {
             // there are cases where is impossible to clip the patch because
             // it is already so small that it is a plane and the intersection
@@ -429,12 +428,12 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         // TODO Improve this step
         if (lower <= upper)
         { // preventing the algorithm from creating long and narrow subpatches
-            constexpr float minspan = 0.1f;
+            constexpr float minspan = 0.01f;
             auto mid = 0.5f * (lower + upper);
             if (upper - lower < minspan)
             {
-                lower = mid - 0.5f * minspan;
-                upper = mid + 0.5f * minspan;
+                lower = std::max(0.0f, mid - 0.5f * minspan);
+                upper = std::min(1.0f, mid + 0.5f * minspan);
             }
         }
 
@@ -487,10 +486,10 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             }
             S.push_back(std::move(s1));
 
-            if (S.size() > 127)
+            if (S.size() > 31)
             {
                 fprintf(stderr,
-                    "warning: the stack has too many elements (%llu)\n", S.size());
+                    "warning: the stack has too many elements (%zu)\n", S.size());
                 break;
             }
         }
