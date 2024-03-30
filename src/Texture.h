@@ -49,7 +49,15 @@ public:
     Texture(GLenum target = GL_TEXTURE_2D) : _target{target}
     {
         glGenTextures(1, &_texture);
-        // glBindTexture(_target, _texture);
+    }
+
+    Texture(Format pixelFormat, uint32_t width, uint32_t height)
+        : _target{GL_TEXTURE_2D}, _format{pixelFormat}
+        , _width{width}, _height{height}
+    {
+        glGenTextures(1, &_texture);
+        glBindTexture(_target, _texture);
+        glTexStorage2D(_target, 1, (GLenum) _format, _width, _height);
     }
 
     // Texture(GLenum target, );
@@ -58,6 +66,9 @@ public:
     Texture(const Texture&) = delete;
     ~Texture() override;
 
+    void bind() const { glBindTexture(_target, _texture); }
+
+    auto format() const { return _format; }
     auto target() const { return _target; }
     auto width() const { return _width; }
     auto height() const { return _height; }

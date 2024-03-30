@@ -379,7 +379,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode)
         _program
     );
 
-    glActiveShaderProgram(_pipeline, _program);
+    glActiveShaderProgram(_pipeline, fragment);
 }
 
 SurfacePipeline::~SurfacePipeline() {}
@@ -505,7 +505,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
 
 bool SurfaceMapper::renderContour(GLRenderer& renderer) const
 {
-    auto pipeline = renderer.pipeline("SurfCont"_ID8);
+    auto pipeline = renderer.pipeline("SurfCont"_ID);
     if (!pipeline) return false;
 
     updateMatrixBlock(renderer);
