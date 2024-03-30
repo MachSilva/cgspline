@@ -171,31 +171,14 @@ RayTracer::scan(Image &image)
 {
     ImageBuffer scanLine{_viewport.w, 1};
 
-    if (_callback)
+    for (auto j = 0; j < _viewport.h; j++)
     {
-        for (auto j = 0; j < _viewport.h; j++)
-        {
-            auto y = (float)j + 0.5f;
+        auto y = (float)j + 0.5f;
 
-            _callback(j, _viewport.h);
-
-            printf("Scanning line %d of %d\r", j + 1, _viewport.h);
-            for (auto i = 0; i < _viewport.w; i++)
-                scanLine[i] = shoot((float)i + 0.5f, y);
-            image.setData(0, j, scanLine);
-        }
-    }
-    else
-    {
-        for (auto j = 0; j < _viewport.h; j++)
-        {
-            auto y = (float)j + 0.5f;
-
-            fprintf(stderr, "Scanning line %d of %d\r", j + 1, _viewport.h);
-            for (auto i = 0; i < _viewport.w; i++)
-                scanLine[i] = shoot((float)i + 0.5f, y);
-            image.setData(0, j, scanLine);
-        }
+        fprintf(stderr, "Scanning line %d of %d\r", j + 1, _viewport.h);
+        for (auto i = 0; i < _viewport.w; i++)
+            scanLine[i] = shoot((float)i + 0.5f, y);
+        image.setData(0, j, scanLine);
     }
 }
 

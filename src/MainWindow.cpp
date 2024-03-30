@@ -157,7 +157,7 @@ void MainWindow::initializeScene()
     obj = createLightObject(Light::Type::Directional, "The Light");
     obj->transform()->setLocalEulerAngles({50,130,0});
 
-    createPrimitiveObject(*GLGraphics3::box(), "Box");
+    // createPrimitiveObject(*GLGraphics3::box(), "Box");
 
     // Load surfaces
     std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {
@@ -188,9 +188,11 @@ void MainWindow::initializeScene()
 
     auto p1 = new SurfacePipeline(0, fs, SurfacePipeline::Mode::ContourCurves);
     p1->beforeDrawing = setFragmentUniforms;
-    editor()->setPipeline("SurfCont"_ID8, p1);
+    editor()->setPipeline("SurfCont"_ID, p1);
 
     registerInspectFunction(inspectSurface);
+
+    _texRenderer = new SplRenderer();
 
 #if SPL_BC_STATS
     {
@@ -219,6 +221,7 @@ void MainWindow::render()
     if (_viewMode != ViewMode::Editor)
     {
         renderScene();
+        // prevRenderScene();
         return;
     }
 
@@ -310,16 +313,182 @@ void MainWindow::render()
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
 }
 
-static volatile int _progress[2];
-
-static
-void progressCallback(int i, int n)
+void MainWindow::convertScene()
 {
-    _progress[0] = i;
-    _progress[1] = n;
+    using Key = rt::Scene::Key;
+    std::pmr::memory_resource* memoryResource = std::pmr::get_default_resource();
+    auto objCount = _scene->actorCount();
+    _rtScene = std::make_unique<rt::Scene>(objCount, memoryResource);
+
+    auto& lights = _rtScene->lights;
+    lights.clear();
+    lights.reserve(_scene->lights().size());
+
+    for (auto light : _scene->lights())
+    {
+        if (!light->isTurnedOn())
+            continue;
+        float angle;
+        switch (light->type())
+        {
+        case Light::Type::Directional:
+            angle = 0.0f;
+            break;
+        case Light::Type::Point:
+            angle = 3.1415f;
+            break;
+        case Light::Type::Spot:
+            angle = math::toRadians(light->spotAngle());
+        }
+        lights.push_back(rt::Light{
+            .color = (vec3f) light->color,
+            .strength = 1.0f,
+            .position = light->position(),
+            .range = light->range(),
+            .direction = light->direction(),
+            .angle = angle
+        });
+    }
+
+    // Give some "pointer stability" to these arrays
+    // All the required data must be previously allocated
+    _rtScene->meshes.clear();
+    _rtScene->meshes.reserve(objCount);
+    _rtScene->surfaces.clear();
+    _rtScene->surfaces.reserve(objCount);
+    _rtScene->bvhs.clear();
+    _rtScene->bvhs.reserve(objCount);
+
+    auto& objects = _rtScene->objects;
+    for (auto actor : _scene->actors())
+    {
+        if (!actor->isVisible())
+            continue;
+
+        auto mapper = actor->mapper();
+
+        auto p = mapper->primitive();
+        auto m = p->material();
+        auto last = objects.size();
+        objects.emplace_back();
+
+        objects.get<Key::eLocal2WorldMatrix>(last) = p->localToWorldMatrix();
+        objects.get<Key::eWorld2LocalMatrix>(last) = p->worldToLocalMatrix();
+
+        objects.get<Key::eMaterial>(last) =
+        {
+            .diffuse = vec3f(m->diffuse),
+            .specular = vec3f(m->specular),
+            .transparency = vec3f(m->transparency),
+            .metalness = m->metalness,
+            .roughness = m->roughness,
+            .refractiveIndex = m->ior,
+        };
+
+        if (auto p = dynamic_cast<TriangleMeshMapper*>(mapper))
+        {
+            auto& data = p->mesh()->data();
+            auto& mesh = _rtScene->meshes.emplace_back();
+            auto indexCount = 3 * data.triangleCount;
+            mesh.vertices = _rtScene->createBuffer<vec3f>(data.vertexCount);
+            mesh.normals = _rtScene->createBuffer<vec3f>(data.vertexCount);
+            mesh.indices = _rtScene->createBuffer<uint32_t>(indexCount);
+            std::copy_n(data.vertices, data.vertexCount, mesh.vertices);
+            std::copy_n(data.vertexNormals, data.vertexCount, mesh.normals);
+            for (int i = 0, j = 0; i < data.triangleCount; i++, j += 3)
+            {
+                mesh.indices[j  ] = data.triangles[i].v[0];
+                mesh.indices[j+1] = data.triangles[i].v[1];
+                mesh.indices[j+2] = data.triangles[i].v[2];
+            }
+
+            objects.get<Key::ePrimitive>(last) = &mesh;
+        }
+        else if (auto s = dynamic_cast<SurfaceMapper*>(mapper))
+        {
+            auto patches = s->surface().patches();
+            auto points = patches->points();
+            auto indices = patches->indexes();
+            auto pointsPtr = points->map(GL_READ_ONLY);
+            auto indicesPtr = indices->map(GL_READ_ONLY);
+            auto& surface = _rtScene->surfaces.emplace_back();
+            surface.vertices = _rtScene->createBuffer<vec4f>(points->size());
+            surface.indices = _rtScene->createBuffer<uint32_t>(indices->size());
+            surface.indexCount = indices->size();
+            std::copy_n(pointsPtr.get(), points->size(), surface.vertices);
+            std::copy_n(indicesPtr.get(), indices->size(), surface.indices);
+
+            auto& bvh = _rtScene->bvhs.emplace_back(memoryResource);
+            surface.buildBVH(bvh);
+
+            objects.get<Key::ePrimitive>(last) = &surface;
+        }
+    }
+
+    _rtScene->buildBVH();
 }
 
 void MainWindow::renderScene()
+{
+    if (_viewMode != ViewMode::Renderer)
+        return;
+
+    if (_image != nullptr)
+    {
+        // draw
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, *_image);
+        _texRenderer->drawTexture2D(0);
+        return;
+    }
+
+    auto camera = graph::CameraProxy::current();
+    if (!camera)
+        camera = editor()->camera();
+
+#if SPL_BC_STATS
+    spline::stats::g_BezierClippingData.clear();
+    spline::stats::g_BezierClippingEnable = false;
+#endif
+
+    convertScene();
+
+    // Set Camera
+    _rtCamera =
+    {
+        .transform =
+        {
+            .rotation = camera->rotation(),
+            .position = camera->position(),
+        },
+        .aspectRatio = camera->aspectRatio(),
+        .fieldOfView = math::toRadians(camera->viewAngle()),
+        .height = camera->height(),
+        .projection = camera->projectionType() == Camera::Parallel
+            ? rt::Camera::Parallel : rt::Camera::Perspective
+    };
+
+    // Create task
+    // if (!_renderTask.valid()) {}
+    auto& v = _state.renderViewport;
+    _image = new gl::Texture(gl::Format::sRGB, v.w, v.h);
+
+    _frame = new rt::Frame(v.w, v.h);
+    _rayTracer = new rt::CPURayTracer({
+        .flipYAxis = true,
+        .threads = 1,
+    });
+    _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+    glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
+        _frame->data());
+
+#if SPL_BC_STATS
+    spline::stats::g_BezierClippingEnable = true;
+#endif
+}
+
+void MainWindow::prevRenderScene()
 {
     if (_viewMode != ViewMode::Renderer)
         return;
@@ -328,7 +497,7 @@ void MainWindow::renderScene()
     if (!camera)
         camera = editor()->camera();
 
-    if (_image == nullptr)
+    if (_prevImage == nullptr)
     {
 #if SPL_BC_STATS
         spline::stats::g_BezierClippingData.clear();
@@ -336,21 +505,20 @@ void MainWindow::renderScene()
 #endif
 
         // Create task
-        // if (!_renderTask.valid()) {}
-        _image = new GLImage(width(), height());
-        if (_rayTracer == nullptr)
-            _rayTracer = new RayTracer(*scene(), *camera);
+        _prevImage = new GLImage(width(), height());
+        if (_prevRayTracer == nullptr)
+            _prevRayTracer = new RayTracer(*scene(), *camera);
         else
-            _rayTracer->setCamera(*camera);
-        // _rayTracer->setProgressCallback(progressCallback);
-        _rayTracer->setMaxRecursionLevel(6);
-        _rayTracer->renderImage(*_image);
+            _prevRayTracer->setCamera(*camera);
+        // _prevRayTracer->setProgressCallback(progressCallback);
+        _prevRayTracer->setMaxRecursionLevel(6);
+        _prevRayTracer->renderImage(*_prevImage);
 
 #if SPL_BC_STATS
         spline::stats::g_BezierClippingEnable = true;
 #endif
     }
-    _image->draw(0, 0);
+    _prevImage->draw(0, 0);
 }
 
 void MainWindow::drawSelectedObject(const graph::SceneObject& object)
@@ -500,7 +668,7 @@ void MainWindow::helpMenu()
     if (ImGui::BeginMenu("Help"))
     {
         if (ImGui::MenuItem("Keybindings"))
-            0;
+            (void)0;
         ImGui::EndMenu();
     }
 }

@@ -2,18 +2,22 @@
 
 #include <filesystem>
 #include <future>
+#include <memory_resource>
 #include <vector>
 #include <CUDAHelper.h>
-#include <graph/SceneWindow.h>
 #include <graph/SceneObject.h>
+#include <graph/SceneWindow.h>
 #include <graphics/GLImage.h>
 #include <graphics/Renderer.h>
 #include "BezierPatches.h"
 #include "Framebuffer.h"
-#include "RayTracer.h"
 #include "SceneReaderExt.h"
-#include "Surface.h"
 #include "Spline.h"
+#include "SplRenderer.h"
+#include "Surface.h"
+#include "RayTracer.h"
+#include "rt/CPURayTracer.h"
+#include "rt/RayTracer.h"
 
 namespace cg
 {
@@ -80,6 +84,7 @@ protected:
         Intersection& hit) const;
     
     void readScene(std::filesystem::path scenefile);
+    void convertScene();
 
     void assetWindow();
     void cameraPreview();
@@ -91,10 +96,19 @@ protected:
     void helpMenu();
     static void inspectSurface(MainWindow&, SurfaceProxy&);
 
-    std::future<void> _renderTask;
-    Ref<GLImage> _image;
-    Ref<RayTracer> _rayTracer;
+    void prevRenderScene();
+    Ref<GLImage> _prevImage;
+    Ref<RayTracer> _prevRayTracer;
+
     Intersection _lastPickHit;
+    Ref<gl::Texture> _image;
+    Ref<rt::Frame> _frame;
+    Ref<rt::CPURayTracer> _rayTracer;
+    std::unique_ptr<rt::Scene> _rtScene;
+    rt::Camera _rtCamera;
+    Ref<SplRenderer> _texRenderer;
+
+    rt::ManagedCUDAResource _cudaManaged;
 
     std::vector<std::filesystem::path> _sceneFileList;
     MaterialMap _sceneMaterials;

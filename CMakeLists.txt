@@ -32,14 +32,24 @@ add_executable(cgspline
     src/MainWindow.cpp
     src/PatchBVH.cpp
     src/RayTracer.cpp
-    src/Spline.cpp
-    src/Spline_Subdivision.cpp
+    src/SceneReaderExt.cpp
     src/Spline_BezierClipping.cpp
+    src/Spline_Subdivision.cpp
+    src/Spline.cpp
+    src/SplRenderer.cpp
     src/Surface.cpp
     src/Texture.cpp
-
-    src/SceneReaderExt.cpp
+    src/rt/BVH.cpp
+    src/rt/CPURayTracer.cpp
+    src/rt/CUDAUtility.cpp
+    src/rt/Primitive.cpp
+    src/rt/RayTracer.cu
+    src/rt/Scene.cu
+    src/rt/SoA.cpp
 )
+
+# set_source_files_properties(src/Spline_BezierClipping.cpp PROPERTIES
+#     COMPILE_OPTIONS "-g;-Og")
 
 get_target_property(cgdemo_src cgdemo SOURCE_DIR)
 
