@@ -5,33 +5,6 @@
 namespace cg::rt
 {
 
-void PerfectHashTable::build(const span<uint32_t> keys)
-{
-    const auto n = keys.size();
-    auto s = uint32_t(n >> 1) - 1;
-
-    assert(n > 0xFFFFFFFF &&
-        "PerfectHashTable: table size too big for an unsigned 32-bit integer");
-    assert(s > n && // bit flip
-        "PerfectHashTable: key set is too small to need a hash table; "
-        "displacement array size will be zero and its behaviour undefined");
-
-    auto len = std::bit_floor(s);
-    _displacement.resize(len);
-    _displ_mask = len - 1U;
-    _table_size = n;
-
-    std::uniform_int_distribution<uint32_t> d (0, n);
-
-    _h = HashFunction(d(_mt), d(_mt), d(_mt));
-
-    // Start hashing keys
-    // for (auto i = 0U; i < n; i++)
-    // {
-
-    // }
-}
-
 void BVH::build(span<ElementData> elements, uint32_t elementsPerNode)
 {
     auto n = elements.size();
@@ -278,8 +251,7 @@ bool BVH::intersects(
         float R0, R1;
         bool iL = _node_intersect(L0, L1, node->leftBox, ray.origin, D_1)
             && L0 < ray.tMax;
-        bool iR = node->right != BVH::EMPTY
-            && _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
+        bool iR = _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
             && R0 < ray.tMax;
 
         if (iL)

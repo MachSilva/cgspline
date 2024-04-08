@@ -3,9 +3,14 @@
 #include <core/Globals.h>
 #include <memory>
 #include <memory_resource>
+#include <thrust/device_allocator.h>
 
 #ifndef NDEBUG
 #define CUDA_CHECK(e) ::cg::rt::cudaErrorCheck(e, __FILE__, __LINE__)
+#elif defined(__FUNCSIG__)
+#define CUDA_CHECK(e) ::cg::rt::cudaErrorCheck(e, __FUNCSIG__, __LINE__)
+#elif defined(__GNUC__)
+#define CUDA_CHECK(e) ::cg::rt::cudaErrorCheck(e, __FUNCTION__, __LINE__)
 #else
 #define CUDA_CHECK(e) ::cg::rt::cudaErrorCheck(e, __func__, __LINE__)
 #endif
@@ -14,23 +19,6 @@ namespace cg::rt
 {
 
 void cudaErrorCheck(cudaError_t e, const char* source, int line);
-
-template<typename T>
-class ManagedAllocator
-{
-public:
-    static T* allocate(size_t n)
-    {
-        T* ptr;
-        CUDA_CHECK(cudaMallocManaged(&ptr, n * sizeof (T)));
-        return ptr;
-    }
-
-    static void free(T* ptr)
-    {
-        CUDA_CHECK(cudaFree(ptr));
-    }
-};
 
 class ManagedCUDAResource : public std::pmr::memory_resource
 {
@@ -43,14 +31,59 @@ private:
     bool do_is_equal(const std::pmr::memory_resource& r) const noexcept override;
 };
 
-// template<typename T> using ManagedArray = cg::ArrayBase<T,ManagedAllocator<T>>;
+template<typename T>
+struct async_allocator
+{
+    using value_type = T;
+    using size_type = size_t;
+
+    // You are free to change this at any time
+    cudaStream_t stream = 0;
+
+    async_allocator() = default;
+    async_allocator(cudaStream_t s) : stream{s} {}
+
+    [[nodiscard]] T* allocate(size_type n)
+    {
+        T* p;
+        CUDA_CHECK(cudaMallocAsync(&p, n * sizeof (T), stream));
+        return p;
+    }
+
+    void deallocate(T* p, size_type)
+    {
+        cudaFreeAsync((void*) p, stream);
+    }
+};
+
+template<typename T>
+struct managed_allocator
+{
+    using value_type = T;
+    using size_type = size_t;
+
+    // Flags to cudaMallocManaged
+    // uint32_t flags = 1U;
+
+    [[nodiscard]] T* allocate(size_type n)
+    {
+        T* p;
+        CUDA_CHECK(cudaMallocManaged(&p, n * sizeof (T)));
+        return p;
+    }
+
+    void deallocate(T* p, size_type)
+    {
+        cudaFree((void*) p);
+    }
+};
 
 /**
  * @brief A template for passing arguments to a CUDA kernel by value without
- * triggering its constructors or destructor.
+ * triggering any constructor or destructor.
  */
 template<typename T>
-struct KernelArg
+struct Raw
 {
     union RawData
     {
@@ -59,9 +92,12 @@ struct KernelArg
     } raw_data;
 
     __host__ __device__
-    KernelArg(const T& value)
+    Raw() = default;
+
+    __host__ __device__
+    Raw(const T& value)
     {
-        auto p = reinterpret_cast<const RawData*>(value);
+        auto p = reinterpret_cast<const RawData*>(&value);
         raw_data = *p;
     }
 
@@ -76,21 +112,28 @@ struct KernelArg
     {
         return reinterpret_cast<T*>(&raw_data);
     }
+
+    __host__ __device__
+    const T* operator-> () const { return get(); }
+
+    __host__ __device__
+    T* operator-> () { return get(); }
 };
 
 /**
  * @brief Just an uninitialized array of type @a T . It is an alternative
- *        to `std::pmr::vector` since it does initialize all the data.
+ *        to `std::pmr::vector` since the latter may initialize all the data.
  */
-template<typename T, typename Alloc = std::pmr::polymorphic_allocator<T>>
+template<typename T,
+    template<typename> typename AllocTpl = std::pmr::polymorphic_allocator>
 class Buffer
 {
 public:
     using value_type = T;
-    using allocator_type = Alloc;
+    using allocator_type = AllocTpl<T>;
 
     Buffer() = default;
-    Buffer(size_t n, const Alloc& allocator = {})
+    Buffer(size_t n, const allocator_type& allocator = {})
         : _length{n}, _alloc{allocator}
     {
         _ptr = _alloc.allocate(n);
@@ -119,17 +162,59 @@ public:
         return *this;
     }
 
+    const auto& allocator() const { return _alloc; }
+
+    auto& allocator() { return _alloc; }
+
+    // Release ownership of the data
+    T* release() { auto p = _ptr; _ptr = nullptr; return p; }
+
+    /**
+     * @brief Resize the buffer. No op. if the requested size is shorter.
+     * 
+     * @note The previous data will be lost if a larger size is requested.
+     */
+    void resize(size_t n)
+    {
+        if (n > _length)
+        {
+            _alloc.deallocate(_ptr, _length);
+            _ptr = _alloc.allocate(_length = n);
+        }
+    }
+
+    __host__ __device__
+    const T* cbegin() const { return _ptr; }
+
+    __host__ __device__
+    const T* cend() const { return _ptr + _length; }
+
+    __host__ __device__
+    T* begin() { return _ptr; }
+
+    __host__ __device__
+    T* end() { return _ptr + _length; }
+
+    __host__ __device__
     const T& operator[] (size_t i) const { return _ptr[i]; }
+
+    __host__ __device__
     T& operator[] (size_t i) { return _ptr[i]; }
 
+    __host__ __device__
     const T* data() const noexcept { return _ptr; }
+
+    __host__ __device__
     T* data() noexcept { return _ptr; }
 
+    __host__ __device__
     size_t size() const noexcept { return _length; }
+
+    __host__ __device__
     size_t size_bytes() const noexcept { return _length * sizeof (T); }
 
 protected:
-    Alloc _alloc {};
+    allocator_type _alloc {};
     size_t _length {0};
     T* _ptr {nullptr};
 };

@@ -19,6 +19,9 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_CUDA_ARCHITECTURES 75)
+if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
+    set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")
+endif()
 
 add_subdirectory(external/stb)
 add_subdirectory(Ds)
@@ -42,14 +45,19 @@ add_executable(cgspline
     src/rt/BVH.cpp
     src/rt/CPURayTracer.cpp
     src/rt/CUDAUtility.cpp
+    src/rt/PerfectHashTable.cu
     src/rt/Primitive.cpp
     src/rt/RayTracer.cu
     src/rt/Scene.cu
     src/rt/SoA.cpp
 )
 
-# set_source_files_properties(src/Spline_BezierClipping.cpp PROPERTIES
-#     COMPILE_OPTIONS "-g;-Og")
+set_source_files_properties(
+    src/rt/PerfectHashTable.cu
+    src/rt/RayTracer.cu
+    src/rt/Scene.cu
+    PROPERTIES
+    COMPILE_OPTIONS "--ptxas-options;--verbose")
 
 get_target_property(cgdemo_src cgdemo SOURCE_DIR)
 

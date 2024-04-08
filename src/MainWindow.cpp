@@ -426,6 +426,12 @@ void MainWindow::convertScene()
     }
 
     _rtScene->buildBVH();
+
+    rt::PerfectHashTable table;
+    for (auto& b : _rtScene->bvhs)
+        table.build(b.keys());
+
+    table.build(_rtScene->topLevelBVH.keys());
 }
 
 void MainWindow::renderScene()
@@ -475,6 +481,7 @@ void MainWindow::renderScene()
 
     _frame = new rt::Frame(v.w, v.h);
     _rayTracer = new rt::CPURayTracer({
+        .backgroundColor = vec3f(backgroundColor),
         .flipYAxis = true,
         .threads = 1,
     });

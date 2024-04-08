@@ -24,6 +24,8 @@ struct SoABase
     constexpr void deallocate(size_t) {}
     constexpr void construct(size_t) {}
     constexpr void destroy(size_t) {}
+    constexpr std::tuple<> as_tuple() const { return {}; }
+    constexpr std::tuple<> as_tuple() { return {}; }
     // constexpr void get(size_t) {}
     // constexpr void set(size_t) {}
 };
@@ -75,12 +77,22 @@ struct SoABase<index_t, T, Args...> : SoABase<index_t, Args...>
         base_type::destroy(n);
     }
 
-    std::tuple<const T&, const Args&...>&& get(index_type i) const
+    std::tuple<const T*, const Args*...> as_tuple() const
+    {
+        return std::tuple_cat(std::tuple<const T*>(data), base_type::as_tuple());
+    }
+
+    std::tuple<T*, Args*...> as_tuple()
+    {
+        return std::tuple_cat(std::tuple<T*>(data), base_type::as_tuple());
+    }
+
+    std::tuple<const T&, const Args&...> get(index_type i) const
     {
         return std::tuple_cat(std::tuple<const T&>(data[i]), base_type::get(i));
     }
 
-    std::tuple<T&, Args&...>&& get(index_type i)
+    std::tuple<T&, Args&...> get(index_type i)
     {
         return std::tuple_cat(std::tuple<T&>(data[i]), base_type::get(i));
     }
@@ -140,7 +152,7 @@ struct SoAData<I, index_t, T, Args...>
 template<typename index_t, typename... Args>
 struct SoA
 {
-    static constexpr auto field_count = sizeof...(Args);
+    static constexpr auto array_count = sizeof...(Args);
 
     using base_type = detail::SoABase<index_t, Args...>;
     using memory_resource = std::pmr::memory_resource;
@@ -163,6 +175,12 @@ struct SoA
     auto resource() const { return _data.resource(); }
     __host__ __device__ auto capacity() const { return _capacity; }
     __host__ __device__ auto size() const { return _size; }
+
+    template<index_t I>
+    __host__ __device__ auto& size_bytes() const noexcept
+    {
+        return _size * sizeof (element_type<I>);
+    }
 
     void emplace_back()
     {
@@ -193,6 +211,11 @@ struct SoA
         _data.destroy(--_size);
     }
 
+    std::tuple<const Args*...> as_pointer_tuple() const
+    {
+        return _data.as_tuple();
+    }
+
     std::tuple<const Args&...> get(index_t i) const
     {
 #ifndef NDEBUG
@@ -213,7 +236,7 @@ struct SoA
     __host__ __device__
     auto& get(index_t i) const
     {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(__NVCC__)
         range_check(i);
 #endif
         return data<I>()[i];
@@ -223,17 +246,17 @@ struct SoA
     __host__ __device__
     auto& get(index_t i)
     {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(__NVCC__)
         range_check(i);
 #endif
         return data<I>()[i];
     }
 
-protected:
     template<index_t I>
     __host__ __device__
     auto& data() const { return detail::SoAData<I,index_t,Args...>::get(_data); }
 
+protected:
     template<index_t I>
     __host__ __device__
     auto& data() { return detail::SoAData<I,index_t,Args...>::get(_data); }
