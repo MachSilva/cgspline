@@ -2,7 +2,7 @@
 
 #include <geometry/BVH.h>
 #include <span>
-#include "BezierPatches.h"
+#include "GLBezierSurface.h"
 
 namespace cg
 {
@@ -19,21 +19,19 @@ bool bezierClipping(std::span<vec4f> vertices,
 
 /**
  * @brief BVH for surface objects consisting of multiple patches.
- * @warning You must call @a map() to map opengl buffers to host memory before
- * attempting an intersection. When done, call @a unmap() to release the memory.
  */
 class PatchBVH final : public BVHBase
 {
 public:
-    PatchBVH(const BezierPatches&);
+    PatchBVH(const BezierSurface*);
+    PatchBVH(const GLBezierSurface*);
 
-    void map();
-    void unmap();
+    BezierSurface* surface() const { return _patches; }
 
-protected:
-    Reference<BezierPatches> _patches;
-    const vec4f* _points {};
-    const uint32_t* _indexes {};
+private:
+    Ref<BezierSurface> _patches;
+
+    void init();
 
     bool intersectLeaf(uint32_t, uint32_t, const Ray3f&) const override;
     void intersectLeaf(uint32_t, uint32_t, const Ray3f&, Intersection&) const override;

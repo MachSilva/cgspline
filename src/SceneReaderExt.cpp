@@ -37,7 +37,7 @@
 #include <graph/SceneObjectBuilder.h>
 #include <graphics/Assets.h>
 #include <graphics/Application.h>
-#include "BezierPatches.h"
+#include "GLBezierSurface.h"
 #include "Surface.h"
 
 namespace cg::util
@@ -330,7 +330,7 @@ try
     if (std::filesystem::exists(file) == false)
         error(FILE_DOESNT_EXIST, file.c_str());
 
-    return BezierPatches::load(file.string().c_str());
+    return GLBezierSurface::load(file.string().c_str());
 }
 catch (const std::runtime_error& e)
 {
@@ -792,7 +792,7 @@ SceneReaderExt::Parser::matchPrimitive(int type)
 
         auto [name, surface] = *matchSurface();
         Ref<SurfacePrimitive> primitive = new SurfacePrimitive(
-            dynamic_cast<BezierPatches*>(surface.get()));
+            dynamic_cast<GLBezierSurface*>(surface.get()));
 
         if (_token == _MATERIAL)
         {

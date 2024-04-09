@@ -4,11 +4,33 @@
 namespace cg
 {
 
-PatchBVH::PatchBVH(const BezierPatches& patches) : BVHBase(1), _patches{&patches}
+PatchBVH::PatchBVH(const BezierSurface* patches)
+    : BVHBase(1), _patches{patches}
+{
+    init();
+}
+
+PatchBVH::PatchBVH(const GLBezierSurface* patches) : BVHBase(1)
+{
+    auto p0 = patches->indices()->map();
+    auto p1 = patches->points()->map();
+
+    std::vector<uint32_t> indices
+        (p0.get(), p0.get() + patches->indices()->size());
+    std::vector<vec4f> points
+        (p1.get(), p1.get() + patches->points()->size());
+
+    _patches = new BezierSurface(std::move(points), std::move(indices));
+
+    init();
+}
+
+void PatchBVH::init()
 {
     auto count = _patches->count();
-    auto indexes = _patches->indexes()->map(GL_READ_ONLY);
-    auto points = _patches->points()->map(GL_READ_ONLY);
+
+    auto points = _patches->points().data();
+    auto indices = _patches->indices().data();
 
     PrimitiveInfoArray info (count);
     _primitiveIds.resize(count);
@@ -16,43 +38,28 @@ PatchBVH::PatchBVH(const BezierPatches& patches) : BVHBase(1), _patches{&patches
     for (uint32_t i = 0; i < count; i++)
     {
         _primitiveIds[i] = i;
-        info[i] = PrimitiveInfo(i, spline::boundingbox(points.get(), &indexes[16*i]));
+        info[i] = PrimitiveInfo(i,
+            spline::boundingbox(points, indices + 16*i)
+        );
     }
 
     build(info);
 }
 
-void PatchBVH::map()
-{
-    _points = static_cast<decltype(_points)>(
-        glMapNamedBuffer(_patches->points()->buffer(), GL_READ_ONLY)
-    );
-    _indexes = static_cast<decltype(_indexes)>(
-        glMapNamedBuffer(_patches->indexes()->buffer(), GL_READ_ONLY)
-    );
-}
-
-void PatchBVH::unmap()
-{
-    glUnmapNamedBuffer(_patches->indexes()->buffer());
-    glUnmapNamedBuffer(_patches->points()->buffer());
-    _indexes = nullptr;
-    _points = nullptr;
-}
-
 bool PatchBVH::intersectLeaf(uint32_t first, uint32_t count, const Ray3f& ray) const
 {
     assert(count == 1); // Max of 1 primitive per node
-    // Assert that the buffers are mapped
-    assert(_points != nullptr && _indexes != nullptr);
+
+    auto points = _patches->points().data();
+    auto indices = _patches->indices().data();
 
     Intersection hit;
     hit.distance = math::Limits<float>::inf();
 
     auto& i = _primitiveIds[first];
-    const uint32_t* patch = _indexes + 16*i;
-    // return spline::doSubdivision(hit, ray, _points, patch);
-    return spline::doBezierClipping(hit, ray, _points, patch);
+    const uint32_t* patch = indices + 16*i;
+    // return spline::doSubdivision(hit, ray, points, patch);
+    return spline::doBezierClipping(hit, ray, points, patch);
 }
 
 void PatchBVH::intersectLeaf(uint32_t first,
@@ -61,20 +68,19 @@ void PatchBVH::intersectLeaf(uint32_t first,
     Intersection& hit) const
 {
     assert(count == 1); // Max of 1 primitive per node
-    // Assert that the buffers are mapped
-    assert(_points != nullptr && _indexes != nullptr);
+
+    auto points = _patches->points().data();
+    auto indices = _patches->indices().data();
 
     uint32_t i = _primitiveIds[first];
 
-    const uint32_t* patch = _indexes + 16*i;
-    // if (spline::doSubdivision(hit, ray, _points, patch))
-    if (spline::doBezierClipping(hit, ray, _points, patch))
+    const uint32_t* patch = indices + 16*i;
+    // if (spline::doSubdivision(hit, ray, points, patch))
+    if (spline::doBezierClipping(hit, ray, points, patch))
     {
         hit.triangleIndex = i;
         hit.object = this; // intersectLeaf must set hit.object
     }
 }
 
-
 } // namespace cg
-

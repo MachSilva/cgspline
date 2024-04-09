@@ -9,7 +9,7 @@
 #include <graph/SceneWindow.h>
 #include <graphics/GLImage.h>
 #include <graphics/Renderer.h>
-#include "BezierPatches.h"
+#include "GLBezierSurface.h"
 #include "Framebuffer.h"
 #include "SceneReaderExt.h"
 #include "Spline.h"
@@ -76,7 +76,7 @@ public:
     };
 
 protected:
-    graph::SceneObject* createSurfaceObject(BezierPatches& p, const char* name);
+    graph::SceneObject* createSurfaceObject(GLBezierSurface& p, const char* name);
     void drawSelectedObject(const graph::SceneObject& object);
 
     graph::SceneObject* pickObject(graph::SceneObject* obj,
@@ -129,7 +129,7 @@ protected:
 
 #if SPL_BC_STATS
     Ref<graph::SceneObject> _debugObject;
-    Ref<BezierPatches> _debugPatch2D;
+    Ref<GLBezierSurface> _debugPatch2D;
     uint32_t _debugPatchIndex {};
     uint32_t _debugStep {};
 #endif

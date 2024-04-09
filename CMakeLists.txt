@@ -29,7 +29,8 @@ add_subdirectory(Ds)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(cgspline
-    src/BezierPatches.cpp
+    src/BezierSurface.cpp
+    src/GLBezierSurface.cpp
     src/Framebuffer.cpp
     src/Main.cpp
     src/MainWindow.cpp

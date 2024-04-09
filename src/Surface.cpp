@@ -386,18 +386,14 @@ SurfacePipeline::~SurfacePipeline() {}
 
 bool SurfacePrimitive::localIntersect(const Ray3f& ray, Intersection& hit) const
 {
-    _bvh->map();
     bool b = _bvh->intersect(ray, hit);
-    _bvh->unmap();
     if (b) hit.object = this;
     return b;
 }
 
 bool SurfacePrimitive::localIntersect(const Ray3f& ray) const
 {
-    _bvh->map();
     bool b = _bvh->intersect(ray);
-    _bvh->unmap();
     return b;
 }
 
@@ -407,10 +403,11 @@ vec4f SurfacePrimitive::point(const Intersection &hit) const
     float u = hit.p.x;
     float v = hit.p.y;
 
-    auto points = _patches->points()->map(GL_READ_ONLY);
-    auto patchIdx = _patches->indexes()->map(GL_READ_ONLY);
+    auto p = _bvh->surface();
+    auto points = p->points();
+    auto patchIdx = p->indices();
 
-    spline::PatchRef patch (points.get(), patchIdx.get(), uint32_t(idx));
+    spline::PatchRef patch (points.data(), patchIdx.data(), uint32_t(idx));
     vec4f P = spline::interpolate(patch, u, v);
     return localToWorldMatrix().transform(P);
 }
@@ -421,10 +418,11 @@ vec3f SurfacePrimitive::normal(const Intersection &hit) const
     float u = hit.p.x;
     float v = hit.p.y;
 
-    auto points = _patches->points()->map(GL_READ_ONLY);
-    auto patchIdx = _patches->indexes()->map(GL_READ_ONLY);
+    auto p = _bvh->surface();
+    auto points = p->points();
+    auto patchIdx = p->indices();
 
-    spline::PatchRef patch (points.get(), patchIdx.get(), uint32_t(idx));
+    spline::PatchRef patch (points.data(), patchIdx.data(), uint32_t(idx));
     vec3f N = spline::normal(patch, u, v);
     return _normalMatrix.transform(N.versor()).versor();
 }
@@ -498,7 +496,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     s->bind();
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);
-    glDrawElements(GL_PATCHES, s->indexes()->size(), GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_PATCHES, s->indices()->size(), GL_UNSIGNED_INT, 0);
 
     return true;
 }
@@ -518,7 +516,7 @@ bool SurfaceMapper::renderContour(GLRenderer& renderer) const
     s->bind();
 
     glPatchParameteri(GL_PATCH_VERTICES, 16);
-    glDrawElements(GL_PATCHES, s->indexes()->size(), GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_PATCHES, s->indices()->size(), GL_UNSIGNED_INT, 0);
 
     return true;
 }

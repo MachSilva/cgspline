@@ -5,7 +5,7 @@
 #include <graphics/PrimitiveMapper.h>
 #include <graph/ComponentProxy.h>
 #include <graph/PrimitiveProxy.h>
-#include "BezierPatches.h"
+#include "GLBezierSurface.h"
 #include "PatchBVH.h"
 #include "PBRMaterial.h"
 
@@ -48,16 +48,16 @@ protected:
 public:
     SurfacePrimitive() = default;
 
-    SurfacePrimitive(BezierPatches* patches)
+    SurfacePrimitive(GLBezierSurface* patches)
     {
         setPatches(patches);
     }
 
-    BezierPatches* patches() const { return _patches; }
-    void setPatches(BezierPatches* p)
+    GLBezierSurface* patches() const { return _patches; }
+    void setPatches(GLBezierSurface* p)
     {
         _patches = p;
-        _bvh = new PatchBVH(*p);
+        _bvh = new PatchBVH(p);
     }
 
     vec4f point(const Intersection&) const;
@@ -67,7 +67,7 @@ public:
     Ref<PBRMaterial> pbrMaterial {nullptr};
 
 private:
-    Ref<BezierPatches> _patches;
+    Ref<GLBezierSurface> _patches;
     Ref<PatchBVH> _bvh;
 };
 

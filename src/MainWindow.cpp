@@ -169,7 +169,7 @@ void MainWindow::initializeScene()
     for (auto& [s, t, r, sc] : surfaces)
     {
         auto asset = Application::assetFilePath(s);
-        auto p = BezierPatches::load(asset.c_str());
+        auto p = GLBezierSurface::load(asset.c_str());
         auto transform = createSurfaceObject(*p, s)->transform();
         transform->translate(t);
         transform->rotate(r);
@@ -204,8 +204,8 @@ void MainWindow::initializeScene()
         for (auto& v : vertexArray)
             v = {0,0,0,1};
 
-        _debugPatch2D = new BezierPatches();
-        auto idxs = _debugPatch2D->indexes();
+        _debugPatch2D = new GLBezierSurface();
+        auto idxs = _debugPatch2D->indices();
         idxs->resize(16);
         idxs->setData(indexArray);
         auto points = _debugPatch2D->points();
@@ -408,7 +408,7 @@ void MainWindow::convertScene()
         {
             auto patches = s->surface().patches();
             auto points = patches->points();
-            auto indices = patches->indexes();
+            auto indices = patches->indices();
             auto pointsPtr = points->map(GL_READ_ONLY);
             auto indicesPtr = indices->map(GL_READ_ONLY);
             auto& surface = _rtScene->surfaces.emplace_back();
@@ -1116,7 +1116,7 @@ void MainWindow::readScene(std::filesystem::path scenefile)
 }
 
 graph::SceneObject*
-MainWindow::createSurfaceObject(BezierPatches &p, const char *name)
+MainWindow::createSurfaceObject(GLBezierSurface &p, const char *name)
 {
     auto object = graph::SceneObject::New(*_scene);
 
