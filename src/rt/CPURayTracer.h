@@ -30,8 +30,9 @@ public:
     struct Options
     {
         vec3f       backgroundColor = {0.1, 0.1, 0.1};
-        bool        flipYAxis = false;
         float       eps = 1e-4f;
+        bool        flipYAxis = false;
+        int         recursionDepth = 6;
         int         threads = std::thread::hardware_concurrency();
         uint16_t    tileSize = 128;
     };

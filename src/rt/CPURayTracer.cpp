@@ -94,10 +94,10 @@ void CPURayTracer::renderTile(
                 .tMin = 0.001f,
                 .tMax = limits<float>::infinity()
             };
-            vec3f c = trace(pixelRay, vec3f(1), 6);
+            vec3f c = trace(pixelRay, vec3f(1), _options.recursionDepth);
             c.x = std::clamp(c.x, 0.0f, 1.0f);
-            c.y = std::clamp(c.x, 0.0f, 1.0f);
-            c.z = std::clamp(c.x, 0.0f, 1.0f);
+            c.y = std::clamp(c.y, 0.0f, 1.0f);
+            c.z = std::clamp(c.z, 0.0f, 1.0f);
             _frame->at(i, j) = pack_sRGB(c.x, c.y, c.z);
         }
     }

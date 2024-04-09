@@ -44,6 +44,9 @@ struct Frame : SharedObject
     __host__ __device__
     auto width() const { return _width; }
 
+    __host__ __device__
+    auto size_bytes() const { return _data.size_bytes(); }
+
 protected:
     Buffer<Pixel> _data;
     uint32_t _height {};

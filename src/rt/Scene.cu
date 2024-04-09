@@ -40,12 +40,10 @@ void Scene::buildBVH()
     {
         auto& e = data[i];
         e.index = i;
-        // e.bounds = objects.get<Key::ePrimitive>(i)->bounds(
-        //     objects.get<Key::eLocal2WorldMatrix>(i)
-        // );
-        e.bounds = Bounds3f(-FLT_MAX, FLT_MAX);
+        e.bounds = objects.get<Key::ePrimitive>(i)->bounds(
+            objects.get<Key::eLocal2WorldMatrix>(i)
+        );
         e.centroid = e.bounds.center();
-        // e.centroid = vec3f{0};
     }
     topLevelBVH.build(data, 1);
 }
