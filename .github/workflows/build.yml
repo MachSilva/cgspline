@@ -12,7 +12,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libglfw3-dev
+        sudo apt-get install -y libglfw3-dev nvidia-cuda-dev
 
     - name: Configure CMake
       run: |
@@ -21,19 +21,6 @@ jobs:
     
     - name: Build
       run: make -C cmake-build -j`nproc`
-
-  windows:
-    runs-on: windows-2022
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Install MSBuild
-      uses: microsoft/setup-msbuild@v1
-    
-    - name: Build cgspline
-      run: |
-        msbuild build\v
 
   # windows-msbuild:
   #   runs-on: windows-2022
