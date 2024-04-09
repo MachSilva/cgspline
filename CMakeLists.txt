@@ -34,6 +34,7 @@ add_executable(cgspline
     src/Framebuffer.cpp
     src/Main.cpp
     src/MainWindow.cpp
+    src/MainWindow_UI.cpp
     src/PatchBVH.cpp
     src/RayTracer.cpp
     src/SceneReaderExt.cpp
