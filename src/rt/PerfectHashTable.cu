@@ -10,45 +10,6 @@
 namespace cg::rt
 {
 
-using namespace thrust::placeholders;
-
-template<typename T>
-struct bitmask_fn
-{
-    T mask;
-
-    __host__ __device__
-    constexpr T operator() (T a) const
-    {
-        return a & mask;
-    }
-};
-
-template<typename T>
-struct index_select_fn
-{
-    const T* lookup;
-    T value;
-
-    __host__ __device__
-    constexpr bool operator() (T a) const
-    {
-        return lookup[a] == value;
-    }
-};
-
-struct conflict_any_fn
-{
-    const HashFunction h;
-    const uint32_t mask;
-
-    __host__ __device__
-    constexpr bool operator() (uint32_t a, uint32_t b) const
-    {
-        return h(a) == h(b) && (a & mask) == (b & mask);
-    }
-};
-
 static constexpr unsigned kBucketMaxSize = 8U;
 
 /**
@@ -95,7 +56,8 @@ void init_and_bucketsort(
 __global__
 void feasibility_test(
     uint32_t* __restrict__ result,
-    HashFunction h,
+    uint32_t hashA,
+    uint32_t hashB,
     const uint32_t* __restrict__ bucketArray,
     const uint32_t* __restrict__ bucketSizeArray,
     uint32_t bucketCount)
@@ -114,10 +76,10 @@ void feasibility_test(
     const uint32_t n = bucketSizeArray[tId];
     for (int i = 1; i < n; i++)
     {
-        const uint32_t k = h(__ldg(bucket + i));
+        const uint32_t k = (hashA * __ldg(bucket + i) + hashB);
         for (int j = 0; j < i; j++)
         {
-            if (k == h(__ldg(bucket + j)) || earlyExit)
+            if (k == (hashA * __ldg(bucket + j) + hashB) || earlyExit)
             {
                 *result = 1;
                 earlyExit = 1;
@@ -178,7 +140,8 @@ void sort_buckets_descending(
 __global__
 void insert_keys(
     int* __restrict__ pFailureCounter,
-    HashFunction h,
+    uint32_t hashA,
+    uint32_t hashB,
     uint32_t* __restrict__ hashTable,
     uint32_t hashTableSize,
     uint32_t* __restrict__ displacementTable,
@@ -210,7 +173,7 @@ void insert_keys(
     const uint32_t myWarpGroup = bucketGroup % 4;
     const uint32_t mask = 0xFF << (myWarpGroup * 8);
 
-    const auto keyHash = h(key);
+    const auto keyHash = hashA * key + hashB;
 
     assert(bucketId == (key & bucketMask));
 
@@ -406,12 +369,12 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
         int j = 0;
         do
         {
-            _h = HashFunction(d(_mt), d(_mt));
-            cofactor = std::gcd(keys.size(), _h.a);
+            _A = d(_mt), _B = d(_mt);
+            cofactor = std::gcd(keys.size(), _A);
 
             fprintf(stderr, "\thash(k) = %u * k + %u mod N; "
                 "gcd(hashtable, h.A) = %u\n",
-                _h.a, _h.b,
+                _A, _B,
                 cofactor);
         }
         while (cofactor > 1 && j < 16); // make it safe against infinite loops
@@ -421,7 +384,7 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
 
         // Test hash function feasibility
         feasibility_test<<<blocks,kThreadsPerBlock,4,stream>>>(
-            result.data(), _h, buckets.data(), bucketSizes.data(), displSize
+            result.data(), _A, _B, buckets.data(), bucketSizes.data(), displSize
         );
 
         CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -462,7 +425,8 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
             {
                 insert_keys<<<blocks, dim3(8, kThreadsPerBlock), 0, stream>>>(
                     (int*) result.data(),
-                    _h,
+                    _A,
+                    _B,
                     hashTable.data(),
                     hashTable.size(),
                     _displacement.data(),

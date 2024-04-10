@@ -27,43 +27,17 @@ static constexpr std::array<uint32_t,16> RANDOM_PRIMES32
     2442028279U, 3978086807U, 3211402351U, 2816854373U,
 };
 
-struct HashFunction
-{
-    uint32_t a = 31;
-    uint32_t b = 19;
-    uint32_t p = RANDOM_PRIMES32[0];
-
-public:
-    __host__ __device__
-    constexpr HashFunction() noexcept = default;
-
-    __host__
-    constexpr explicit
-    HashFunction(uint32_t A, uint32_t B, int prime_seed = 0) noexcept
-    {
-        p = RANDOM_PRIMES32[prime_seed % RANDOM_PRIMES32.size()];
-        a = A % p;
-        b = B % p;
-        // `a` cannot be zero
-        if (a == 0)
-            a = 31;
-    }
-
-    __host__ __device__
-    constexpr uint32_t operator() (uint32_t value) const
-    {
-        return (a*value + b) % p;
-    }
-};
-
 class PerfectHashTable
 {
-    HashFunction _h;
     std::mt19937 _mt;
 
     Buffer<uint32_t,managed_allocator> _displacement;
     uint32_t _displMask;
     uint32_t _tableSize;
+
+    // Hash function coefficients
+    uint32_t _A = 31;
+    uint32_t _B = 19;
 
 public:
     static constexpr auto EMPTY = uint32_t(-1);
@@ -82,8 +56,14 @@ public:
     uint32_t hash(uint32_t key) const
     {
         const uint32_t* ptr = _displacement.data();
-        return (_h(key) + ptr[key & _displMask]) % _tableSize;
+        return (_A * key + _B + ptr[key & _displMask]) % _tableSize;
     }
+
+    __host__ __device__
+    auto displacementSize() const noexcept { return _displacement.size(); }
+
+    __host__ __device__
+    auto tableSize() const noexcept { return _tableSize; }
 };
 
 
