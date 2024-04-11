@@ -47,7 +47,7 @@ add_executable(cgspline
     src/rt/BVH.cpp
     src/rt/CPURayTracer.cpp
     src/rt/CUDAUtility.cpp
-    src/rt/PerfectHashTable.cu
+    src/rt/PerfectHashFunction.cu
     src/rt/Primitive.cpp
     src/rt/RayTracer.cu
     src/rt/Scene.cu
@@ -55,7 +55,7 @@ add_executable(cgspline
 )
 
 set_source_files_properties(
-    src/rt/PerfectHashTable.cu
+    src/rt/PerfectHashFunction.cu
     src/rt/RayTracer.cu
     src/rt/Scene.cu
     PROPERTIES

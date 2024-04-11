@@ -27,7 +27,7 @@ static constexpr std::array<uint32_t,16> RANDOM_PRIMES32
     2442028279U, 3978086807U, 3211402351U, 2816854373U,
 };
 
-class PerfectHashTable
+class PerfectHashFunction
 {
     std::mt19937 _mt;
 
@@ -42,7 +42,7 @@ class PerfectHashTable
 public:
     static constexpr auto EMPTY = uint32_t(-1);
 
-    PerfectHashTable(uint32_t seed = 42)
+    PerfectHashFunction(uint32_t seed = 42)
         : _mt{seed} {}
 
     /**
@@ -51,6 +51,9 @@ public:
      * @return int Non-zero in case of failure
      */
     int build(span<const uint32_t> keys, cudaStream_t stream = 0);
+
+    __host__ __device__
+    uint32_t operator() (uint32_t key) const { return hash(key); }
 
     __host__ __device__
     uint32_t hash(uint32_t key) const

@@ -1,4 +1,4 @@
-#include "PerfectHashTable.h"
+#include "PerfectHashFunction.h"
 
 // #define CUB_DEBUG_SYNC
 
@@ -212,7 +212,7 @@ void insert_keys(
     }
 }
 
-int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
+int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 {
     SPL_TIME_THIS();
 
@@ -220,9 +220,9 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
     uint32_t s = uint32_t(n >> 1U) - 1U;
 
     assert(n < 0xFFFFFFFF &&
-        "PerfectHashTable: table size too big for an unsigned 32-bit integer");
+        "PerfectHashFunction: table size too big for an unsigned 32-bit integer");
     assert(s < n && // bit flip
-        "PerfectHashTable: key set is too small to need a hash table; "
+        "PerfectHashFunction: key set is too small to need a hash table; "
         "displacement array size will be zero and its behaviour undefined");
 
     const auto displSize = std::max(2U, std::bit_floor(s));
@@ -265,7 +265,7 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
     Buffer<uint32_t,async_allocator> hashTable (n, stream);
 
     fprintf(stderr,
-        "PerfectHashTable:\n"
+        "PerfectHashFunction:\n"
         "\t%u displacement buckets\n"
         "\t%u keys\n",
         displSize, keys.size());
@@ -369,7 +369,10 @@ int PerfectHashTable::build(span<const uint32_t> keys, cudaStream_t stream)
         int j = 0;
         do
         {
-            _A = d(_mt), _B = d(_mt);
+            _A = d(_mt);
+            if (_A == 0)
+                _A = 31; // _A cannot be zero
+            _B = d(_mt);
             cofactor = std::gcd(keys.size(), _A);
 
             fprintf(stderr, "\thash(k) = %u * k + %u mod N; "
