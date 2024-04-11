@@ -22,7 +22,7 @@ bool Sphere::intersect(Intersection& hit, const Ray& ray) const
     return {};
 }
 
-bool Sphere::intersects(const Ray& ray0) const
+bool Sphere::intersect(const Ray& ray0) const
 {
     return {};
 }
@@ -49,7 +49,7 @@ bool Mesh::intersect(Intersection& hit, const Ray& ray) const
     return {};
 }
 
-bool Mesh::intersects(const Ray& ray0) const
+bool Mesh::intersect(const Ray& ray0) const
 {
     return {};
 }
@@ -98,10 +98,11 @@ bool BezierSurface::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
-    return bvh->intersect(hit0, ray0, fn);
+    // return bvh->intersect(hit0, ray0, fn);
+    return bvh->hashIntersect(hit0, ray0, fn);
 }
 
-bool BezierSurface::intersects(const Ray& ray0) const
+bool BezierSurface::intersect(const Ray& ray0) const
 {
     auto fn = [this](const Ray& ray, uint32_t index)
     {
@@ -113,7 +114,7 @@ bool BezierSurface::intersects(const Ray& ray0) const
         return spline::doBezierClipping(
             anotherHit, anotherRay, this->vertices, patch);
     };
-    return bvh->intersects(ray0, fn);
+    return bvh->hashIntersect(ray0, fn);
 }
 
 // __host__ __device__

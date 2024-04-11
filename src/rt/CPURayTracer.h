@@ -62,7 +62,7 @@ private:
 
     int intersect(Intersection& hit, const Ray& ray) const;
 
-    bool intersects(const Ray& ray) const;
+    bool intersect(const Ray& ray) const;
 
     bool lightVector(float& d, vec3f& L, const vec3f& P, const Light& light) const;
 

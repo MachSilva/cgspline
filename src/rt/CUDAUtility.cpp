@@ -24,13 +24,13 @@ void cudaErrorCheck(cudaError_t e, const char* source, int line)
     }
 }
 
-ManagedCUDAResource* ManagedCUDAResource::get_instance()
+ManagedResource* ManagedResource::get_instance()
 {
-    static ManagedCUDAResource instance {};
+    static ManagedResource instance {};
     return &instance;
 }
 
-void* ManagedCUDAResource::do_allocate(std::size_t n, std::size_t alignment)
+void* ManagedResource::do_allocate(std::size_t n, std::size_t alignment)
 {
     void* ptr;
     if (alignment > 256)
@@ -39,14 +39,14 @@ void* ManagedCUDAResource::do_allocate(std::size_t n, std::size_t alignment)
     return ptr;
 }
 
-void ManagedCUDAResource::do_deallocate(void* p, std::size_t n, std::size_t alignment)
+void ManagedResource::do_deallocate(void* p, std::size_t n, std::size_t alignment)
 {
     cudaFree(p);
 }
 
-bool ManagedCUDAResource::do_is_equal(const std::pmr::memory_resource& r) const noexcept
+bool ManagedResource::do_is_equal(const std::pmr::memory_resource& r) const noexcept
 {
-    return dynamic_cast<const ManagedCUDAResource*>(&r) != nullptr;
+    return dynamic_cast<const ManagedResource*>(&r) != nullptr;
 }
 
 } // namespace cg::rt

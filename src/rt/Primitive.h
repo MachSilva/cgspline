@@ -17,7 +17,7 @@ struct Primitive
     // __host__ __device__
     virtual bool intersect(Intersection& hit, const Ray& ray) const = 0;
 
-    virtual bool intersects(const Ray& ray) const = 0;
+    virtual bool intersect(const Ray& ray) const = 0;
 
     // __host__ __device__
     virtual vec3f normal(const Intersection& hit) const = 0;
@@ -32,7 +32,7 @@ struct Sphere : public Primitive
     // __host__ __device__
     bool intersect(Intersection& hit, const Ray& ray) const override;
 
-    bool intersects(const Ray& ray) const override;
+    bool intersect(const Ray& ray) const override;
 
     // __host__ __device__
     vec3f normal(const Intersection& hit) const override;
@@ -50,7 +50,7 @@ struct Mesh : public Primitive
     // __host__ __device__
     bool intersect(Intersection& hit, const Ray& ray) const override;
 
-    bool intersects(const Ray& ray) const override;
+    bool intersect(const Ray& ray) const override;
 
     // __host__ __device__
     vec3f normal(const Intersection& hit) const override;
@@ -79,7 +79,7 @@ struct BezierSurface : public Primitive
     // __host__ __device__
     bool intersect(Intersection& hit, const Ray& ray) const override;
 
-    bool intersects(const Ray& ray) const override;
+    bool intersect(const Ray& ray) const override;
 
     // __host__ __device__
     vec3f normal(const Intersection& hit) const override;

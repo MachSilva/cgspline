@@ -108,7 +108,7 @@ protected:
     rt::Camera _rtCamera;
     Ref<SplRenderer> _texRenderer;
 
-    rt::ManagedCUDAResource _cudaManaged;
+    rt::ManagedResource _cudaManaged;
 
     std::vector<std::filesystem::path> _sceneFileList;
     MaterialMap _sceneMaterials;

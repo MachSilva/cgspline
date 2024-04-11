@@ -17,7 +17,25 @@ void BVH::build(span<ElementData> elements, uint32_t elementsPerNode)
 
     _elementsPerNode = elementsPerNode;
     _root = split(elements, ROOT_KEY);
-    link(_root, EMPTY);
+    link(&_nodes[_root], EMPTY);
+}
+
+void BVH::buildHashTable(cudaStream_t stream)
+{
+    auto e = _hash.build({_keys.data(), _keys.size()}, stream);
+    if (e)
+        throw std::runtime_error("hash table build failed");
+
+    _table.resize(_hash.tableSize());
+    std::ranges::uninitialized_fill(_table, EMPTY);
+
+    for (int i = 0; i < _keys.size(); i++)
+    {
+        auto k = _keys[i];
+        _table[_hash(k)] = i;
+    }
+
+    // printf("hey\n");
 }
 
 uint32_t BVH::split(span<ElementData> elements, uint32_t key)
@@ -101,54 +119,26 @@ uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
     return _nodes.size() - 1;
 }
 
-void BVH::link(uint32_t node, uint32_t uncle)
+void BVH::link(Node* node, uint32_t sibling)
 {
-    auto& e = _nodes[node];
-    e.uncle = uncle;
-
-    if (e.isLeaf())
+    if (node->isLeaf())
         return;
 
     // Uncle must exist for all non-leaf non-root nodes
     // All non-leaf nodes must have two children
     // Non-leaf nodes with a single child must be converted to a leaf node
-    link(e.left, e.right);
-    link(e.right, e.left);
-}
-
-static inline
-bool _node_intersect(float& tMin, float& tMax, const Bounds3f& bounds,
-    const vec3f& origin, const vec3f& directionInverse)
-{
-    using flt = std::numeric_limits<float>;
-    static_assert(flt::is_iec559, "Quiet NaNs and infinities required");
-
-    auto& b0 = bounds.min();
-    auto& b1 = bounds.max();
-    tMin = -flt::infinity();
-    tMax = +flt::infinity();
-
-    // y = A + Bt
-    // t = (y - A) / B, B != 0
-    for (int i = 0; i < 3; i++)
-    {
-        int s = std::signbit(directionInverse[i]);
-        float t[2];
-        t[0] = (b0[i] - origin[i]) * directionInverse[i];
-        t[1] = (b1[i] - origin[i]) * directionInverse[i];
-        if (t[0 + s] > tMin)
-            tMin = t[0 + s];
-        if (t[1 - s] < tMax)
-            tMax = t[1 - s];
-    }
-
-    return tMin < tMax && tMax > 0.0001f;
+    auto left = &_nodes[node->left];
+    auto right = &_nodes[node->right];
+    left->uncle = sibling;
+    right->uncle = sibling;
+    link(left, node->right);
+    link(right, node->left);
 }
 
 bool BVH::intersect(
     Intersection& hit,
     const Ray& ray,
-    std::function<bool(Intersection&, const Ray&, uint32_t)> intersectElement
+    std::function<bool(Intersection&, const Ray&, uint32_t)> intersectfn
     ) const
 {
     if (_root == BVH::EMPTY)
@@ -171,7 +161,7 @@ bool BVH::intersect(
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
-                bool b = intersectElement(hit, ray, _indices[base + i]);
+                bool b = intersectfn(hit, ray, _indices[base + i]);
                 result |= b;
             }
             continue;
@@ -213,10 +203,9 @@ bool BVH::intersect(
     return result;
 }
 
-
-bool BVH::intersects(
+bool BVH::intersect(
     const Ray& ray,
-    std::function<bool(const Ray&, uint32_t)> intersectsElement
+    std::function<bool(const Ray&, uint32_t)> intersectfn
     ) const
 {
     if (_root == BVH::EMPTY)
@@ -239,7 +228,7 @@ bool BVH::intersects(
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
-                if (intersectsElement(ray, _indices[base + i]))
+                if (intersectfn(ray, _indices[base + i]))
                 {
                     return true;
                 }

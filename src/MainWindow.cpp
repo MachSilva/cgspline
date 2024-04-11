@@ -425,11 +425,10 @@ void MainWindow::convertScene()
 
     _rtScene->buildBVH();
 
-    rt::PerfectHashTable table;
     for (auto& b : _rtScene->bvhs)
-        table.build(b.keys());
+        b.buildHashTable();
 
-    table.build(_rtScene->topLevelBVH.keys());
+    _rtScene->topLevelBVH.buildHashTable();
 }
 
 void MainWindow::renderScene()

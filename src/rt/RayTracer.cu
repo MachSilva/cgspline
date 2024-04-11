@@ -72,12 +72,11 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene)
         cudaMemcpy(_ctx.get(), &ctx, sizeof (ctx), cudaMemcpyHostToDevice);
     }
 
-    dim3 threadsPerBlock (32, 32, 1);
+    dim3 threadsPerBlock (32, 32);
     dim3 blocksPerGrid
     {
         (w / 32) + (w % 32 ? 1 : 0),
-        (h / 32) + (h % 32 ? 1 : 0),
-        1
+        (h / 32) + (h % 32 ? 1 : 0)
     };
 
     rt::render<<<blocksPerGrid, threadsPerBlock>>>(_ctx.get());
@@ -107,7 +106,7 @@ void render(Context* ctx)
         .origin = ctx->cameraPosition,
         .direction = d,
         .tMin = 0.001f,
-        .tMax = CUDART_INF_F
+        .tMax = cuda::std::numeric_limits<float>::infinity()
     };
     vec3f c = trace(ctx, pixelRay, vec3f(1), ctx->options.recursionDepth);
     c.x = math::clamp(c.x, 0.0f, 1.0f);

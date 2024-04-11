@@ -160,11 +160,12 @@ int CPURayTracer::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
-    _scene->topLevelBVH.intersect(hit0, ray0, fn);
+    // _scene->topLevelBVH.intersect(hit0, ray0, fn);
+    _scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
 
-bool CPURayTracer::intersects(const Ray& ray0) const
+bool CPURayTracer::intersect(const Ray& ray0) const
 {
     auto fn = [this](const Ray& ray, uint32_t i)
     {
@@ -180,9 +181,9 @@ bool CPURayTracer::intersects(const Ray& ray0) const
         localRay.tMax = ray.tMax * d;
         d = 1 / d;
         localRay.direction *= d;
-        return p->intersects(localRay);
+        return p->intersect(localRay);
     };
-    return _scene->topLevelBVH.intersects(ray0, fn);
+    return _scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
 
@@ -384,7 +385,7 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
 
         // Shadow
         Ray r1 { .origin = P + _options.eps * L, .direction = L, .tMax = d };
-        if (intersects(r1))
+        if (intersect(r1))
             continue;
 
         I = lightColor(d, lights[i]);

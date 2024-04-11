@@ -20,10 +20,10 @@ namespace cg::rt
 
 void cudaErrorCheck(cudaError_t e, const char* source, int line);
 
-class ManagedCUDAResource : public std::pmr::memory_resource
+class ManagedResource : public std::pmr::memory_resource
 {
 public:
-    static ManagedCUDAResource* get_instance();
+    static ManagedResource* get_instance();
 
 private:
     void* do_allocate(std::size_t n, std::size_t alignment) override;
@@ -218,5 +218,7 @@ protected:
     size_t _length {0};
     T* _ptr {nullptr};
 };
+
+template<typename T> using ManagedBuffer = Buffer<T,managed_allocator>;
 
 } // namespace cg::rt
