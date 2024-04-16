@@ -12,18 +12,6 @@
 namespace cg::rt
 {
 
-// struct CPURayTracingContext;
-
-// struct CPURayTracingParameters
-// {
-//     CPUFrame* frame;
-//     const Camera* camera;
-//     const Scene* scene;
-//     // Algorithm parameters
-//     uint16_t threadCount;
-
-// };
-
 class CPURayTracer : public SharedObject
 {
 public:
@@ -63,10 +51,6 @@ private:
     int intersect(Intersection& hit, const Ray& ray) const;
 
     bool intersect(const Ray& ray) const;
-
-    bool lightVector(float& d, vec3f& L, const vec3f& P, const Light& light) const;
-
-    vec3f lightColor(float d, const Light& light) const;
 
     void renderTile(
         uint16_t X0, uint16_t X1,

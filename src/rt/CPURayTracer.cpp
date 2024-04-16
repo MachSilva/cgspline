@@ -1,6 +1,7 @@
 #include "CPURayTracer.h"
 
 #include <graphics/Color.h>
+#include "PBR.h"
 
 namespace cg::rt
 {
@@ -160,7 +161,6 @@ int CPURayTracer::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
-    // _scene->topLevelBVH.intersect(hit0, ray0, fn);
     _scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
@@ -186,8 +186,6 @@ bool CPURayTracer::intersect(const Ray& ray0) const
     return _scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
-
-
 vec3f CPURayTracer::miss() const
 {
     return _options.backgroundColor;
@@ -199,148 +197,6 @@ vec3f CPURayTracer::miss() const
 
 // }
 
-__host__ __device__
-constexpr float G1(float dotNX, float k)
-{
-    return dotNX / (dotNX * (1 - k) + k);
-}
-
-// Smith's geometry shadow-mask function
-__host__ __device__
-constexpr float G(float dotNL, float dotNV, float r)
-{
-    const float r1 = r + 1;
-    const float k = r1 * r1 * 0.125; // .125 = 1/8
-    return G1(dotNL, k) * G1(dotNV, k);
-}
-
-// Microfacet normal distribution function
-__host__ __device__
-inline float D(float dotNH, float r)
-{
-    dotNH = std::max(dotNH, 0.0f);
-    float a2 = powf(std::max(r, 1e-3f), 4); // a = r^2; a^2 = r^4
-    float d = dotNH * dotNH * (a2 - 1) + 1; // dot(H,N)^2 * (a^2 - 1) + 1
-    return a2 / (std::numbers::pi_v<float> * d*d);
-}
-
-// Schlick's approximation for Fresnel reflectance for each wavelength
-__host__ __device__
-inline vec3f schlick(const vec3f& R0, float dotLH)
-{
-    float b = 1 - dotLH;
-    float b2 = b*b;
-    return R0 + (vec3f(1) - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
-}
-
-// Original Fresnel reflectance for each wavelength
-//   eta: relative refractive index
-// TODO
-// __host__ __device__
-// inline vec3f fresnel(const vec3f& R0, float dotLH, float eta)
-// {
-//     return R0 + (vec3f(1) - R0) * powf(1 - dotLH, 5);
-// }
-
-template<typename T, std::floating_point real>
-__host__ __device__
-constexpr T mix(const T& a, const T& b, real t)
-{
-    return (real(1) - t) * a + t * b;
-}
-
-__host__ __device__
-inline vec3f BRDF_diffuse(const Material& m)
-{
-    // Lambertian diffuse
-    return m.diffuse * std::numbers::inv_pi_v<float>;
-}
-
-__host__ __device__
-inline vec3f BRDF_specular(
-    const vec3f& L,
-    const vec3f& V,
-    const vec3f& N,
-    float dotNV,
-    float dotNL,
-    const Material& m)
-{
-    vec3f H = (L + V).versor();
-    return (
-        schlick(m.specular, vec3f::dot(L, H))
-        * G(dotNL, dotNV, m.roughness)
-        * D(vec3f::dot(H, N), m.roughness)
-    ) * (1 / (4 * dotNL * dotNV));
-}
-
-__host__ __device__
-vec3f BRDF(
-    const vec3f& I,
-    const vec3f& L,
-    const vec3f& V,
-    const vec3f& N,
-    float dotNV,
-    float dotNL,
-    const Material& m)
-{
-    vec3f d = BRDF_diffuse(m);
-    vec3f s = BRDF_specular(L, V, N, dotNV, dotNL, m);
-    return I * mix(d, s, m.metalness) * dotNL;
-}
-
-/**
- * @brief Computes a vector from the point @a P to the light.
- * 
- * @param [out] d Light distance (infinity if the light is directional)
- * @param [out] L An unit vector from the point @a P to the light @a L
- * @param P The point
- * @param light The light
- * @return bool If point @a P is illuminated by the light
- */
-inline
-bool CPURayTracer::lightVector(float& d, vec3f& L, const vec3f& P, const Light& light) const
-{
-    if (light.isDirectional())
-    {
-        L = -light.direction;
-        d = limits<float>::infinity();
-        return true;
-    }
-    L = light.position - P;
-    d = L.length();
-
-    if (d < 1e-14f || (light.range > 0 && d > light.range))
-        return false;
-
-    L *= (1 / d);
-    if (light.isPoint())
-        return true;
-
-    // spot
-    float DL = vec3f::dot(light.direction, L);
-    return DL < 0 && light.angle > 2 * acosf(DL);
-}
-
-vec3f CPURayTracer::lightColor(float d, const Light& light) const
-{
-    // directional light
-    if (light.isDirectional())
-        return light.color;
-
-    float range = light.range;
-    float f;
-    if (range == 0) // infinite range
-    {
-        f = 1 / d;
-        f *= f;
-    }
-    else
-    {
-        f = d / range;
-        f = 1 + f * (f - 2); // (1 - f)^2
-    }
-    return light.color * f;
-}
 
 vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     vec3f attenuation, uint32_t object, int depth) const
