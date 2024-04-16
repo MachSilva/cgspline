@@ -1,8 +1,15 @@
 #include "Spline.h"
 #include <geometry/Triangle.h>
 
+#include <cuda/std/array>
+#include <cuda/std/cstddef>
+#include <cuda/std/limits>
+#include <cuda/std/utility>
+
 namespace cg::spline
 {
+
+using ::cuda::std::numeric_limits;
 
 #ifdef SPL_BC_STATS
 namespace stats
@@ -14,8 +21,8 @@ bool g_BezierClippingEnable = true;
 
 mat3f rotation(const vec3f& v, float angle)
 {
-    const auto c = std::cos(angle);
-    const auto s = std::sin(angle);
+    const auto c = cosf(angle);
+    const auto s = sinf(angle);
     const auto c1 = 1.0f - c;
     const auto xx = v.x * v.x;
     const auto yy = v.y * v.y;
@@ -43,7 +50,7 @@ mat3f rotation(const vec3f& v, float angle)
  * @param P The point whose distance is being measured
  * @return float The computed distance
  */
-static inline
+_SPL_CONSTEXPR_ATTR
 float distance(const vec3f& N, const vec3f& O, const vec3f& P)
 {
     return N.dot(P - O);
@@ -58,24 +65,23 @@ float distance(const vec3f& N, const vec3f& O, const vec3f& P)
  * @param P The point whose distance is being measured
  * @return float The computed distance
  */
-static inline
+_SPL_CONSTEXPR_ATTR
 float distance(const vec2f& N, const vec2f& O, const vec2f& P)
 {
     return N.dot(P - O);
 }
 
+HOST DEVICE
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
     const vec4f buffer[],
     const uint32_t patch[16],
     float tol)
 {
-    thread_local std::vector<vec2f> hits;
-    hits.clear();
+    LocalArray<vec2f> hits; 
 
     // project patch into a 2D plane perpendicular to the ray direction
-    // vec2f patch2D[16];
-    std::array<vec2f,16> patch2D;
+    custd::array<vec2f,16> patch2D;
 
     // find two planes whose intersection is a line that contains the ray
     const auto& d = ray.direction;
@@ -93,7 +99,7 @@ bool doBezierClipping(Intersection& hit,
         };
     }
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
     stats::BCData* data = nullptr;
     if (stats::g_BezierClippingEnable)
     {
@@ -117,7 +123,7 @@ bool doBezierClipping(Intersection& hit,
                 hit.p = e;
             }
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
             if (data)
                 data->hits.push_back({ .distance = t, .coord = e});
 #endif
@@ -140,10 +146,10 @@ bool doBezierClipping(Intersection& hit,
  * @return true  Intersection found
  * @return false No intersection
  */
-static
+_SPL_CONSTEXPR_ATTR
 bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
 {
-    constexpr float eps = std::numeric_limits<float>::epsilon();
+    constexpr float eps = numeric_limits<float>::epsilon();
     // find where does the x-axis intersects with points A and B
     // (1-t)A + tB = 0
     // A - tA + tB = 0
@@ -152,7 +158,7 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
     // Ay = (Ay - By)t, Ay != By
     // Ay / (Ay - By) = t, Ay != By
     float q = A.y - B.y;
-    if (std::abs(q) > eps)
+    if (fabs(q) > eps)
     { // not zero
         float t = A.y / q;
         if (0.0f <= t && t <= 1.0f)
@@ -162,7 +168,7 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
             return true;
         }
     }
-    else if (std::abs(A.y) <= eps)
+    else if (fabs(A.y) <= eps)
     {
         result = {A.x, B.x};
         return true;
@@ -173,33 +179,20 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
 // Returns a positive value if Q is a vector obtained by rotating P counter
 // clockwise by less than 180º; otherwise, returns a negative value; or zero
 // if both vectors are parallel.
-static inline
+_SPL_CONSTEXPR_ATTR
 float isCCW(vec2f P, vec2f Q)
 {
     return P.x*Q.y - P.y*Q.x;
 }
 
 // Returns a vector perpendicular to the segment AB. A and B are points.
-static inline // constexpr
+_SPL_CONSTEXPR_ATTR
 vec2f perpendicular(vec2f A, vec2f B)
 {
     return {A.y - B.y, B.x - A.x}; // rotate (B - A) by 90° degrees ccw
 }
 
-static inline
-bool triangleContainsOrigin(vec2f A, vec2f B, vec2f C)
-{
-    vec2f p = perpendicular(A, B);
-    vec2f q = perpendicular(B, C);
-    vec2f r = perpendicular(C, A);
-
-    if (std::signbit(isCCW(p, -r))) // isCCW(AB, AC)
-        return p.dot(A) >= 0 && q.dot(B) >= 0 && r.dot(C) >= 0;
-
-    return p.dot(-A) >= 0 && q.dot(-B) >= 0 && r.dot(-C) >= 0;
-}
-
-static inline
+static HOST DEVICE
 bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
 {
     vec2f p = A - P;
@@ -208,7 +201,7 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
 
     // `det` will be often small (< 1e-7) but not zero
     // and the intersection should not be discarded
-    if (std::abs(det) < 0x1p-80f) // ~ 1e-24f (not a subnormal number)
+    if (fabs(det) < 0x1p-80f) // ~ 1e-24f (not a subnormal number)
         return false;
 
     det = 1.0f / det;
@@ -229,11 +222,13 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
     return true;
 }
 
-bool doBezierClipping2D(std::vector<vec2f>& hits,
+HOST DEVICE
+bool doBezierClipping2D(LocalArray<vec2f>& hits,
     const vec2f patch[16],
     float tol)
 {
-    constexpr float eps = std::numeric_limits<float>::epsilon();
+    // constexpr float eps = numeric_limits<float>::epsilon();
+    namespace std = ::cuda::std;
     struct State
     {
         vec2f patch[16];
@@ -247,19 +242,23 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         } cutside;
     };
 
-    bool stackFreeze = false;
-    std::deque<State> S; // a stack
+    FixedArray<State,16> S; // a stack
 
     S.push_back({
         .min = {0,0}, .max = {1,1},
         .size = {1,1}, .cutside = State::eU
     });
-    std::copy_n(patch, 16, S.back().patch);
+
+    {
+        auto& p = S.back().patch;
+        for (int i = 0; i < 16; i++)
+            p[i] = patch[i];
+    }
 
     float distancePatch[16];
     Patch d (distancePatch);
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
     stats::BCData* searchData = nullptr;
     if (stats::g_BezierClippingEnable)
         searchData = &stats::g_BezierClippingData.back();
@@ -270,7 +269,7 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         auto &e = S.back();
         auto p = Patch(e.patch);
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
         if (searchData)
             searchData->steps.push_back({
                 .L = {0, 0},
@@ -299,12 +298,6 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             auto p11 = p.point(3,3);   // (1,1)
 
             vec2f coord;
-            // if (triangleOriginIntersection(coord, p10, p01, p00)
-            //     || triangleOriginIntersection(coord, p01, p10, p11))
-            // {
-            //     hits.push_back(0.5f * (e.min + e.max));
-            // }
-
             if (triangleOriginIntersection(coord, p00, p10, p01))
             {
                 hits.push_back(e.min + coord * e.size);
@@ -313,12 +306,6 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             {
                 hits.push_back(e.max - coord * e.size);
             }
-
-            // if (triangleContainsOrigin(p10, p01, p00)
-            //     || triangleContainsOrigin(p01, p10, p11))
-            // {
-            //     hits.push_back(0.5f * (e.min + e.max));
-            // }
             S.pop_back();
             continue;
         }
@@ -359,8 +346,8 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
                 for (int k = 1; k < 4; k++)
                 {
                     float y = d.point(i,k);
-                    ytop[i] = std::max(ytop[i], y);
-                    ybot[i] = std::min(ybot[i], y);
+                    ytop[i] = fmax(ytop[i], y);
+                    ybot[i] = fmin(ybot[i], y);
                 }
             }
         }
@@ -372,8 +359,8 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
                 for (int k = 1; k < 4; k++)
                 {
                     float y = d.point(k,i);
-                    ytop[i] = std::max(ytop[i], y);
-                    ybot[i] = std::min(ybot[i], y);
+                    ytop[i] = fmax(ytop[i], y);
+                    ybot[i] = fmin(ybot[i], y);
                 }
             }
         }
@@ -420,8 +407,8 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             {
                 if (s.x > s.y)
                     std::swap(s.x, s.y);
-                lower = std::min(lower, s.x);
-                upper = std::max(upper, s.y);
+                lower = fmin(lower, s.x);
+                upper = fmax(upper, s.y);
             }
         }
 
@@ -432,12 +419,12 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             auto mid = 0.5f * (lower + upper);
             if (upper - lower < minspan)
             {
-                lower = std::max(0.0f, mid - 0.5f * minspan);
-                upper = std::min(1.0f, mid + 0.5f * minspan);
+                lower = fmax(0.0f, mid - 0.5f * minspan);
+                upper = fmin(1.0f, mid + 0.5f * minspan);
             }
         }
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
         if (searchData)
         {
             auto& step = searchData->steps.back();
@@ -457,7 +444,8 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
         else if (delta > 0.8f)
         { // clipping too small; thus, subdivide
             State s1;
-            std::copy_n(e.patch, 16, s1.patch);
+            for (int i = 0; i < 16; i++)
+                s1.patch[i] = e.patch[i];
             if (e.cutside == State::eU)
             {
                 float hs = 0.5f * e.size.x;
@@ -486,12 +474,14 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             }
             S.push_back(std::move(s1));
 
-            if (S.size() > 31)
+#if !defined(__CUDA_ARCH__)
+            if (S.size() > 32)
             {
                 fprintf(stderr,
                     "warning: the stack has too many elements (%zu)\n", S.size());
                 break;
             }
+#endif            
         }
         else
         { // clip
@@ -517,7 +507,7 @@ bool doBezierClipping2D(std::vector<vec2f>& hits,
             }
         }
 
-#ifdef SPL_BC_STATS
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
         if (searchData)
         {
             auto& m = searchData->maxStackDepth;

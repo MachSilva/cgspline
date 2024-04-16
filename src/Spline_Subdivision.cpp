@@ -1,5 +1,6 @@
 #include "Spline.h"
 #include <geometry/Triangle.h>
+#include <stack>
 
 namespace cg::spline
 {
@@ -17,7 +18,6 @@ bool doSubdivision(Intersection& hit,
         bool cutside;
     };
     
-    // static thread_local
     std::stack<State> st;
     float tmin, tmax;
     vec4f subp[16];
