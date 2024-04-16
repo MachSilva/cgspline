@@ -34,8 +34,6 @@ void BVH::buildHashTable(cudaStream_t stream)
         auto k = _keys[i];
         _table[_hash(k)] = i;
     }
-
-    // printf("hey\n");
 }
 
 uint32_t BVH::split(span<ElementData> elements, uint32_t key)
@@ -46,15 +44,6 @@ uint32_t BVH::split(span<ElementData> elements, uint32_t key)
 
     Bounds3f box {};
     auto inv = 1.0f / count;
-
-    const auto base = _indices.size();
-    _indices.resize(base + count);
-    for (auto i = 0U; i < count; i++)
-    {
-        auto& e = elements[i];
-        _indices[base + i] = e.index;
-        box.inflate(e.bounds);
-    }
 
     auto v = box.size();
     int dim = v.z > v.y
@@ -71,12 +60,12 @@ uint32_t BVH::split(span<ElementData> elements, uint32_t key)
             return a.centroid[dim] < b.centroid[dim];
         });
 
-    _nodes.emplace_back(Node{
+    _nodes.push_back(Node{
         .left = split(elements.subspan(0, middle), binarytree::left(key)),
         .right = split(elements.subspan(middle), binarytree::right(key)),
         .uncle = EMPTY,
     });
-    _keys.emplace_back(key);
+    _keys.push_back(key);
     auto& node = _nodes.back();
     auto& left = _nodes[node.left];
     auto& right = _nodes[node.right];
@@ -88,6 +77,7 @@ uint32_t BVH::split(span<ElementData> elements, uint32_t key)
         node.rightBox.inflate(right.rightBox);
     return _nodes.size() - 1;
 }
+
 uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
 {
     auto count = elements.size();
@@ -105,14 +95,14 @@ uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
         box.inflate(e.bounds);
     }
 
-    _nodes.emplace_back(Node{
+    _nodes.push_back(Node{
         .leftBox = box,
         .rightBox = {},
         .left = EMPTY,
         // .right = EMPTY,
         // .uncle = EMPTY,
     });
-    _keys.emplace_back(key);
+    _keys.push_back(key);
     auto& node = _nodes.back();
     node.first = idx;
     node.count = count;

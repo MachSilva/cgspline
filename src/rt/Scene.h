@@ -96,15 +96,17 @@ struct Scene
         eTransform,
         eMaterial,
         ePrimitive,
+        ePrimitiveType,
     };
 
-    using ObjectArrays = SoA<uint32_t,mat4f,mat4f,Transform,Material,Primitive*>;
+    using ObjectArrays = SoA<uint32_t,mat4f,mat4f,Transform,Material,
+        Primitive*,PrimitiveType>;
 
     ObjectArrays objects;
-    vector<Light> lights {};
-    vector<Mesh> meshes {};
-    vector<BezierSurface> surfaces {};
-    vector<BVH> bvhs {};
+    Array<Light> lights {};
+    Array<Mesh> meshes {};
+    Array<BezierSurface> surfaces {};
+    Array<BVH> bvhs {};
     BVH topLevelBVH {};
 
     Scene() = default;

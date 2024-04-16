@@ -38,24 +38,28 @@ add_executable(cgspline
     src/PatchBVH.cpp
     src/RayTracer.cpp
     src/SceneReaderExt.cpp
-    src/Spline_BezierClipping.cpp
+    src/Spline_BezierClipping.cu
     src/Spline_Subdivision.cpp
-    src/Spline.cpp
+    src/Spline.cu
     src/SplRenderer.cpp
     src/Surface.cpp
     src/Texture.cpp
     src/rt/BVH.cpp
     src/rt/CPURayTracer.cpp
     src/rt/CUDAUtility.cpp
+    src/rt/PBR.cu
     src/rt/PerfectHashFunction.cu
-    src/rt/Primitive.cpp
+    src/rt/Primitive.cu
     src/rt/RayTracer.cu
     src/rt/Scene.cu
     src/rt/SoA.cpp
 )
 
 set_source_files_properties(
-    src/rt/PerfectHashFunction.cu
+    src/Spline.cu
+    src/Spline_BezierClipping.cu
+    src/rt/PBR.cu
+    src/rt/Primitive.cu
     src/rt/RayTracer.cu
     src/rt/Scene.cu
     PROPERTIES

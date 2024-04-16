@@ -314,7 +314,8 @@ void MainWindow::render()
 void MainWindow::convertScene()
 {
     using Key = rt::Scene::Key;
-    std::pmr::memory_resource* memoryResource = std::pmr::get_default_resource();
+    using PrType = rt::PrimitiveType;
+    std::pmr::memory_resource* memoryResource = rt::ManagedResource::instance();
     auto objCount = _scene->actorCount();
     _rtScene = std::make_unique<rt::Scene>(objCount, memoryResource);
 
@@ -401,6 +402,7 @@ void MainWindow::convertScene()
             }
 
             objects.get<Key::ePrimitive>(last) = &mesh;
+            objects.get<Key::ePrimitiveType>(last) = PrType::eMesh;
         }
         else if (auto s = dynamic_cast<SurfaceMapper*>(mapper))
         {
@@ -420,6 +422,7 @@ void MainWindow::convertScene()
             surface.buildBVH(bvh);
 
             objects.get<Key::ePrimitive>(last) = &surface;
+            objects.get<Key::ePrimitiveType>(last) = PrType::eBezierSurface;
         }
     }
 
@@ -472,17 +475,27 @@ void MainWindow::renderScene()
     };
 
     // Create task
-    // if (!_renderTask.valid()) {}
     auto& v = _state.renderViewport;
     _image = new gl::Texture(gl::Format::sRGB, v.w, v.h);
 
-    _frame = new rt::Frame(v.w, v.h);
-    _rayTracer = new rt::CPURayTracer({
-        .backgroundColor = vec3f(backgroundColor),
-        .flipYAxis = true,
-        .threads = 1,
-    });
-    _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+    _frame = new rt::Frame(v.w, v.h, rt::ManagedResource::instance());
+    {
+        // rt:Scope
+        _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
+            .backgroundColor = vec3f(backgroundColor),
+            .flipYAxis = true,
+            .device = 0,
+        });
+        _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+    }
+    // _cpuRayTracer = new rt::CPURayTracer(rt::CPURayTracer::Options{
+    //     .backgroundColor = vec3f(backgroundColor),
+    //     .flipYAxis = true,
+    //     .threads = 1,
+    // });
+    // _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
         _frame->data());

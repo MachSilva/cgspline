@@ -103,7 +103,8 @@ protected:
     Intersection _lastPickHit;
     Ref<gl::Texture> _image;
     Ref<rt::Frame> _frame;
-    Ref<rt::CPURayTracer> _rayTracer;
+    Ref<rt::RayTracer> _rayTracer;
+    Ref<rt::CPURayTracer> _cpuRayTracer;
     std::unique_ptr<rt::Scene> _rtScene;
     rt::Camera _rtCamera;
     Ref<SplRenderer> _texRenderer;

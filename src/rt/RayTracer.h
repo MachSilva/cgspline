@@ -22,32 +22,18 @@ public:
         int         device = 0; // CUDA device id
     };
 
-    struct __align__(8) Context
-    {
-        vec2f topLeftCorner;
-        float half_dx;
-        float half_dy;
-        mat4f cameraToWorld;
-        mat3f cameraNormalToWorld;
-        vec3f cameraPosition;
-        uint32_t height;
-        uint32_t width;
-        __align__(8) Raw<Frame> frame;
-        __align__(8) Raw<const Scene> scene;
-        __align__(8) Options options;
-    };
+    struct Context;
 
     RayTracer() = default;
     RayTracer(Options&& op) : _options{std::move(op)} {}
 
-    void render(Frame* frame, const Camera* camera, const Scene* scene);
+    void render(Frame* frame, const Camera* camera, const Scene* scene,
+        cudaStream_t stream = 0);
 
     const auto& options() const { return _options; }
     void setOptions(Options&& op);
 
 private:
-    using Key = Scene::Key;
-
     Options _options {};
     std::unique_ptr<Context, void(*)(void*)> _ctx {nullptr, nullptr};
 };

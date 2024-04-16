@@ -6,123 +6,136 @@
 namespace cg::rt
 {
 
+// Sphere
+
+HOST DEVICE
 Bounds3f Sphere::bounds() const
 {
     return {};
 }
 
+HOST DEVICE
 Bounds3f Sphere::bounds(const mat4f& M) const
 {
     return {};
 }
 
-// __host__ __device__
+HOST DEVICE
 bool Sphere::intersect(Intersection& hit, const Ray& ray) const
 {
-    return {};
+    return rt::intersect(*this, hit, ray);
 }
 
-bool Sphere::intersect(const Ray& ray0) const
+HOST DEVICE
+bool Sphere::intersect(const Ray& ray) const
 {
-    return {};
+    return rt::intersect(*this, ray);
 }
 
-// __host__ __device__
+HOST DEVICE
 vec3f Sphere::normal(const Intersection& hit) const
 {
+    return rt::normal(*this, hit);
+}
+
+HOST DEVICE bool intersect(const Sphere&, Intersection&, const Ray&)
+{
     return {};
 }
 
+HOST DEVICE bool intersect(const Sphere&, const Ray&)
+{
+    return {};
+}
+
+HOST DEVICE vec3f normal(const Sphere&, const Intersection&)
+{
+    return {};
+}
+
+// Mesh
+
+HOST DEVICE
 Bounds3f Mesh::bounds() const
 {
     return {};
 }
 
+HOST DEVICE
 Bounds3f Mesh::bounds(const mat4f& M) const
 {
     return {};
 }
 
-// __host__ __device__
+HOST DEVICE
 bool Mesh::intersect(Intersection& hit, const Ray& ray) const
 {
-    return {};
+    return rt::intersect(*this, hit, ray);
 }
 
-bool Mesh::intersect(const Ray& ray0) const
+HOST DEVICE
+bool Mesh::intersect(const Ray& ray) const
 {
-    return {};
+    return rt::intersect(*this, ray);
 }
 
-// __host__ __device__
+HOST DEVICE
 vec3f Mesh::normal(const Intersection& hit) const
 {
+    return rt::normal(*this, hit);
+}
+
+HOST DEVICE bool intersect(const Mesh&, Intersection&, const Ray&)
+{
     return {};
 }
 
+HOST DEVICE bool intersect(const Mesh&, const Ray&)
+{
+    return {};
+}
+
+HOST DEVICE vec3f normal(const Mesh&, const Intersection&)
+{
+    return {};
+}
+
+// BezierSurface
+
+HOST DEVICE
 Bounds3f BezierSurface::bounds() const
 {
-    return spline::boundingbox(std::views::transform(
-        std::views::counted(this->indices, this->indexCount),
+    return spline::boundingbox<float>(
+        this->indices, this->indices + this->indexCount,
         [&](uint32_t i) -> vec4f { return this->vertices[i]; }
-    ));
+    );
 }
 
+HOST DEVICE
 Bounds3f BezierSurface::bounds(const mat4f& M) const
 {
-    return spline::boundingbox(std::views::transform(
-        std::views::counted(this->indices, this->indexCount),
+    return spline::boundingbox<float>(
+        this->indices, this->indices + this->indexCount,
         [&](uint32_t i) -> vec4f { return M * this->vertices[i]; }
-    ));
+    );
 }
 
-// __host__ __device__
-bool BezierSurface::intersect(Intersection& hit0, const Ray& ray0) const
+HOST DEVICE
+bool BezierSurface::intersect(Intersection& hit, const Ray& ray) const
 {
-    auto fn = [this](Intersection& hit, const Ray& ray, uint32_t index)
-    {
-        cg::Intersection anotherHit;
-        anotherHit.distance = hit.t;
-        anotherHit.p = hit.coordinates;
-        cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = ray.tMax;
-        const uint32_t* patch = this->indices + 16*index;
-        if (spline::doBezierClipping(anotherHit, anotherRay, this->vertices, patch))
-        {
-            hit.index = index;
-            hit.object = this;
-            hit.t = anotherHit.distance;
-            hit.coordinates = anotherHit.p;
-            return true;
-        }
-        return false;
-    };
-    // return bvh->intersect(hit0, ray0, fn);
-    return bvh->hashIntersect(hit0, ray0, fn);
+    return rt::intersect(*this, hit, ray);
 }
 
-bool BezierSurface::intersect(const Ray& ray0) const
+HOST DEVICE
+bool BezierSurface::intersect(const Ray& ray) const
 {
-    auto fn = [this](const Ray& ray, uint32_t index)
-    {
-        cg::Intersection anotherHit { .distance = ray.tMax };
-        cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = ray.tMax;
-        const uint32_t* patch = this->indices + 16*index;
-        return spline::doBezierClipping(
-            anotherHit, anotherRay, this->vertices, patch);
-    };
-    return bvh->hashIntersect(ray0, fn);
+    return rt::intersect(*this, ray);
 }
 
-// __host__ __device__
+HOST DEVICE
 vec3f BezierSurface::normal(const Intersection& hit) const
 {
-    auto [u, v, _] = hit.coordinates;
-    spline::PatchRef patch (this->vertices, this->indices, uint32_t(hit.index));
-    return spline::normal(patch, u, v).versor();
+    return rt::normal(*this, hit);
 }
 
 void BezierSurface::buildBVH(BVH& bvh)
@@ -146,6 +159,52 @@ void BezierSurface::buildBVH(BVH& bvh)
     }
     bvh.build(patchData, 1);
     this->bvh = &bvh;
+}
+
+HOST DEVICE bool intersect(const BezierSurface& s, Intersection& hit0, const Ray& ray0)
+{
+    auto fn = [&s](Intersection& hit, const Ray& ray, uint32_t index)
+    {
+        cg::Intersection anotherHit;
+        anotherHit.distance = hit.t;
+        anotherHit.p = hit.coordinates;
+        cg::Ray3f anotherRay { ray.origin, ray.direction };
+        anotherRay.tMin = ray.tMin;
+        anotherRay.tMax = ray.tMax;
+        const uint32_t* patch = s.indices + 16*index;
+        if (spline::doBezierClipping(anotherHit, anotherRay, s.vertices, patch))
+        {
+            hit.index = index;
+            hit.object = &s;
+            hit.t = anotherHit.distance;
+            hit.coordinates = anotherHit.p;
+            return true;
+        }
+        return false;
+    };
+    return s.bvh->hashIntersect(hit0, ray0, fn);
+}
+
+HOST DEVICE bool intersect(const BezierSurface& s, const Ray& ray0)
+{
+    auto fn = [&s](const Ray& ray, uint32_t index)
+    {
+        cg::Intersection anotherHit { .distance = ray.tMax };
+        cg::Ray3f anotherRay { ray.origin, ray.direction };
+        anotherRay.tMin = ray.tMin;
+        anotherRay.tMax = ray.tMax;
+        const uint32_t* patch = s.indices + 16*index;
+        return spline::doBezierClipping(
+            anotherHit, anotherRay, s.vertices, patch);
+    };
+    return s.bvh->hashIntersect(ray0, fn);
+}
+
+HOST DEVICE vec3f normal(const BezierSurface& s, const Intersection& hit)
+{
+    auto [u, v, _] = hit.coordinates;
+    spline::PatchRef patch (s.vertices, s.indices, uint32_t(hit.index));
+    return spline::normal(patch, u, v).versor();
 }
 
 } // namespace cg::rt

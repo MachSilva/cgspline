@@ -1,27 +1,16 @@
 #pragma once
 
 #include <bit>
-#include <deque>
 #include <functional>
-#include <limits>
-#include <memory_resource>
-#include <numeric>
 #include <ranges>
+#include <cuda/std/cmath>
 #include <geometry/Bounds3.h>
-#include <cuda/std/bit>
-#include <thrust/universal_vector.h>
 #include "Intersection.h"
 #include "PerfectHashFunction.h"
 #include "RTNamespace.h"
 
 namespace cg::rt
 {
-
-// template<typename F>
-// concept intersect_nearest_invocable = requires (F f)
-// {
-
-// };
 
 struct BVH
 {
@@ -57,8 +46,8 @@ struct BVH
         uint32_t index;
     };
 
-    BVH(const polymorphic_allocator<Node>& alloc = {})
-        : _alloc{alloc}, _keys{alloc}, _nodes{alloc}, _indices{alloc}
+    BVH(memory_resource* mr = ManagedResource::instance())
+        : _alloc{mr}, _keys{mr}, _nodes{mr}, _indices{mr}, _table{mr}
     {}
 
     const auto root() const noexcept { return _root; }
@@ -108,14 +97,15 @@ struct BVH
 
 private:
     polymorphic_allocator<Node> _alloc;
-    vector<uint32_t> _keys;
-    vector<Node> _nodes;
-    vector<uint32_t> _indices;
     uint32_t _elementsPerNode = 1;
     uint32_t _root = EMPTY;
 
     PerfectHashFunction _hash;
-    ManagedBuffer<uint32_t> _table;
+
+    Array<Node> _nodes;
+    Array<uint32_t> _keys;
+    Array<uint32_t> _indices;
+    Array<uint32_t> _table;
 
     void link(Node* node, uint32_t sibling);
     uint32_t split(span<ElementData> elements, uint32_t key);
@@ -125,17 +115,35 @@ private:
 namespace binarytree
 {
 
+__host__ __device__
 constexpr uint32_t parent(uint32_t node) { return node >> 1U; }
 
+__host__ __device__
 constexpr uint32_t sibling(uint32_t node) { return node ^ 1U; }
 
+__host__ __device__
 constexpr uint32_t left(uint32_t node) { return node << 1U; }
 
+__host__ __device__
 constexpr uint32_t right(uint32_t node) { return sibling(left(node)); }
 
+__host__ __device__
 constexpr uint32_t uncle(uint32_t node) { return sibling(parent(node)); }
 
 } // namespace binarytree
+
+/**
+ * @brief Count trailing zeros
+ */
+static inline __host__ __device__
+int ctz(unsigned int x)
+{
+#if !defined(__CUDA_ARCH__)
+    return std::countr_zero(x);
+#else
+    return __clz(__brev(x));
+#endif
+}
 
 static inline
 __host__ __device__
@@ -177,7 +185,7 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
         return false;
 
     const vec3f D_1 = ray.direction.inverse();
-    const Node* node = &_nodes[_root];
+    const Node* node = _nodes.data() + _root;
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;
     int bits = 0;
@@ -212,25 +220,25 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
                     if (L0 < L1)
                     {
                         key = binarytree::left(key);
-                        node = &_nodes[node->left];
+                        node = _nodes.data() + node->left;
                     }
                     else
                     {
                         key = binarytree::right(key);
-                        node = &_nodes[node->right];
+                        node = _nodes.data() + node->right;
                     }
                 }
                 else // only left
                 {
                     key = binarytree::left(key);
-                    node = &_nodes[node->left];
+                    node = _nodes.data() + node->left;
                 }
                 continue;
             }
             else if (iR) // only right
             {
                 key = binarytree::right(key);
-                node = &_nodes[node->right];
+                node = _nodes.data() + node->right;
                 continue;
             }
         }
@@ -249,7 +257,11 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
         {
             postponed ^= 1;
             key = binarytree::sibling(key);
-            node = &_nodes[_table[_hash(key)]];
+            auto d_hash = _hash(key);
+            assert(d_hash < _table.size());
+            auto d_offset = _table[d_hash];
+            assert(d_offset < _nodes.size());
+            node = _nodes.data() + _table[_hash(key)];
             continue;
         }
         else if (postponed & 2)
@@ -258,20 +270,23 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
             postponed ^= 1;
             key = binarytree::uncle(key);
             assert(node->uncle < _nodes.size());
-            node = &_nodes[node->uncle];
+            node = _nodes.data() + node->uncle;
             continue;
         }
 
         if (!postponed)
             break;
 
-        auto levels = ::cuda::std::countr_zero(postponed);
+        int levels = ctz(postponed);
         postponed >>= levels;
         bits = bits - levels;
         key = binarytree::sibling(key >> levels);
         postponed ^= 1;
-        // assert(_table[_hash(key)] < _nodes.size());
-        node = &_nodes[_table[_hash(key)]];
+        auto d_hash = _hash(key);
+        assert(d_hash < _table.size());
+        auto d_offset = _table[d_hash];
+        assert(d_offset < _nodes.size());
+        node = _nodes.data() + _table[_hash(key)];
     }
 
     return result;
@@ -286,7 +301,7 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
         return false;
 
     const vec3f D_1 = ray.direction.inverse();
-    const Node* node = &_nodes[_root];
+    const Node* node = _nodes.data() + _root;
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;
     int bits = 0;
@@ -319,25 +334,25 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
                     if (L0 < L1)
                     {
                         key = binarytree::left(key);
-                        node = &_nodes[node->left];
+                        node = _nodes.data() + node->left;
                     }
                     else
                     {
                         key = binarytree::right(key);
-                        node = &_nodes[node->right];
+                        node = _nodes.data() + node->right;
                     }
                 }
                 else // only left
                 {
                     key = binarytree::left(key);
-                    node = &_nodes[node->left];
+                    node = _nodes.data() + node->left;
                 }
                 continue;
             }
             else if (iR) // only right
             {
                 key = binarytree::right(key);
-                node = &_nodes[node->right];
+                node = _nodes.data() + node->right;
                 continue;
             }
         }
@@ -356,7 +371,7 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
         {
             postponed ^= 1;
             key = binarytree::sibling(key);
-            node = &_nodes[_table[_hash(key)]];
+            node = _nodes.data() + _table[_hash(key)];
             continue;
         }
         else if (postponed & 2)
@@ -365,20 +380,20 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
             postponed ^= 1;
             key = binarytree::uncle(key);
             assert(node->uncle < _nodes.size());
-            node = &_nodes[node->uncle];
+            node = _nodes.data() + node->uncle;
             continue;
         }
 
         if (!postponed)
             break;
 
-        auto levels = ::cuda::std::countr_zero(postponed);
+        auto levels = ctz(postponed);
         postponed >>= levels;
         bits = bits - levels;
         key = binarytree::sibling(key >> levels);
         postponed ^= 1;
         // assert(_table[_hash(key)] < _nodes.size());
-        node = &_nodes[_table[_hash(key)]];
+        node = _nodes.data() + _table[_hash(key)];
     }
 
     return false;
