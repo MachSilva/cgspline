@@ -203,7 +203,10 @@ public:
             _alloc.deallocate(_ptr, _length);
     }
 
-    Buffer(const Buffer& other) = default;
+    Buffer(const Buffer& other)
+    {
+        *this = other;
+    }
 
     Buffer(Buffer&& other)
     {
@@ -233,7 +236,7 @@ public:
         if (this == &other)
             return *this;
 
-        if (_alloc == other._alloc)
+        if (_alloc != other._alloc)
         {
             throw std::runtime_error(
                 "Buffer move assignment: allocators are not equal"
