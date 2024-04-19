@@ -14,11 +14,15 @@ mat4f Transform::inverseMatrix() const
     R[0] *= (1.0f / scale.x);
     R[1] *= (1.0f / scale.y);
     R[2] *= (1.0f / scale.z);
+    // nvcc:
+    // internal error: assertion failed at: "interpret.c", line 2607 in get_runtime_array_pos
+    //           { R[0][1], R[1][1], R[2][1], 0 },
+    //                          ^
     return mat4f
     { // columns
         { R[0][0], R[1][0], R[2][0], 0 },
-        { R[0][1], R[1][1], R[2][1], 0 },
-        { R[0][2], R[1][2], R[2][2], 0 },
+        { R[0][1], R[1].y , R[2][1], 0 },
+        { R[0][2], R[1].z , R[2][2], 0 },
         { -position.dot(R[0]), -position.dot(R[1]), -position.dot(R[2]), 1 }
     };
 }
