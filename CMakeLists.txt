@@ -32,6 +32,7 @@ add_executable(cgspline
     src/BezierSurface.cpp
     src/GLBezierSurface.cpp
     src/Framebuffer.cpp
+    src/Log.cpp
     src/Main.cpp
     src/MainWindow.cpp
     src/MainWindow_UI.cpp

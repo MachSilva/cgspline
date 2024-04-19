@@ -6,6 +6,7 @@
 #include <cub/cub.cuh>
 #include <unordered_set>
 #include "ScopeClock.h"
+#include "../Log.h"
 
 namespace cg::rt
 {
@@ -264,10 +265,7 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
     Buffer<uint32_t,async_allocator> hashTable (n, stream);
 
-    fprintf(stderr,
-        "PerfectHashFunction:\n"
-        "\t%u displacement buckets\n"
-        "\t%u keys\n",
+    log::info("PerfectHashFunction: {} displacement buckets; {} keys",
         displSize, keys.size());
 
     constexpr uint32_t bucketCapacity = 8;
@@ -303,9 +301,10 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     {
         if (tmpStorageSize > tmpStorage.size_bytes())
         {
-            fprintf(stderr, "\ttemporary storage buffer increased from %zu"
-                " bytes to (requested) %zu bytes\n",
-                tmpStorage.size_bytes(), tmpStorageSize);
+            // log::debug(
+            //     "\ttemporary storage buffer increased from {}"
+            //     " bytes to (requested) {} bytes",
+            //     tmpStorage.size_bytes(), tmpStorageSize);
             tmpStorage.resize(tmpStorageSize);
         }
     };
@@ -330,8 +329,6 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
         if (histogram[i] > 0)
             bucketGreatestSize = i;
     }
-
-    fprintf(stderr, "\tgreatest bucket size = %d\n", bucketGreatestSize);
 
     CUDA_CHECK(cudaMemPrefetchAsync((const void*) histogram.data(),
         histogram.size_bytes(), device, stream));
@@ -375,8 +372,8 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
             _B = d(_mt);
             cofactor = std::gcd(keys.size(), _A);
 
-            fprintf(stderr, "\thash(k) = %u * k + %u mod N; "
-                "gcd(hashtable, h.A) = %u\n",
+            log::info("\ttest hash(k) = {} * k + {} mod N; "
+                "gcd(N, h.A) = {}",
                 _A, _B,
                 cofactor);
         }
@@ -394,7 +391,7 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
         if (result[0] != 0)
         {
-            fprintf(stderr, "\tSKIPPING... impossible hash function\n");
+            std::error("\tSKIPPING... impossible hash function");
             continue;
         }
 #endif
@@ -449,12 +446,12 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
         CUDA_CHECK(cudaStreamSynchronize(stream));
 
-        fprintf(stderr, "\t\tFailure count: %d\n", (int) result[0]);
+        // log::debug("\t\tFailure count: {}", (int) result[0]);
 
         // Success?
         if (result[0] == 0)
         {
-            fprintf(stderr, "\t\tSuccess with hash function number %d\n", hashId);
+            // log::debug("\t\tSuccess with hash function number {}", hashId);
             break;
         }
 
@@ -462,7 +459,7 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
         // Increase table size
         _tableSize = hashTable.size() + sizeIncreaseStep;
         hashTable.resize(_tableSize);
-        fprintf(stderr, "\tN <- %u\n", _tableSize);
+        // log::debug("\tN <- {}", _tableSize);
     }
 
     std::unordered_set<uint32_t> hashSet {};
@@ -470,15 +467,16 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     for (auto& key : keys)
     {
         auto v = hash(key);
-        // fprintf(stderr, "\t%8X => %u\n", key, v);
         duplicate |= hashSet.contains(v);
         hashSet.emplace(v);
     }
 
     if (duplicate)
-        fprintf(stderr, "\tDUPLICATE FOUND!\n");
+        log::error("\tDUPLICATE FOUND!");
     else
-        fprintf(stderr, "\tNo duplicate. Perfect Hash!\n");
+        log::info("\tNo duplicate. Perfect Hash! "
+            "hash table: {} bytes, displacement table: {} bytes",
+            _tableSize * sizeof (uint32_t), _displacement.size_bytes());
 
     return (int) duplicate;
 }

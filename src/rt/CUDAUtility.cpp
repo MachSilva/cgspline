@@ -1,7 +1,6 @@
 #include "CUDAUtility.h"
 
-#include <format>
-#include <iostream>
+#include "../Log.h"
 
 namespace cg::rt
 {
@@ -10,15 +9,14 @@ void cudaErrorCheck(cudaError_t e, const char* source, int line)
 {
     if (e != cudaSuccess)
     {
-        std::string msg = std::format(
-            "CUDA: '{}' ({}) at {}:{}: {}\n",
+        log::error(
+            "CUDA: '{}' ({}) at {}:{}: {}",
             cudaGetErrorName(e),
             (int) e,
             source,
             line,
             cudaGetErrorString(e)
         );
-        std::cerr << msg << std::endl;
         abort();
     }
 }
@@ -35,13 +33,14 @@ void* ManagedResource::do_allocate(std::size_t n, std::size_t alignment)
     if (alignment > 256)
         throw std::runtime_error("memory alignment not supported");
     CUDA_CHECK(cudaMallocManaged(&ptr, n));
-    fprintf(stderr, "ManagedResource: allocate %8zu bytes at %p - %p\n", n, ptr, ((uint8_t*)ptr)+n);
+    // log::debug("ManagedResource: allocate {:8} bytes at {} - {}", n, ptr,
+    //     (void*)(((uint8_t*)ptr)+n));
     return ptr;
 }
 
 void ManagedResource::do_deallocate(void* p, std::size_t n, std::size_t alignment)
 {
-    fprintf(stderr, "ManagedResource: free     %8zu bytes at %p\n", n, p);
+    // log::debug("ManagedResource: free     {:8} bytes at {}", n, p);
     cudaFree(p);
 }
 
