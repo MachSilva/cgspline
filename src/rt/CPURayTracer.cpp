@@ -2,11 +2,12 @@
 
 #include <graphics/Color.h>
 #include "PBR.h"
+#include "../Log.h"
 
 namespace cg::rt
 {
 
-template<typename T> using limits = std::numeric_limits<T>;
+// using std::numeric_limits;
 
 void CPURayTracer::progress(int done, int total) const
 {
@@ -23,6 +24,9 @@ void CPURayTracer::progress(int done, int total) const
 
 void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene)
 {
+    if (_status.running.test_and_set())
+        throw std::runtime_error("this ray tracer object is already busy");
+
     _frame = frame;
     _scene = scene;
     uint32_t w = frame->width();
@@ -59,23 +63,61 @@ void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene
         _half_dy = -_half_dy;
     }
 
-    const int totalWork = _work.size();
-    int workDone = 0;
+    _status.totalWork = _work.size();
+    _status.workDone = 0;
 
-    while (!_work.empty())
+    _workers.clear();
+    _workers.reserve(_options.threads);
+    for (int i = 0; i < _options.threads; i++)
     {
-        auto [x, y] = _work.back();
-        _work.pop_back();
-        auto x1 = std::min<uint16_t>(w, x + _options.tileSize);
-        auto y1 = std::min<uint16_t>(h, y + _options.tileSize);
-        renderTile(x, x1, y, y1);
-        progress(++workDone, totalWork);
+        _workers.emplace_back(&CPURayTracer::work, this);
     }
 
-    fprintf(stderr, "Ray tracing completed in %g ms\n", clock.time());
+    for (auto& t : _workers)
+        t.detach();
 
-    _frame = nullptr;
-    _scene = nullptr;
+    // while (!_work.empty())
+    // {
+    //     auto [x, y] = _work.back();
+    //     _work.pop_back();
+    //     auto x1 = std::min<uint16_t>(w, x + _options.tileSize);
+    //     auto y1 = std::min<uint16_t>(h, y + _options.tileSize);
+    //     renderTile(x, x1, y, y1);
+    //     progress(++workDone, totalWork);
+    // }
+
+    // fprintf(stderr, "Ray tracing completed in %g ms\n", clock.time());
+}
+
+void CPURayTracer::work()
+{
+    uint16_t x, y;
+    while (true)
+    {
+        {
+            std::lock_guard lck (_workMutex);
+            if (_work.empty())
+                return;
+            auto& t = _work.back();
+            x = t.x, y = t.y;
+            _work.pop_back();
+        }
+        auto x1 = std::min<uint16_t>(_frame->width(), x + _options.tileSize);
+        auto y1 = std::min<uint16_t>(_frame->height(), y + _options.tileSize);
+        renderTile(x, x1, y, y1);
+        _status.workDone.fetch_add(1);
+
+        // Last one?
+        if (_status.workDone.load() == _status.totalWork)
+        {
+            log::info("Ray tracing completed in {} ms", clock.time());
+            // Clear
+            _frame = nullptr;
+            _scene = nullptr;
+            _status.running.clear();
+            _status.running.notify_all();
+        }
+    }
 }
 
 void CPURayTracer::renderTile(
@@ -86,14 +128,13 @@ void CPURayTracer::renderTile(
     {
         for (int i = X0; i < X1; i++)
         {
-            // auto d = (_cameraNormalToWorld * pixelRayDirection(i, j)).versor();
             auto d = pixelRayDirection(i, j);
             Ray pixelRay
             {
                 .origin = _cameraPosition,
                 .direction = d,
                 .tMin = 0.001f,
-                .tMax = limits<float>::infinity()
+                .tMax = numeric_limits<float>::infinity()
             };
             vec3f c = trace(pixelRay, vec3f(1), _options.recursionDepth);
             c.x = std::clamp(c.x, 0.0f, 1.0f);
@@ -112,9 +153,12 @@ vec3f CPURayTracer::trace(const Ray& ray, vec3f attenuation, int depth) const
         .t = ray.tMax,
     };
     int nearestObject = intersect(hit, ray);
+    _status.rays.fetch_add(1, std::memory_order_relaxed);
 
     if (nearestObject < 0)
         return miss();
+
+    _status.hits.fetch_add(1, std::memory_order_relaxed);
 
     // Is opaque?
     // auto& m = _scene->objects.get<Key::eMaterial>(nearestObject);
@@ -265,7 +309,7 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
         {
             .origin = P + _options.eps * R,
             .direction = R,
-            .tMax = limits<float>::infinity()
+            .tMax = numeric_limits<float>::infinity()
         };
         // color += m.opacity * trace(r, attenuation, depth - 1);
         color += trace(r, a, depth - 1);

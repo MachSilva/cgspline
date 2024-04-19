@@ -22,7 +22,16 @@ public:
         bool        flipYAxis = false;
         int         recursionDepth = 6;
         int         threads = std::thread::hardware_concurrency();
-        uint16_t    tileSize = 128;
+        uint16_t    tileSize = 32;
+    };
+
+    struct Status
+    {
+        std::atomic<uint32_t> rays = 0;
+        std::atomic<uint32_t> hits = 0;
+        std::atomic_flag running;
+        std::atomic<uint32_t> workDone = 0;
+        volatile uint32_t totalWork = 0;
     };
 
     CPURayTracer() = default;
@@ -30,10 +39,10 @@ public:
 
     void render(Frame* frame, const Camera* camera, const Scene* scene);
 
-    // std::future<bool> renderAsync(CPUFrame* frame, const Camera* camera, const Scene* scene);
-
     const auto& options() const { return _options; }
     void setOptions(Options&& op);
+
+    const auto status() const { return &_status; }
 
 private:
     using Key = Scene::Key;
@@ -57,6 +66,8 @@ private:
         uint16_t Y0, uint16_t Y1
     ) const;
 
+    void work();
+
     void progress(int done, int total) const;
 
     vec3f pixelRayDirection(int x, int y) const
@@ -73,8 +84,10 @@ private:
 
     struct Tile { uint16_t x, y; };
 
+    mutable Status _status;
     std::vector<std::thread> _workers;
     std::deque<Tile> _work;
+    std::mutex _workMutex;
 
     Options _options {};
     Frame* _frame = nullptr;

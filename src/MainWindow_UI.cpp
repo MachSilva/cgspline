@@ -309,6 +309,9 @@ void MainWindow::controlWindow()
         _image = nullptr;
     }
 
+    static const int maxT = std::thread::hardware_concurrency();
+    ImGui::SliderInt("Threads", &_threads, 1, maxT);
+
     ImGui::Separator();
 
     const char* items[] = {

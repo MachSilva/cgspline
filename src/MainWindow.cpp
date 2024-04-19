@@ -479,23 +479,38 @@ void MainWindow::renderScene()
     _image = new gl::Texture(gl::Format::sRGB, v.w, v.h);
 
     _frame = new rt::Frame(v.w, v.h, rt::ManagedResource::instance());
-    {
-        // rt:Scope
-        _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
-            .backgroundColor = vec3f(backgroundColor),
-            .flipYAxis = true,
-            .device = 0,
-        });
-        _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
-    }
-    // _cpuRayTracer = new rt::CPURayTracer(rt::CPURayTracer::Options{
-    //     .backgroundColor = vec3f(backgroundColor),
-    //     .flipYAxis = true,
-    //     .threads = 1,
-    // });
-    // _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
+    // {
+    //     // rt:Scope
+    //     _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
+    //         .backgroundColor = vec3f(backgroundColor),
+    //         .flipYAxis = true,
+    //         .device = 0,
+    //     });
+    //     _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+    //     CUDA_CHECK(cudaDeviceSynchronize());
+    // }
 
-    CUDA_CHECK(cudaDeviceSynchronize());
+    _cpuRayTracer = new rt::CPURayTracer(rt::CPURayTracer::Options{
+        .backgroundColor = vec3f(backgroundColor),
+        .flipYAxis = true,
+        .threads = _threads,
+    });
+    _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+    int m = _cpuRayTracer->options().tileSize;
+    m *= m;
+    auto status = _cpuRayTracer->status();
+    auto total = status->totalWork;
+    while (status->running.test())
+    {
+        using namespace std::chrono_literals;
+        auto done = status->workDone.load();
+        float p = (100.0f * done) / total;
+        int a = m * done;
+        int b = m * total;
+        printf("\rRay traced %d of %d pixels (%.2f%%)", a, b, p);
+        std::this_thread::sleep_for(67ms);
+    }
 
     glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
         _frame->data());

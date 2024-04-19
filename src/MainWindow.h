@@ -105,6 +105,7 @@ protected:
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;
     Ref<rt::CPURayTracer> _cpuRayTracer;
+    int _threads = 1;
     std::unique_ptr<rt::Scene> _rtScene;
     rt::Camera _rtCamera;
     Ref<SplRenderer> _texRenderer;
