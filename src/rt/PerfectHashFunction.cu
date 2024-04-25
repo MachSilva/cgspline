@@ -215,18 +215,22 @@ void insert_keys(
 
 int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 {
-    SPL_TIME_THIS();
+    // SPL_TIME_THIS();
 
     const auto n = keys.size();
-    uint32_t s = uint32_t(n >> 1U) - 1U;
+    int s = int(n >> 1) - 1;
 
     assert(n < 0xFFFFFFFF &&
         "PerfectHashFunction: table size too big for an unsigned 32-bit integer");
-    assert(s < n && // bit flip
-        "PerfectHashFunction: key set is too small to need a hash table; "
-        "displacement array size will be zero and its behaviour undefined");
 
-    const auto displSize = std::max(2U, std::bit_floor(s));
+    // Minimum size for the displacement table
+    if (s < 2)
+    {
+        s = 2;
+        // log::warn("PerfectHashFunction: key set is too small to need a hash table (|S| = {})", n);
+    }
+
+    const auto displSize = std::bit_floor((unsigned) s);
     _displacement.resize(displSize);
     _displMask = displSize - 1U;
     _tableSize = n;
@@ -265,8 +269,8 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
     Buffer<uint32_t,async_allocator> hashTable (n, stream);
 
-    log::info("PerfectHashFunction: {} displacement buckets; {} keys",
-        displSize, keys.size());
+    // log::info("PerfectHashFunction: {} displacement buckets; {} keys",
+    //     displSize, keys.size());
 
     constexpr uint32_t bucketCapacity = 8;
     Buffer<uint32_t,async_allocator> buckets (bucketCapacity*displSize, stream);
@@ -372,10 +376,10 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
             _B = d(_mt);
             cofactor = std::gcd(keys.size(), _A);
 
-            log::info("\ttest hash(k) = {} * k + {} mod N; "
-                "gcd(N, h.A) = {}",
-                _A, _B,
-                cofactor);
+            // log::info("\ttest hash(k) = {} * k + {} mod N; "
+            //     "gcd(N, h.A) = {}",
+            //     _A, _B,
+            //     cofactor);
         }
         while (cofactor > 1 && j < 16); // make it safe against infinite loops
 
@@ -472,11 +476,11 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     }
 
     if (duplicate)
-        log::error("\tDUPLICATE FOUND!");
-    else
-        log::info("\tNo duplicate. Perfect Hash! "
-            "hash table: {} bytes, displacement table: {} bytes",
-            _tableSize * sizeof (uint32_t), _displacement.size_bytes());
+        log::error("PerfectHashFunction: DUPLICATE FOUND!");
+    // else
+    //     log::info("\tNo duplicate. Perfect Hash! "
+    //         "hash table: {} bytes, displacement table: {} bytes",
+    //         _tableSize * sizeof (uint32_t), _displacement.size_bytes());
 
     return (int) duplicate;
 }
