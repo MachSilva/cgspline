@@ -78,7 +78,7 @@ void SplRenderer::drawTexture2D(int textureUnit, const vec4f quad[4],
     };
     static const vec2f defaultUV[]
     {
-        {0, 0}, {1, 0}, {0, 1}, {1, 1}
+        {0, 1}, {1, 1}, {0, 0}, {1, 0}
     };
     Vertex data[6];
 
