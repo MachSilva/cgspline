@@ -7,11 +7,11 @@
 #ifndef NDEBUG
 #define CUDA_CHECK(e) \
     ::cg::rt::cudaErrorCheck(cudaGetLastError(),__FILE__,__LINE__), \
-    ::cg::rt::cudaErrorCheck(e,__FILE__,__LINE__)
+    ::cg::rt::cudaErrorCheck((e),__FILE__,__LINE__)
 #else
 #define CUDA_CHECK(e) \
     ::cg::rt::cudaErrorCheck(cudaGetLastError(),__func__,__LINE__), \
-    ::cg::rt::cudaErrorCheck(e,__func__,__LINE__)
+    ::cg::rt::cudaErrorCheck((e),__func__,__LINE__)
 #endif
 
 namespace cg::rt
@@ -139,11 +139,10 @@ bool operator== (const async_allocator<T1>&, const A2&)
  * triggering any constructor or destructor.
  */
 template<typename T>
-struct Raw
+struct __align__(alignof(T)) Raw
 {
-    union Data
+    struct Data
     {
-        __align__(alignof(T)) struct {} nothing;
         uint8_t data[sizeof(T)];
     } raw_data;
 
@@ -556,5 +555,25 @@ size_t size_bytes(const C& c) noexcept
 
 template<typename T> using ManagedBuffer = Buffer<T,managed_allocator>;
 template<typename T> using ManagedArray = Array<T,managed_allocator>;
+
+struct default_managed_delete
+{
+    void operator() (void* ptr) const noexcept
+    {
+        cudaFree(ptr);
+    }
+};
+
+template<typename T>
+using ManagedPtr = std::unique_ptr<T,default_managed_delete>;
+
+template<typename T, typename... Args>
+ManagedPtr<T> makeManaged(Args&&... args)
+{
+    void* ptr;
+    CUDA_CHECK(cudaMallocManaged(&ptr, sizeof (T)));
+    new (ptr) T(std::forward<Args>(args)...);
+    return ManagedPtr<T>((T*) ptr);
+}
 
 } // namespace cg::rt

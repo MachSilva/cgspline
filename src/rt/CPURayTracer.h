@@ -35,12 +35,12 @@ public:
     };
 
     CPURayTracer() = default;
-    CPURayTracer(Options&& op) { setOptions(std::move(op)); }
+    CPURayTracer(const Options& op) { setOptions(op); }
 
     void render(Frame* frame, const Camera* camera, const Scene* scene);
 
     const auto& options() const { return _options; }
-    void setOptions(Options&& op);
+    void setOptions(const Options& op);
 
     const auto status() const { return &_status; }
 
@@ -107,9 +107,9 @@ private:
     Stopwatch clock;
 };
 
-inline void CPURayTracer::setOptions(Options&& op)
+inline void CPURayTracer::setOptions(const Options& op)
 {
-    _options = std::move(op);
+    _options = op;
     _options.threads = std::clamp(_options.threads, 1, 0x1000);
     _options.tileSize = std::max<uint16_t>(_options.tileSize, 8);
 }

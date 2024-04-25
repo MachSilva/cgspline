@@ -5,6 +5,14 @@
 #include <cuda/std/cstddef>
 #include <cuda/std/limits>
 #include <cuda/std/utility>
+#include "rt/Frame.h"
+
+namespace cg::rt
+{
+
+extern __managed__ Frame* g_BezierClippingHeatMap;
+
+} // namespace cg::rt
 
 namespace cg::spline
 {
@@ -242,6 +250,7 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
         } cutside;
     };
 
+    int maxDepth = 1; // we already start with one element
     FixedArray<State,16> S; // a stack
 
     S.push_back({
@@ -473,6 +482,7 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
                 subpatchV(s1.patch, 0.5f, 1.0f);
             }
             S.push_back(std::move(s1));
+            maxDepth = std::max(maxDepth, (int) S.size());
 
 #if !defined(__CUDA_ARCH__)
             if (S.size() > 32)
@@ -506,16 +516,25 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
                 e.cutside = State::eU;
             }
         }
-
-#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
-        if (searchData)
-        {
-            auto& m = searchData->maxStackDepth;
-            m = std::max(m, (int) S.size());
-        }
-#endif
     }
     while (!S.empty());
+
+#ifdef __CUDA_ARCH__
+    if (auto m = rt::g_BezierClippingHeatMap)
+    {
+        auto i = blockIdx.x * blockDim.x + threadIdx.x;
+        auto j = blockIdx.y * blockDim.y + threadIdx.y;
+        m->at(i, j) = std::max(m->at(i, j), (uint32_t) maxDepth);
+    }
+#endif
+
+#if !defined(__CUDA_ARCH__) && defined(SPL_BC_STATS)
+    if (searchData)
+    {
+        auto& m = searchData->maxStackDepth;
+        m = std::max(m, maxDepth);
+    }
+#endif
 
     return !hits.empty();
 }

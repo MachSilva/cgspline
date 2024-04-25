@@ -35,6 +35,7 @@ void MainWindow::gui()
     inspectorWindow();
     editorView();
     controlWindow();
+    workbenchWindow();
     ImGui::ShowMetricsWindow();
 }
 
@@ -285,32 +286,22 @@ void MainWindow::controlWindow()
     else
         ImGui::Text("No image.");
 
-    if (ImGui::Button("Render"))
+    if (ImGui::Button("Render (CPU)"))
     {
         _viewMode = ViewMode::Renderer;
-        _image = nullptr;
+        _renderMethod = eCPU;
+        renderScene();
     }
     ImGui::SameLine();
-
-    ImGui::BeginDisabled(_image == nullptr);
-    if (ImGui::Button("Show/Hide"))
+    if (ImGui::Button("Render (CUDA)"))
     {
-        if (_viewMode != ViewMode::Renderer)
-            _viewMode = ViewMode::Renderer;
-        else
-            _viewMode = ViewMode::Editor;
-    }
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    if (ImGui::Button("Clear"))
-    {
-        _viewMode = ViewMode::Editor;
-        _image = nullptr;
+        _viewMode = ViewMode::Renderer;
+        _renderMethod = eCUDA;
+        renderScene();
     }
 
     static const int maxT = std::thread::hardware_concurrency();
-    ImGui::SliderInt("Threads", &_threads, 1, maxT);
+    ImGui::SliderInt("CPU threads", &_cpuRTOptions.threads, 1, maxT);
 
     ImGui::Separator();
 
@@ -353,6 +344,17 @@ void MainWindow::controlWindow()
     p->use();
     p->setDepth(depthValue);
 
+    ImGui::Separator();
+    constexpr int maxValue = heatMaxValue;
+    for (int i = 0; i <= maxValue; i++)
+    {
+        if (i > 0)
+            ImGui::SameLine(0, 0);
+        auto label = std::format("Value ({})", i);
+        const auto color = heatPallete(i);
+        ImGui::ColorButton(label.c_str(), *(ImVec4*)&color.x);
+    }
+
 #if SPL_BC_STATS
     ImGui::Separator();
     auto t = _debugObject->transform();
@@ -368,7 +370,7 @@ void MainWindow::controlWindow()
     ImGui::Separator();
     char label[128];
     const auto& patches = spline::stats::g_BezierClippingData;
-    ImGui::Text("Patch intersection test data (%d)", patches.size());
+    ImGui::Text("Patch intersection test data (%zu)", patches.size());
     if (ImGui::BeginListBox("##PatchList", {-FLT_MIN, -FLT_MIN}))
     {
         for (int i = 0; i < patches.size(); i++)
@@ -446,6 +448,41 @@ void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
     ImGui::inputText("Surface", s.sceneObject()->name());
     ImGui::Separator();
     window.inspectMaterial(s.mapper()->surface());
+}
+
+void MainWindow::workbenchWindow()
+{
+    ImGui::Begin("Workbench");
+
+    auto& selectedItem = _image;
+    for (auto& [k, item] : _workbench2D)
+    {
+        bool selected = selectedItem == item;
+        if (ImGui::Selectable(k.c_str(), selected))
+        {
+            selectedItem = selected ? nullptr : item;
+        }
+    }
+
+    // bool open = true;
+    // if (selectedItem)
+    // {
+    //     auto title = std::format("Texture ({},{})###Texture",
+    //         selectedItem->width(), selectedItem->height());
+    //     if (ImGui::Begin(title.c_str(), &open))
+    //     {
+    //         auto id = reinterpret_cast<ImTextureID>((uintptr_t) selectedItem->handle());
+    //         auto max = ImGui::GetWindowContentRegionMax();
+    //         auto min = ImGui::GetWindowContentRegionMin();
+    //         ImGui::Image(id, {max.x - min.x, max.y - min.y});
+    //     }
+    //     ImGui::End();
+    // }
+
+    // if (!open)
+    //     selectedItem = nullptr;
+
+    ImGui::End();
 }
 
 } // namespace cg

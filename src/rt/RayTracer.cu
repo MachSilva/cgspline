@@ -5,10 +5,13 @@
 #include <cmath>
 #include <utility>
 #include <math_constants.h>
+#include <cuda_gl_interop.h>
 #include "PBR.h"
 
 namespace cg::rt
 {
+
+__managed__ Frame* g_BezierClippingHeatMap;
 
 struct __align__(8) RayTracer::Context
 {
@@ -76,6 +79,8 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     uint32_t w = frame->width();
     uint32_t h = frame->height();
 
+    g_BezierClippingHeatMap = _options.heatMap;
+
     {
         Context ctx;
         ctx.options = _options;
@@ -112,8 +117,6 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     };
 
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx.get());
-
-    CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 __global__

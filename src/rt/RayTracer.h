@@ -20,18 +20,19 @@ public:
         bool        flipYAxis = false;
         int         recursionDepth = 6;
         int         device = 0; // CUDA device id
+        Frame*      heatMap = nullptr;
     };
 
     struct Context;
 
     RayTracer() = default;
-    RayTracer(Options&& op) : _options{std::move(op)} {}
+    RayTracer(const Options& op) : _options{op} {}
 
     void render(Frame* frame, const Camera* camera, const Scene* scene,
         cudaStream_t stream = 0);
 
     const auto& options() const { return _options; }
-    void setOptions(Options&& op);
+    // void setOptions(const Options& op) {  }
 
 private:
     Options _options {};

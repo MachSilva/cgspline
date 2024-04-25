@@ -9,6 +9,7 @@
 #include <graph/SceneWindow.h>
 #include <graphics/GLImage.h>
 #include <graphics/Renderer.h>
+#include "ColorMap.h"
 #include "GLBezierSurface.h"
 #include "Framebuffer.h"
 #include "SceneReaderExt.h"
@@ -75,6 +76,18 @@ public:
         GLint windowSampleBuffers;
     };
 
+    // #ffffff
+    // #fffb00
+    // #fe2500
+    // #000000
+    static constexpr float heatMaxValue = 16;
+    static constexpr ColorMap<4> heatPallete {{vec4f
+        {0, 0, 0, 1},
+        {254.f/255, 37.f/255, 0, 1},
+        {1, 251.f/255, 0, 1},
+        {1, 1, 1, 1}
+    }, heatMaxValue};
+
 protected:
     graph::SceneObject* createSurfaceObject(GLBezierSurface& p, const char* name);
     void drawSelectedObject(const graph::SceneObject& object);
@@ -89,6 +102,7 @@ protected:
     void assetWindow();
     void cameraPreview();
     void controlWindow();
+    void workbenchWindow();
     void fileMenu();
     void mainMenu();
     void openSceneMenu(std::string_view label);
@@ -100,17 +114,24 @@ protected:
     Ref<GLImage> _prevImage;
     Ref<RayTracer> _prevRayTracer;
 
+    enum RenderMethod
+    {
+        eCPU, eCUDA
+    } _renderMethod = RenderMethod::eCPU;
+
     Intersection _lastPickHit;
     Ref<gl::Texture> _image;
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;
     Ref<rt::CPURayTracer> _cpuRayTracer;
-    int _threads = 1;
+    rt::CPURayTracer::Options _cpuRTOptions { .threads = 4 };
     std::unique_ptr<rt::Scene> _rtScene;
     rt::Camera _rtCamera;
-    Ref<SplRenderer> _texRenderer;
 
-    rt::ManagedResource _cudaManaged;
+    Ref<SplRenderer> _texRenderer;
+    std::map<std::string,Ref<gl::Texture>> _workbench2D;
+
+    Ref<gl::Texture> _workbench2DSelectedItem = nullptr;
 
     std::vector<std::filesystem::path> _sceneFileList;
     MaterialMap _sceneMaterials;

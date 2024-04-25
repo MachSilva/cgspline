@@ -9,6 +9,8 @@
 #include <ranges>
 #include "Framebuffer.h"
 #include "SceneReaderExt.h"
+#include "Log.h"
+#include "rt/ScopeClock.h"
 
 namespace cg
 {
@@ -190,6 +192,9 @@ void MainWindow::initializeScene()
 
     registerInspectFunction(inspectSurface);
 
+    editor()->camera()->setPosition({1, 3.3, 3.4});
+    editor()->camera()->setEulerAngles({-36, 28, 9.5e-6});
+
     _texRenderer = new SplRenderer();
 
 #if SPL_BC_STATS
@@ -216,10 +221,22 @@ void MainWindow::initializeScene()
 
 void MainWindow::render()
 {
-    if (_viewMode != ViewMode::Editor)
+    // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
+    auto e = editor();
+    auto& v = _state.renderViewport;
+    e->setImageSize(v.w, v.h);
+    glViewport(v.x, v.y, v.w, v.h);
+
+    if (_image != nullptr)
     {
-        renderScene();
-        // prevRenderScene();
+        auto dt = glIsEnabled(GL_DEPTH_TEST);
+        glDisable(GL_DEPTH_TEST);
+        // draw
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, *_image);
+        _texRenderer->drawTexture2D(0);
+        if (dt)
+            glEnable(GL_DEPTH_TEST);
         return;
     }
 
@@ -247,12 +264,6 @@ void MainWindow::render()
         __debugLine = {step.L.x, 0, step.L.y};
     }
 #endif
-
-    // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
-    auto e = editor();
-    auto& v = _state.renderViewport;
-    e->setImageSize(v.w, v.h);
-    glViewport(v.x, v.y, v.w, v.h);
 
     if (_sceneEnvironment)
     {
@@ -436,17 +447,8 @@ void MainWindow::convertScene()
 
 void MainWindow::renderScene()
 {
-    if (_viewMode != ViewMode::Renderer)
-        return;
-
-    if (_image != nullptr)
-    {
-        // draw
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, *_image);
-        _texRenderer->drawTexture2D(0);
-        return;
-    }
+    // if (_viewMode != ViewMode::Renderer)
+    //     return;
 
     auto camera = graph::CameraProxy::current();
     if (!camera)
@@ -479,37 +481,69 @@ void MainWindow::renderScene()
     _image = new gl::Texture(gl::Format::sRGB, v.w, v.h);
 
     _frame = new rt::Frame(v.w, v.h, rt::ManagedResource::instance());
-    // {
-    //     // rt:Scope
-    //     _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
-    //         .backgroundColor = vec3f(backgroundColor),
-    //         .flipYAxis = true,
-    //         .device = 0,
-    //     });
-    //     _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
-    //     CUDA_CHECK(cudaDeviceSynchronize());
-    // }
 
-    _cpuRayTracer = new rt::CPURayTracer(rt::CPURayTracer::Options{
-        .backgroundColor = vec3f(backgroundColor),
-        .flipYAxis = true,
-        .threads = _threads,
-    });
-    _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
-
-    int m = _cpuRayTracer->options().tileSize;
-    m *= m;
-    auto status = _cpuRayTracer->status();
-    auto total = status->totalWork;
-    while (status->running.test())
+    switch (_renderMethod)
     {
-        using namespace std::chrono_literals;
-        auto done = status->workDone.load();
-        float p = (100.0f * done) / total;
-        int a = m * done;
-        int b = m * total;
-        printf("\rRay traced %d of %d pixels (%.2f%%)", a, b, p);
-        std::this_thread::sleep_for(67ms);
+    case RenderMethod::eCUDA:
+    {
+        rt::ScopeClock _c {[](std::chrono::microseconds duration)
+        {
+            log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
+        }};
+
+        auto heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, rt::ManagedResource::instance());
+        CUDA_CHECK(cudaMemsetAsync(heatMap->data(), 0, heatMap->size_bytes()));
+
+        // Launch render kernel
+        _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
+            .backgroundColor = vec3f(backgroundColor),
+            .device = 0,
+            .heatMap = heatMap.get(),
+        });
+        _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+        CUDA_CHECK(cudaDeviceSynchronize());
+        _workbench2D["CUDA ray traced image"] = _image;
+
+        // Get heat map
+        Ref<gl::Texture> tex = new gl::Texture(gl::Format::sRGB, v.w, v.h);
+        _workbench2D["Bezier Clipping Heat Map"] = tex;
+
+        // Convert counters to colors
+        for (auto i = 0U; i < heatMap->size(); i++)
+        {
+            auto& e = heatMap->data()[i];
+            e = packColor(Color(heatPallete(e)));
+        }
+
+        glTextureSubImage2D(*tex, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
+            heatMap->data());
+    } break;
+    case RenderMethod::eCPU:
+    {
+        _cpuRTOptions.backgroundColor = vec3f(backgroundColor);
+
+        _cpuRayTracer = new rt::CPURayTracer(_cpuRTOptions);
+        _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+        int m = _cpuRayTracer->options().tileSize;
+        m *= m;
+        auto status = _cpuRayTracer->status();
+        auto total = status->totalWork;
+        while (status->running.test())
+        {
+            using namespace std::chrono_literals;
+            auto done = status->workDone.load();
+            float p = (100.0f * done) / total;
+            int a = m * done;
+            int b = m * total;
+            printf("\rRay traced %d of %d pixels (%.2f%%)", a, b, p);
+            std::this_thread::sleep_for(67ms);
+        }
+        _workbench2D["Ray traced image"] = _image;
+    } break;
+    default:
+        break;
     }
 
     glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
@@ -571,21 +605,20 @@ void MainWindow::drawSelectedObject(const graph::SceneObject& object)
 
 bool MainWindow::onKeyPress(int key, int p2)
 {
-    if (_viewMode == ViewMode::Editor)
+    switch (key)
     {
-        switch (key)
-        {
-        case GLFW_KEY_F1:
-            _state.cursorMode = CursorMode::Select; break;
-        case GLFW_KEY_F2:
-            _state.cursorMode = CursorMode::PrimitiveInspect; break;
-        case GLFW_KEY_F3:
-            _state.cursorMode = CursorMode::NormalInspect; break;
-        }
+    case GLFW_KEY_F1:
+        _state.cursorMode = CursorMode::Select; break;
+    case GLFW_KEY_F2:
+        _state.cursorMode = CursorMode::PrimitiveInspect; break;
+    case GLFW_KEY_F3:
+        _state.cursorMode = CursorMode::NormalInspect; break;
     }
 
     return SceneWindow::onKeyPress(key, p2);
 }
+
+// bool MainWindow::
 
 bool MainWindow::onMouseLeftPress(int x, int y)
 {
