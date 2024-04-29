@@ -87,13 +87,21 @@ uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
 
     Bounds3f box {};
     const auto idx = _indices.size();
+
+#ifdef SPL_BVH_INDEX_SENTINEL
+    _indices.resize(idx + count + 1);
+#else
     _indices.resize(idx + count);
+#endif
     for (auto i = 0U; i < count; i++)
     {
         auto& e = elements[i];
         _indices[idx + i] = e.index;
         box.inflate(e.bounds);
     }
+#ifdef SPL_BVH_INDEX_SENTINEL
+    _indices[idx + count] = EMPTY;
+#endif
 
     _nodes.push_back(Node{
         .leftBox = box,
@@ -105,7 +113,9 @@ uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
     _keys.push_back(key);
     auto& node = _nodes.back();
     node.first = idx;
+#ifndef SPL_BVH_INDEX_SENTINEL
     node.count = count;
+#endif
     return _nodes.size() - 1;
 }
 
@@ -148,12 +158,21 @@ bool BVH::intersect(
 
         if (node->isLeaf())
         {
+#ifdef SPL_BVH_INDEX_SENTINEL
+            auto i = node->first;
+            while (_indices[i] != EMPTY)
+            {
+                bool b = intersectfn(hit, ray, _indices[i++]);
+                result |= b;
+            }
+#else
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
                 bool b = intersectfn(hit, ray, _indices[base + i]);
                 result |= b;
             }
+#endif
             continue;
         }
 
@@ -215,6 +234,16 @@ bool BVH::intersect(
 
         if (node->isLeaf())
         {
+#ifdef SPL_BVH_INDEX_SENTINEL
+            auto i = node->first;
+            while (_indices[i] != EMPTY)
+            {
+                if (intersectfn(ray, _indices[i++]))
+                {
+                    return true;
+                }
+            }
+#else
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
@@ -223,6 +252,7 @@ bool BVH::intersect(
                     return true;
                 }
             }
+#endif
             continue;
         }
 

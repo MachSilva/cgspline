@@ -9,6 +9,8 @@
 #include "PerfectHashFunction.h"
 #include "RTNamespace.h"
 
+#define SPL_BVH_INDEX_SENTINEL
+
 namespace cg::rt
 {
 
@@ -28,7 +30,9 @@ struct BVH
             struct
             {
                 uint32_t first;
+#ifndef SPL_BVH_INDEX_SENTINEL
                 uint32_t count;
+#endif
             };
         };
         // Uncle must exist for all non-leaf non-root nodes
@@ -244,12 +248,21 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
         }
         else // is a leaf
         {
+#ifdef SPL_BVH_INDEX_SENTINEL
+            auto i = node->first;
+            while (_indices[i] != EMPTY)
+            {
+                bool b = intersectfn(hit, ray, _indices[i++]);
+                result |= b;
+            }
+#else
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
                 bool b = intersectfn(hit, ray, _indices[base + i]);
                 result |= b;
             }
+#endif
         }
 
         // going up
@@ -358,12 +371,21 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
         }
         else // is a leaf
         {
+#ifdef SPL_BVH_INDEX_SENTINEL
+            auto i = node->first;
+            while (_indices[i] != EMPTY)
+            {
+                if (intersectfn(ray, _indices[i++]))
+                    return true;
+            }
+#else
             auto base = node->first;
             for (int i = 0; i < node->count; i++)
             {
                 if (intersectfn(ray, _indices[base + i]))
                     return true;
             }
+#endif
         }
 
         // going up
@@ -379,7 +401,6 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
             postponed >>= 1;
             postponed ^= 1;
             key = binarytree::uncle(key);
-            assert(node->uncle < _nodes.size());
             node = _nodes.data() + node->uncle;
             continue;
         }
@@ -392,7 +413,6 @@ bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
         bits = bits - levels;
         key = binarytree::sibling(key >> levels);
         postponed ^= 1;
-        // assert(_table[_hash(key)] < _nodes.size());
         node = _nodes.data() + _table[_hash(key)];
     }
 
