@@ -54,29 +54,14 @@ struct BVH
         : _alloc{mr}, _keys{mr}, _nodes{mr}, _indices{mr}, _table{mr}
     {}
 
-    const auto root() const noexcept { return _root; }
+    constexpr auto root() const { return 0; }
 
-    span<const Node> nodes() const noexcept
-    {
-        return {_nodes.data(), _nodes.size()};
-    }
+    std::span<const Node>     nodes() const noexcept { return _nodes; }
+    std::span<Node>           nodes() noexcept { return _nodes; }
+    std::span<const uint32_t> indices() const noexcept { return _indices; }
+    std::span<const uint32_t> keys() const noexcept { return _keys; }
 
-    span<Node> nodes() noexcept
-    {
-        return {_nodes.data(), _nodes.size()};
-    }
-
-    span<const uint32_t> indices() const noexcept
-    {
-        return {_indices.data(), _indices.size()};
-    }
-
-    span<const uint32_t> keys() const noexcept
-    {
-        return {_keys.data(), _keys.size()};
-    }
-
-    void build(span<ElementData> elements, uint32_t elementsPerNode = 1);
+    void build(std::span<ElementData> elements, uint32_t elementsPerNode = 1);
 
     void buildHashTable(cudaStream_t stream = 0);
 
@@ -102,7 +87,6 @@ struct BVH
 private:
     polymorphic_allocator<Node> _alloc;
     uint32_t _elementsPerNode = 1;
-    uint32_t _root = EMPTY;
 
     PerfectHashFunction _hash;
 
@@ -112,8 +96,8 @@ private:
     Array<uint32_t> _table;
 
     void link(Node* node, uint32_t sibling);
-    uint32_t split(span<ElementData> elements, uint32_t key);
-    uint32_t wrap(span<ElementData> elements, uint32_t key);
+    uint32_t split(std::span<ElementData> elements, uint32_t key);
+    uint32_t wrap(std::span<ElementData> elements, uint32_t key);
 };
 
 namespace binarytree
@@ -185,11 +169,8 @@ __host__ __device__
 bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
     Fn intersectfn) const
 {
-    if (_root == BVH::EMPTY)
-        return false;
-
     const vec3f D_1 = ray.direction.inverse();
-    const Node* node = _nodes.data() + _root;
+    const Node* node = _nodes.data();
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;
     int bits = 0;
@@ -310,11 +291,8 @@ template<std::regular_invocable<const Ray&,uint32_t> Fn>
 __host__ __device__
 bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
 {
-    if (_root == BVH::EMPTY)
-        return false;
-
     const vec3f D_1 = ray.direction.inverse();
-    const Node* node = _nodes.data() + _root;
+    const Node* node = _nodes.data();
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;
     int bits = 0;

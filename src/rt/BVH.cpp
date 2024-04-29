@@ -5,7 +5,7 @@
 namespace cg::rt
 {
 
-void BVH::build(span<ElementData> elements, uint32_t elementsPerNode)
+void BVH::build(std::span<ElementData> elements, uint32_t elementsPerNode)
 {
     auto n = elements.size();
     _keys.clear();
@@ -16,13 +16,13 @@ void BVH::build(span<ElementData> elements, uint32_t elementsPerNode)
     _indices.reserve(n);
 
     _elementsPerNode = elementsPerNode;
-    _root = split(elements, ROOT_KEY);
-    link(&_nodes[_root], EMPTY);
+    split(elements, ROOT_KEY);
+    link(_nodes.data(), EMPTY);
 }
 
 void BVH::buildHashTable(cudaStream_t stream)
 {
-    auto e = _hash.build({_keys.data(), _keys.size()}, stream);
+    auto e = _hash.build(_keys, stream);
     if (e)
         throw std::runtime_error("hash table build failed");
 
@@ -36,7 +36,7 @@ void BVH::buildHashTable(cudaStream_t stream)
     }
 }
 
-uint32_t BVH::split(span<ElementData> elements, uint32_t key)
+uint32_t BVH::split(std::span<ElementData> elements, uint32_t key)
 {
     auto count = elements.size();
     if (count <= _elementsPerNode)
@@ -60,13 +60,13 @@ uint32_t BVH::split(span<ElementData> elements, uint32_t key)
             return a.centroid[dim] < b.centroid[dim];
         });
 
-    _nodes.push_back(Node{
-        .left = split(elements.subspan(0, middle), binarytree::left(key)),
-        .right = split(elements.subspan(middle), binarytree::right(key)),
-        .uncle = EMPTY,
-    });
     _keys.push_back(key);
-    auto& node = _nodes.back();
+    auto idx = _nodes.size();
+    auto& node = _nodes.emplace_back();
+    node.left = split(elements.subspan(0, middle), binarytree::left(key)),
+    node.right = split(elements.subspan(middle), binarytree::right(key)),
+    node.uncle = EMPTY;
+
     auto& left = _nodes[node.left];
     auto& right = _nodes[node.right];
     node.leftBox = left.leftBox;
@@ -75,10 +75,10 @@ uint32_t BVH::split(span<ElementData> elements, uint32_t key)
         node.leftBox.inflate(left.rightBox);
     if (!right.isLeaf())
         node.rightBox.inflate(right.rightBox);
-    return _nodes.size() - 1;
+    return idx;
 }
 
-uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
+uint32_t BVH::wrap(std::span<ElementData> elements, uint32_t key)
 {
     auto count = elements.size();
     if (count == 0)
@@ -103,15 +103,11 @@ uint32_t BVH::wrap(span<ElementData> elements, uint32_t key)
     _indices[idx + count] = EMPTY;
 #endif
 
-    _nodes.push_back(Node{
-        .leftBox = box,
-        .rightBox = {},
-        .left = EMPTY,
-        // .right = EMPTY,
-        // .uncle = EMPTY,
-    });
     _keys.push_back(key);
-    auto& node = _nodes.back();
+    auto& node = _nodes.emplace_back();
+    node.leftBox = box;
+    node.rightBox = {};
+    node.left = EMPTY;
     node.first = idx;
 #ifndef SPL_BVH_INDEX_SENTINEL
     node.count = count;
@@ -141,15 +137,12 @@ bool BVH::intersect(
     std::function<bool(Intersection&, const Ray&, uint32_t)> intersectfn
     ) const
 {
-    if (_root == BVH::EMPTY)
-        return false;
-
     const vec3f D_1 = ray.direction.inverse();
     bool result = false;
 
     std::deque<const Node*> S;
     S.clear();
-    S.push_back(&_nodes[_root]);
+    S.push_back(&_nodes[0]);
 
     while (!S.empty())
     {
@@ -217,15 +210,12 @@ bool BVH::intersect(
     std::function<bool(const Ray&, uint32_t)> intersectfn
     ) const
 {
-    if (_root == BVH::EMPTY)
-        return false;
-
     const vec3f D_1 = ray.direction.inverse();
-    uint32_t offset = _root;
+    uint32_t offset = 0;
 
     std::deque<const Node*> S;
     S.clear();
-    S.push_back(&_nodes[_root]);
+    S.push_back(&_nodes[0]);
 
     while (!S.empty())
     {
