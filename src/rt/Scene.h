@@ -108,6 +108,7 @@ struct Scene
     Array<BezierSurface> surfaces {};
     Array<BVH> bvhs {};
     BVH topLevelBVH {};
+    vec3f backgroundColor {0.1f, 0.1f, 0.1f};
 
     Scene() = default;
     Scene(uint32_t capacity, std::pmr::memory_resource* mr)

@@ -235,19 +235,21 @@ public:
         if (this == &other)
             return *this;
 
-        if (_alloc != other._alloc)
-        {
-            throw std::runtime_error(
-                "Buffer move assignment: allocators are not equal"
-                ", operation for this case not implemented yet");
-        }
-
-        std::destroy_at(this);
-
         if constexpr (std::allocator_traits<allocator_type>
             ::propagate_on_container_move_assignment::value)
         {
+            std::destroy_at(this);
             _alloc = std::move(_alloc);
+        }
+        else
+        {
+            if (_alloc != other._alloc)
+            {
+                throw std::runtime_error(
+                    "Buffer move assignment: allocators are not equal"
+                    ", operation for this case not implemented yet");
+            }
+            std::destroy_at(this);
         }
 
         _length = other._length;

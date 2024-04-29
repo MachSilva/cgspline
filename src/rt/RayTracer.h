@@ -14,7 +14,6 @@ class RayTracer : public SharedObject
 public:
     struct Options
     {
-        vec3f       backgroundColor = {0.1, 0.1, 0.1};
         int         diffusionRays = 1;
         float       eps = 1e-4f;
         bool        flipYAxis = false;
@@ -25,18 +24,18 @@ public:
 
     struct Context;
 
-    RayTracer() = default;
-    RayTracer(const Options& op) : _options{op} {}
+    RayTracer();
+    RayTracer(const Options& op) : RayTracer() { _options = op; }
+    ~RayTracer() override;
 
     void render(Frame* frame, const Camera* camera, const Scene* scene,
         cudaStream_t stream = 0);
 
     const auto& options() const { return _options; }
-    // void setOptions(const Options& op) {  }
 
 private:
     Options _options {};
-    std::unique_ptr<Context, void(*)(void*)> _ctx {nullptr, nullptr};
+    Context* _ctx {nullptr};
 };
 
 } // namespace cg::rt

@@ -329,6 +329,7 @@ void MainWindow::convertScene()
     std::pmr::memory_resource* memoryResource = rt::ManagedResource::instance();
     auto objCount = _scene->actorCount();
     _rtScene = std::make_unique<rt::Scene>(objCount, memoryResource);
+    _rtScene->backgroundColor = _scene->backgroundColor;
 
     auto& lights = _rtScene->lights;
     lights.clear();
@@ -480,7 +481,12 @@ void MainWindow::renderScene()
     auto& v = _state.renderViewport;
     _image = new gl::Texture(gl::Format::sRGB, v.w, v.h);
 
-    _frame = new rt::Frame(v.w, v.h, rt::ManagedResource::instance());
+    constexpr int warpSize = 32;
+    _frame = new rt::Frame(v.w, v.h, warpSize, rt::ManagedResource::instance());
+
+    GLint rowLength;
+    glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, _frame->stride());
 
     switch (_renderMethod)
     {
@@ -491,12 +497,11 @@ void MainWindow::renderScene()
             log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
         }};
 
-        auto heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, rt::ManagedResource::instance());
+        auto heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, warpSize, rt::ManagedResource::instance());
         CUDA_CHECK(cudaMemsetAsync(heatMap->data(), 0, heatMap->size_bytes()));
 
         // Launch render kernel
-        _rayTracer = new rt::RayTracer(rt::RayTracer::Options{
-            .backgroundColor = vec3f(backgroundColor),
+        _rayTracer = new rt::RayTracer({
             .device = 0,
             .heatMap = heatMap.get(),
         });
@@ -521,7 +526,7 @@ void MainWindow::renderScene()
     } break;
     case RenderMethod::eCPU:
     {
-        _cpuRTOptions.backgroundColor = vec3f(backgroundColor);
+        _cpuRTOptions.backgroundColor = vec3f(_scene->backgroundColor);
 
         _cpuRayTracer = new rt::CPURayTracer(_cpuRTOptions);
         _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
@@ -548,6 +553,8 @@ void MainWindow::renderScene()
 
     glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
         _frame->data());
+
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
 
 #if SPL_BC_STATS
     spline::stats::g_BezierClippingEnable = true;

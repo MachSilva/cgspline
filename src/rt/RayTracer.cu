@@ -48,6 +48,16 @@ struct __align__(8) RayTracer::Context
     }
 };
 
+RayTracer::RayTracer()
+{
+    CUDA_CHECK(cudaMalloc(&_ctx, sizeof (Context)));
+}
+
+RayTracer::~RayTracer()
+{
+    cudaFree(_ctx);
+}
+
 using Context = RayTracer::Context;
 using Key = Scene::Key;
 
@@ -69,12 +79,6 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
         },
         objs.as_pointer_tuple()
     );
-
-    {
-        Context* ptr;
-        CUDA_CHECK(cudaMalloc(&ptr, sizeof (Context)));
-        _ctx = {ptr, [](void* p){ cudaFree(p); }};
-    }
 
     uint32_t w = frame->width();
     uint32_t h = frame->height();
@@ -104,9 +108,8 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
             ctx.topLeftCorner.y = -ctx.topLeftCorner.y;
             ctx.half_dy = -ctx.half_dy;
         }
-        // CUDA_CHECK();
-        cudaMemcpyAsync(_ctx.get(), &ctx, sizeof (ctx), cudaMemcpyHostToDevice,
-            stream);
+        CUDA_CHECK(cudaMemcpyAsync(_ctx, &ctx, sizeof (ctx),
+            cudaMemcpyHostToDevice, stream));
     }
 
     dim3 threadsPerBlock (8, 8);
@@ -116,7 +119,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
         (h / 8) + (h % 8 ? 1 : 0)
     };
 
-    rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx.get());
+    rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
 }
 
 __global__
@@ -252,7 +255,7 @@ bool Context::intersect(const Ray& ray0) const
 __device__
 vec3f Context::miss() const
 {
-    return this->options.backgroundColor;
+    return this->scene->backgroundColor;
 }
 
 __device__

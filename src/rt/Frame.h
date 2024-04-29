@@ -13,7 +13,7 @@ namespace cg::rt
  * @brief ...
  * 
  * @param n Value to be aligned
- * @param alignment An alignment that is not a power of two results in
+ * @param alignment An alignment value that is not a power of two results in
  *        undefined behaviour
  */
 constexpr uint32_t alignTo(uint32_t n, uint32_t alignment)
@@ -23,7 +23,7 @@ constexpr uint32_t alignTo(uint32_t n, uint32_t alignment)
     assert(std::popcount(alignment) == 1);
     auto mask = alignment - 1;
     auto rem = n & mask;
-    return rem ? (n + alignment) : rem; 
+    return rem ? (n + (alignment - rem)) : n; 
 }
 
 struct Frame : SharedObject
@@ -48,10 +48,9 @@ struct Frame : SharedObject
      */
     Frame(uint32_t width, uint32_t height, uint32_t alignment,
         memory_resource* mr)
-        : _width{width}, _height{height}
-        , _stride{alignTo(width, alignment)}
+        : Frame(alignTo(width, alignment), height, mr)
     {
-        _data = std::move(Buffer<Pixel>((size_t) _stride * height, mr));
+        _width = width;
     }
 
     __host__ __device__
