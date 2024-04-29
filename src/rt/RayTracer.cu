@@ -13,26 +13,32 @@ namespace cg::rt
 
 __managed__ Frame* g_BezierClippingHeatMap;
 
-struct __align__(8) RayTracer::Context
+struct RayPayload
 {
-    vec2f topLeftCorner;
-    float half_dx;
-    float half_dy;
-    mat4f cameraToWorld;
-    mat3f cameraNormalToWorld;
-    vec3f cameraPosition;
+    Ray ray;
+    vec3f color;
+    vec3f attenuation;
+    int depth;
+};
+
+struct RayTracer::Context
+{
     __align__(8) Raw<Frame> frame;
     __align__(8) Raw<const Scene> scene;
     __align__(8) Options options;
+    __align__(16) mat4f cameraToWorld;
+    __align__(16) mat3f cameraNormalToWorld;
+    __align__(16) vec3f cameraPosition;
+    vec2f topLeftCorner;
+    float half_dx;
+    float half_dy;
 
-    __device__ vec3f trace(const Ray&,
-        vec3f attenuation, int depth) const;
-    __device__ int intersect(Intersection&, const Ray&) const;
+    __device__ bool anyHit(RayPayload&) const;
+    __device__ bool closestHit(const Intersection&, RayPayload&, uint32_t object) const;
     __device__ bool intersect(const Ray&) const;
-    __device__ vec3f miss() const;
-    __device__ vec3f anyHit() const;
-    __device__ vec3f closestHit(const Intersection&, const Ray&,
-        vec3f attenuation, uint32_t object, int depth) const;
+    __device__ int  intersect(Intersection&, const Ray&) const;
+    __device__ bool miss(RayPayload&) const;
+    __device__ bool trace(RayPayload&) const;
 
     __device__
     vec3f pixelRayDirection(int x, int y) const
@@ -131,44 +137,50 @@ void render(Context* ctx)
         return;
 
     auto d = ctx->pixelRayDirection(i, j);
-    Ray pixelRay
+    RayPayload payload
     {
-        .origin = ctx->cameraPosition,
-        .direction = d,
-        .tMin = 0.001f,
-        .tMax = numeric_limits<float>::infinity()
+        .ray = {
+            .origin = ctx->cameraPosition,
+            .direction = d,
+            .tMin = 0.001f,
+            .tMax = numeric_limits<float>::infinity()
+        },
+        .color = vec3f(0),
+        .attenuation = vec3f(1),
+        .depth = ctx->options.recursionDepth
     };
-    vec3f c = ctx->trace(pixelRay, vec3f(1), ctx->options.recursionDepth);
-    c.x = math::clamp(c.x, 0.0f, 1.0f);
-    c.y = math::clamp(c.y, 0.0f, 1.0f);
-    c.z = math::clamp(c.z, 0.0f, 1.0f);
+    while (ctx->trace(payload));
+    vec3f c = payload.color;
+    c.x = __saturatef(c.x);
+    c.y = __saturatef(c.y);
+    c.z = __saturatef(c.z);
     ctx->frame->at(i, j) = pack_sRGB(c.x, c.y, c.z);
 }
 
 __device__
-vec3f Context::trace(const Ray& ray, vec3f attenuation, int depth) const
+bool Context::trace(RayPayload& payload) const
 {
     Intersection hit
     {
         .object = nullptr,
-        .t = ray.tMax,
+        .t = payload.ray.tMax,
     };
-    int nearestObject = intersect(hit, ray);
+    int nearestObject = intersect(hit, payload.ray);
 
     if (nearestObject < 0)
-        return miss();
+        return miss(payload);
 
     // Is opaque?
     // TODO refraction
 
-    return closestHit(hit, ray, attenuation, nearestObject, depth);
+    return closestHit(hit, payload, nearestObject);
 }
 
 __device__
 int Context::intersect(Intersection& hit0, const Ray& ray0) const
 {
     int nearestObject = -1;
-    auto fn = [&](Intersection& hit, const Ray& ray, uint32_t i)
+    auto fn = [&](Intersection& hit, const Ray& ray, uint32_t i) -> bool
     {
         Intersection localHit;
         auto& objs = this->scene->objects;
@@ -196,7 +208,7 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
             b = rt::intersect(*(const Mesh*)p, localHit, localRay);
             break;
         default:
-            return false;
+            __builtin_unreachable();
         }
 
         if (b)
@@ -221,7 +233,7 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
 __device__
 bool Context::intersect(const Ray& ray0) const
 {
-    auto fn = [this](const Ray& ray, uint32_t i)
+    auto fn = [this](const Ray& ray, uint32_t i) -> bool
     {
         auto& objs = this->scene->objects;
         auto p = objs.get<Key::ePrimitive>(i);
@@ -244,41 +256,34 @@ bool Context::intersect(const Ray& ray0) const
         case PrimitiveType::eMesh:
             return rt::intersect(*(const Mesh*)p, localRay);
         default:
-            return false;
+            __builtin_unreachable();
         }
-
-        // return p->intersect(localRay);
     };
     return this->scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
-__device__
-vec3f Context::miss() const
+__device__ bool Context::miss(RayPayload& payload) const
 {
-    return this->scene->backgroundColor;
+    payload.color += this->scene->backgroundColor * payload.attenuation;
+    return false;
 }
 
 __device__
-vec3f Context::anyHit() const
+bool Context::anyHit(RayPayload& payload) const
 {
-    return {};
+    return false;
 }
 
 __device__
-vec3f Context::closestHit(const Intersection& hit, const Ray& ray,
-    vec3f attenuation, uint32_t object, int depth) const
+bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t object) const
 {
     const auto p = this->scene->objects.get<Key::ePrimitive>(object);
     const auto& m = this->scene->objects.get<Key::eMaterial>(object);
     const auto& M_1 = this->scene->objects.get<Key::eWorld2LocalMatrix>(object);
     vec3f color {0};
 
-    // m.specular.xyz = max(m.specular.xyz, vec3f(0.04));
-
     // From the point to the camera; BRDF uses this vector orientation.
-    vec3f V = - ray.direction;
-    // vec3f N = p->normal(hit);
-    // vec3f N = (mat3f(M_1).transposed() * p->normal(hit)).versor();
+    vec3f V = - payload.ray.direction;
 
     vec3f N;
     switch (this->scene->objects.get<Key::ePrimitiveType>(object))
@@ -290,7 +295,7 @@ vec3f Context::closestHit(const Intersection& hit, const Ray& ray,
         N = normal(*(const Mesh*)p, hit);
         break;
     default:
-        return color;
+        __builtin_unreachable();
     }
     N = (mat3f(M_1).transposed() * N).versor();
 
@@ -304,7 +309,7 @@ vec3f Context::closestHit(const Intersection& hit, const Ray& ray,
         dotNV = -dotNV;
     }
 
-    vec3f P = ray.origin + hit.t * ray.direction;
+    vec3f P = payload.ray.origin + hit.t * payload.ray.direction;
 
     const auto& lights = this->scene->lights;
     for (int i = 0; i < lights.size(); i++)
@@ -329,30 +334,32 @@ vec3f Context::closestHit(const Intersection& hit, const Ray& ray,
         color += BRDF(I, L, V, N, dotNV, dotNL, m);
     }
 
-    color *= std::numbers::pi_v<float> * attenuation;
+    payload.color += color * std::numbers::pi_v<float> * payload.attenuation;
 
-    if (depth <= 0)
-        return color;
+    if (payload.depth <= 0)
+        return false;
 
     // Reflection
-    // constexpr float minRadiance = 0x1p-8f;
-    // vec3f reflectance = schlick(m.specular, dotNV);
-    // vec3f a = attenuation * reflectance;
-    // if (a.max() > minRadiance)
-    // {
-    //     // I = -V
-    //     vec3f R = (-V) + 2 * dotNV * N;
-    //     Ray r
-    //     {
-    //         .origin = P + this->options.eps * R,
-    //         .direction = R,
-    //         .tMax = numeric_limits<float>::infinity()
-    //     };
-    //     // color += m.opacity * trace(r, attenuation, depth - 1);
-    //     color += trace(r, a, depth - 1);
-    // }
+    constexpr float minRadiance = 0x1p-8f;
+    vec3f reflectance = schlick(m.specular, dotNV);
+    vec3f a = payload.attenuation * reflectance;
+    if (a.max() <= minRadiance)
+        return false;
 
-    return color;
+    // I = -V
+    vec3f R = (-V) + 2 * dotNV * N;
+    Ray r
+    {
+        .origin = P + this->options.eps * R,
+        .direction = R,
+        .tMax = numeric_limits<float>::infinity()
+    };
+    payload.ray = r;
+    payload.attenuation = a;
+    payload.depth = payload.depth - 1;
+    // color += m.opacity * trace(r, attenuation, depth - 1);
+    // color += trace(r, a, depth - 1);
+    return true;
 }
 
 } // namespace cg::rt

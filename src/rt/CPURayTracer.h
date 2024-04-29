@@ -17,7 +17,6 @@ class CPURayTracer : public SharedObject
 public:
     struct Options
     {
-        vec3f       backgroundColor = {0.1, 0.1, 0.1};
         float       eps = 1e-4f;
         bool        flipYAxis = false;
         int         recursionDepth = 6;

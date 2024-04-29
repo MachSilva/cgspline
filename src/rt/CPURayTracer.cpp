@@ -232,15 +232,13 @@ bool CPURayTracer::intersect(const Ray& ray0) const
 
 vec3f CPURayTracer::miss() const
 {
-    return _options.backgroundColor;
+    return _scene->backgroundColor;
 }
 
-// vec3f CPURayTracer::anyHit(const Intersection& hit, const Ray& ray, uint32_t object)
 // vec3f CPURayTracer::anyHit()
 // {
 
 // }
-
 
 vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     vec3f attenuation, uint32_t object, int depth) const

@@ -19,7 +19,7 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_CUDA_ARCHITECTURES 75)
-if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")
 endif()
 
@@ -57,12 +57,12 @@ add_executable(cgspline
 )
 
 set_source_files_properties(
-    src/Spline.cu
-    src/Spline_BezierClipping.cu
-    src/rt/PBR.cu
-    src/rt/Primitive.cu
+    # src/Spline.cu
+    # src/Spline_BezierClipping.cu
+    # src/rt/PBR.cu
+    # src/rt/Primitive.cu
     src/rt/RayTracer.cu
-    src/rt/Scene.cu
+    # src/rt/Scene.cu
     PROPERTIES
     COMPILE_OPTIONS "--ptxas-options;--verbose")
 

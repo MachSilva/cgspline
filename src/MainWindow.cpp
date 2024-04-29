@@ -526,8 +526,6 @@ void MainWindow::renderScene()
     } break;
     case RenderMethod::eCPU:
     {
-        _cpuRTOptions.backgroundColor = vec3f(_scene->backgroundColor);
-
         _cpuRayTracer = new rt::CPURayTracer(_cpuRTOptions);
         _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
 
