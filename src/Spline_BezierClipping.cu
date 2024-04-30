@@ -86,10 +86,8 @@ bool doBezierClipping(Intersection& hit,
     const uint32_t patch[16],
     float tol)
 {
-    LocalArray<vec2f> hits; 
-
     // project patch into a 2D plane perpendicular to the ray direction
-    custd::array<vec2f,16> patch2D;
+    vec2f patch2D[16];
 
     // find two planes whose intersection is a line that contains the ray
     const auto& d = ray.direction;
@@ -107,40 +105,20 @@ bool doBezierClipping(Intersection& hit,
         };
     }
 
-#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
-    stats::BCData* data = nullptr;
-    if (stats::g_BezierClippingEnable)
+    PatchRef S (buffer, patch);
+    auto onHit = [&](vec2f e) -> bool
     {
-        stats::g_BezierClippingData.push_back({ .patch2D = patch2D });
-        data = &stats::g_BezierClippingData.back();
-    }
-#endif
-
-    if (doBezierClipping2D(hits, patch2D.data(), tol))
-    {
-        PatchRef S (buffer, patch);
-        bool found = false;
-        for (auto &e : hits)
+        auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
+        float t = V.length();
+        if (t < hit.distance && V.dot(ray.direction) > 0)
         {
-            auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
-            float t = V.length();
-            if (t < hit.distance && V.dot(ray.direction) > 0)
-            {
-                found = true;
-                hit.distance = t;
-                hit.p = e;
-            }
-
-#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
-            if (data)
-                data->hits.push_back({ .distance = t, .coord = e});
-#endif
+            hit.distance = t;
+            hit.p = e;
+            return true;
         }
-
-        return found;
-    }
-
-    return false;
+        return false;
+    };
+    return doBezierClipping2D(onHit, patch2D, tol);
 }
 
 /**
@@ -231,7 +209,7 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
 }
 
 HOST DEVICE
-bool doBezierClipping2D(LocalArray<vec2f>& hits,
+bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
     const vec2f patch[16],
     float tol)
 {
@@ -250,7 +228,8 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
         } cutside;
     };
 
-    int maxDepth = 1; // we already start with one element
+    bool found = false;
+    // int maxDepth = 1; // we already start with one element
     FixedArray<State,16> S; // a stack
 
     S.push_back({
@@ -309,11 +288,11 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
             vec2f coord;
             if (triangleOriginIntersection(coord, p00, p10, p01))
             {
-                hits.push_back(e.min + coord * e.size);
+                found |= onHit(e.min + coord * e.size);
             }
             if (triangleOriginIntersection(coord, p11, p01, p10))
             {
-                hits.push_back(e.max - coord * e.size);
+                found |= onHit(e.max - coord * e.size);
             }
             S.pop_back();
             continue;
@@ -444,8 +423,11 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
 #endif
 
         float delta = upper - lower;
-        assert(delta <= 1.0f);
-        assert(lower >= 0.0f && upper <= 1.0f);
+#if __CUDA_ARCH__ >= 500
+        __builtin_assume(delta <= 1.0f);
+        __builtin_assume(lower >= 0.0f && upper <= 1.0f);
+#endif
+
         if (delta < 0)
         { // no intersection
             S.pop_back();
@@ -482,7 +464,7 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
                 subpatchV(s1.patch, 0.5f, 1.0f);
             }
             S.push_back(std::move(s1));
-            maxDepth = std::max(maxDepth, (int) S.size());
+            // maxDepth = std::max(maxDepth, (int) S.size());
 
 #if !defined(__CUDA_ARCH__)
             if (S.size() > 32)
@@ -519,7 +501,7 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
     }
     while (!S.empty());
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) && defined(SPL_BC_HEATMAP)
     if (auto m = rt::g_BezierClippingHeatMap)
     {
         auto i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -536,7 +518,7 @@ bool doBezierClipping2D(LocalArray<vec2f>& hits,
     }
 #endif
 
-    return !hits.empty();
+    return found;
 }
 
 } // namespace cg::spline

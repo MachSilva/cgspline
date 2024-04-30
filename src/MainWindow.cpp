@@ -154,7 +154,9 @@ void MainWindow::initializeScene()
     // auto obj = createCameraObject(aspect, "Main Camera");
     // obj->transform()->setLocalPosition({0,0,10});
 
-    obj = createLightObject(Light::Type::Directional, "The Light");
+    auto light = Ref(new Light());
+    light->color = Color(0.4f, 0.4f, 0.4f);
+    obj = createObject("The Light", graph::LightProxy::New(*light));
     obj->transform()->setLocalEulerAngles({50,130,0});
 
     // createPrimitiveObject(*GLGraphics3::box(), "Box");

@@ -5,6 +5,7 @@
 #include <geometry/Intersection.h>
 #include <cuda/std/concepts>
 #include "ArrayAdaptor.h"
+#include "rt/Intersection.h"
 
 #define _SPL_DISABLED_WHILE_RANGES_NOT_IMPLEMENTED_FOR_LIBCUXX
 
@@ -13,14 +14,13 @@
 #define SPL_MAX_LOCAL_ARRAY_SIZE 16U
 
 // Enable this do enable Bézier Clipping statistics
+// @deprecated do not enable
 // #define SPL_BC_STATS
 
 // Except where noted, the patches are assumed to be bicubic Bézier patches.
 
 namespace cg::spline
 {
-
-static constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
 
 template<typename T>
 using LocalArray = FixedArray<T,SPL_MAX_LOCAL_ARRAY_SIZE>;
@@ -170,14 +170,12 @@ protected:
 template<typename vec, typename real = typename vec::value_type>
 _SPL_CONSTEXPR_ATTR vec& deCasteljau(vec p[4], real u)
 {
-    p[0] += u * (p[1] - p[0]);
-    p[1] += u * (p[2] - p[1]);
-    p[2] += u * (p[3] - p[2]);
+    // deCasteljau algorithm (The NURBS Book, page 24)
+    const real t = 1 - u;
 
-    p[0] += u * (p[1] - p[0]);
-    p[1] += u * (p[2] - p[1]);
-
-    p[0] += u * (p[1] - p[0]);
+    for (unsigned k = 1; k < 4; ++k)
+        for (unsigned i = 0; i < 4 - k; ++i)
+            p[i] = t * p[i] + u * p[i + 1];
     return p[0];
 }
 
@@ -187,19 +185,75 @@ _SPL_CONSTEXPR_ATTR vec& deCasteljau(vec p[4], real u)
 template<typename vec, typename real = typename vec::value_type>
 _SPL_CONSTEXPR_ATTR vec& deCasteljauDx(vec p[4], real u)
 {
-    p[0] = p[1] - p[0];
-    p[1] = p[2] - p[1];
-    p[2] = p[3] - p[2];
+    const real t = 1 - u;
 
-    p[0] += u * (p[1] - p[0]);
-    p[1] += u * (p[2] - p[1]);
-    
-    p[0] += u * (p[1] - p[0]);
+    for (unsigned i = 1; i < 4; ++i)
+        p[i - 1] = p[i] - p[i - 1];
+
+    for (unsigned k = 2; k < 4; ++k)
+        for (unsigned i = 0; i < 4 - k; ++i)
+            p[i] = t * p[i] + u * p[i + 1];
     return p[0];
 }
 
-// vec4f derivativeU(const PatchRef<vec4f,uint32_t> &s, float u, float v);
-// vec4f derivativeV(const PatchRef<vec4f,uint32_t> &s, float u, float v);
+template<surface_cage S, typename real = S::point_type::value_type>
+_SPL_CONSTEXPR_ATTR
+auto interpolate(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
+{
+    using vec = std::remove_cvref_t<typename S::point_type>;
+    vec p[4];
+    vec q[4];
+
+    const real t = 1 - u;
+    for (unsigned j = 0; j < 4; j++)
+    {
+        for (unsigned i = 0; i < 4; ++i)
+            p[i] = s.point(i, j);
+        q[j] = deCasteljau(p, u);
+    }
+    return deCasteljau(q, v);
+}
+
+template<surface_cage S, typename real = S::point_type::value_type>
+_SPL_CONSTEXPR_ATTR
+auto derivativeU(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
+{
+    using vec = std::remove_cvref_t<typename S::point_type>;
+    vec p[4];
+    vec q[4];
+
+    for (auto j = 0; j < 4; j++)
+    {
+        for (auto i = 0; i < 4; i++)
+            p[i] = s.point(i, j);
+        q[j] = deCasteljauDx(p, u);
+    }
+
+    // Normal not normalized.
+    return deCasteljau(q, v);
+}
+
+template<surface_cage S, typename real = S::point_type::value_type>
+_SPL_CONSTEXPR_ATTR
+auto derivativeV(const S& s, real u, real v) ->
+    std::remove_cvref_t<typename S::point_type>
+{
+    using vec = std::remove_cvref_t<typename S::point_type>;
+    vec p[4];
+    vec q[4];
+
+    for (auto i = 0; i < 4; i++)
+    {
+        for (auto j = 0; j < 4; j++)
+            q[j] = s.point(i, j);
+        p[i] = deCasteljauDx(q, v);
+    }
+
+    // Normal not normalized.
+    return deCasteljau(p, u);
+}
 
 /**
  * Compute Bézier surface normal at coordinates ( @a u , @a v ).
@@ -437,16 +491,24 @@ Bounds3<real> subpatchBoundingbox(
  * @brief Performs Bézier clipping on an already projected non-rational patch.
  *        Intersection points lie in the origin (0,0) of the projected space.
  * 
- * @param [out] hits Output vector to store all the intersection coordinates.
+ * @param onHit Callback to receive all the intersection coordinates.
  * @param patch Bézier patch in 2D with control points (x, y).
  * @param tol Required precision for each dimension.
  * @retval Returns if an intersection was found.
  */
 HOST DEVICE
-bool doBezierClipping2D(LocalArray<vec2f>& hits,
+bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
     const vec2f patch[16],
     float tol = 0x1p-12f);
 
+// HOST DEVICE
+// bool doBezierClipping(rt::Intersection& hit,
+//     const rt::Ray& ray,
+//     const vec4f buffer[],
+//     const uint32_t patch[16],
+//     float tol = 0x1p-12f);
+
+// Ray represented only the direction vector
 HOST DEVICE
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
@@ -467,6 +529,8 @@ bool doSubdivision(Intersection& hit,
  */
 namespace ext
 {
+
+static constexpr auto MAX_POINTS = SPL_DERIVATIVE_MAXPOINTS;
 
 #ifndef _SPL_DISABLED_WHILE_RANGES_NOT_IMPLEMENTED_FOR_LIBCUXX
 template<std::ranges::random_access_range V,
@@ -625,10 +689,6 @@ auto derivativeV(const S& s, real u, real v) ->
 // }
 
 } // namespace ext
-
-using ext::interpolate;
-using ext::derivativeU;
-using ext::derivativeV;
 
 // Used once as debug code
 #ifdef SPL_BC_STATS

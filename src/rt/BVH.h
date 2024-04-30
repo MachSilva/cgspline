@@ -76,13 +76,13 @@ struct BVH
         std::function<bool(const Ray&, uint32_t index)>
             intersectfn) const;
 
-    template<std::invocable<Intersection&,const Ray&,uint32_t> Fn>
     __host__ __device__
-    bool hashIntersect(Intersection& hit, const Ray&, Fn intersectfn) const;
+    bool hashIntersect(Intersection& hit, const Ray&,
+        std::predicate<Intersection&,const Ray&,uint32_t> auto intersectfn) const;
 
-    template<std::regular_invocable<const Ray&,uint32_t> Fn>
     __host__ __device__
-    bool hashIntersect(const Ray&, Fn intersectfn) const;
+    bool hashIntersect(const Ray&,
+        std::predicate<const Ray&,uint32_t> auto intersectfn) const;
 
 private:
     polymorphic_allocator<Node> _alloc;
@@ -164,10 +164,9 @@ bool _node_intersect(float& tMin, float& tMax, const Bounds3f& bounds,
     return tMin < tMax && tMax > 0.0001f;
 }
 
-template<std::invocable<Intersection&,const Ray&,uint32_t> Fn>
 __host__ __device__
 bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
-    Fn intersectfn) const
+    std::predicate<Intersection&,const Ray&,uint32_t> auto intersectfn) const
 {
     const vec3f D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
@@ -286,10 +285,9 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
     return result;
 }
 
-
-template<std::regular_invocable<const Ray&,uint32_t> Fn>
 __host__ __device__
-bool BVH::hashIntersect(const Ray& ray, Fn intersectfn) const
+bool BVH::hashIntersect(const Ray& ray,
+    std::predicate<const Ray&,uint32_t> auto intersectfn) const
 {
     const vec3f D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
