@@ -60,6 +60,17 @@ static inline float D(float dotNH, float r)
     return a2 / (std::numbers::pi_v<float> * d*d);
 }
 
+__host__ __device__
+static inline float BRDF_microfacet(
+    float dotNV,
+    float dotNL,
+    float dotNH,
+    float roughness)
+{
+    return G(dotNL, dotNV, roughness) * D(dotNH, roughness)
+        / (4 * dotNL * dotNV);
+}
+
 // Schlick's approximation for Fresnel reflectance for each wavelength
 __host__ __device__
 static inline vec3f schlick(const vec3f& R0, float dotLH)
@@ -67,6 +78,14 @@ static inline vec3f schlick(const vec3f& R0, float dotLH)
     float b = 1 - dotLH;
     float b2 = b*b;
     return R0 + (vec3f(1) - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
+}
+
+__host__ __device__
+static inline float schlick(float R0, float dotLH)
+{
+    float b = 1 - dotLH;
+    float b2 = b*b;
+    return R0 + (1 - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
 }
 
 // Original Fresnel reflectance for each wavelength

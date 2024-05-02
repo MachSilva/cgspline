@@ -41,6 +41,9 @@ static inline char getSeverityLetter(Severity s)
 
 std::ostreambuf_iterator<char> StdLog::log(Severity s)
 {
+    if (s == eInfo)
+        return std::ostreambuf_iterator<char>(_stream);
+
     return std::format_to(
         std::ostreambuf_iterator<char>(_stream),
         "[{:8}] ",

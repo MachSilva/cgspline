@@ -305,22 +305,6 @@ void MainWindow::controlWindow()
 
     ImGui::Separator();
 
-    const char* items[] = {
-        "Select",
-        "Primitive Inspect",
-        "Normal Inspect"
-    };
-    CursorMode modes[] = {
-        Select,
-        PrimitiveInspect,
-        NormalInspect,
-    };
-    int mode = _state.cursorMode;
-    if (ImGui::Combo("Cursor Mode", &mode, items, std::size(items)))
-        _state.cursorMode = modes[mode];
-
-    ImGui::Separator();
-
     ImGui::Text("Color Encoding: %s",
         _data.windowColorEncoding == GL_SRGB ? "sRGB" : "Linear");
     ImGui::Text("Component Type: %s",
@@ -453,6 +437,42 @@ void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
 void MainWindow::workbenchWindow()
 {
     ImGui::Begin("Workbench");
+
+    constexpr const char* items[]
+    {
+        "Select",
+        "Primitive Inspect",
+        "Normal Inspect"
+    };
+    constexpr const char* keybinding[] { "F1", "F2", "F3" };
+    constexpr CursorMode modes[]
+    {
+        Select,
+        PrimitiveInspect,
+        NormalInspect,
+    };
+
+    if (ImGui::CollapsingHeader("Cursor Mode", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        for (int i = 0; i < std::size(items); i++)
+        {
+            bool selected = _state.cursorMode == modes[i];
+            if (ImGui::Selectable(items[i], selected,
+                ImGuiSelectableFlags_AllowItemOverlap))
+                _state.cursorMode = modes[i];
+            ImGui::SameLine();
+            auto s = keybinding[i];
+            auto w = ImGui::CalcTextSize(s).x + 2 * ImGui::GetStyle().FramePadding.x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - w);
+            ImGui::Text(s);
+        }
+    }
+
+
+    ImGui::Separator();
+
+    if (ImGui::Button("Back to Editor"))
+        _image = nullptr;
 
     auto& selectedItem = _image;
     for (auto& [k, item] : _workbench2D)

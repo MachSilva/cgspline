@@ -159,7 +159,9 @@ void MainWindow::initializeScene()
     obj = createObject("The Light", graph::LightProxy::New(*light));
     obj->transform()->setLocalEulerAngles({50,130,0});
 
-    // createPrimitiveObject(*GLGraphics3::box(), "Box");
+    obj = createPrimitiveObject(*GLGraphics3::box(), "Box");
+    obj->transform()->setLocalScale({10, 0.5f, 10});
+    obj->transform()->setPosition({0, -1, 0});
 
     // Load surfaces
     std::tuple<const char*, vec3f, vec3f, float> surfaces[] = {
@@ -402,10 +404,10 @@ void MainWindow::convertScene()
         {
             auto& data = p->mesh()->data();
             auto& mesh = _rtScene->meshes.emplace_back();
-            auto indexCount = 3 * data.triangleCount;
+            mesh.indexCount = 3 * data.triangleCount;
             mesh.vertices = _rtScene->createBuffer<vec3f>(data.vertexCount);
             mesh.normals = _rtScene->createBuffer<vec3f>(data.vertexCount);
-            mesh.indices = _rtScene->createBuffer<uint32_t>(indexCount);
+            mesh.indices = _rtScene->createBuffer<uint32_t>(mesh.indexCount);
             std::copy_n(data.vertices, data.vertexCount, mesh.vertices);
             std::copy_n(data.vertexNormals, data.vertexCount, mesh.normals);
             for (int i = 0, j = 0; i < data.triangleCount; i++, j += 3)
@@ -414,6 +416,9 @@ void MainWindow::convertScene()
                 mesh.indices[j+1] = data.triangles[i].v[1];
                 mesh.indices[j+2] = data.triangles[i].v[2];
             }
+
+            auto& bvh = _rtScene->bvhs.emplace_back(memoryResource);
+            mesh.buildBVH(bvh);
 
             objects.get<Key::ePrimitive>(last) = &mesh;
             objects.get<Key::ePrimitiveType>(last) = PrType::eMesh;
@@ -624,8 +629,6 @@ bool MainWindow::onKeyPress(int key, int p2)
 
     return SceneWindow::onKeyPress(key, p2);
 }
-
-// bool MainWindow::
 
 bool MainWindow::onMouseLeftPress(int x, int y)
 {

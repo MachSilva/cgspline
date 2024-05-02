@@ -72,6 +72,8 @@ struct Mesh final : public Primitive
     HOST DEVICE
     vec3f normal(const Intersection& hit) const override;
 
+    void buildBVH(BVH& bvh);
+
     /**
      * Mesh is formed by triangles.
      * Each triangle is a set of 3 vertices.

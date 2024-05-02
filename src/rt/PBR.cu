@@ -17,14 +17,12 @@ inline vec3f BRDF_specular(
     const vec3f& N,
     float dotNV,
     float dotNL,
-    const Material& m)
+    float roughness,
+    const vec3f& R0)
 {
     vec3f H = (L + V).versor();
-    return (
-        schlick(m.specular, vec3f::dot(L, H))
-        * G(dotNL, dotNV, m.roughness)
-        * D(vec3f::dot(H, N), m.roughness)
-    ) * (1 / (4 * dotNL * dotNV));
+    return schlick(R0, vec3f::dot(L, H))
+        * BRDF_microfacet(dotNV, dotNL, vec3f::dot(H, N), roughness);
 }
 
 __host__ __device__
@@ -38,7 +36,7 @@ vec3f BRDF(
     const Material& m)
 {
     vec3f d = BRDF_diffuse(m);
-    vec3f s = BRDF_specular(L, V, N, dotNV, dotNL, m);
+    vec3f s = BRDF_specular(L, V, N, dotNV, dotNL, m.roughness, m.specular);
     return I * mix(d, s, m.metalness) * dotNL;
 }
 

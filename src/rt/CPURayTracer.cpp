@@ -156,7 +156,7 @@ vec3f CPURayTracer::trace(const Ray& ray, vec3f attenuation, int depth) const
     _status.rays.fetch_add(1, std::memory_order_relaxed);
 
     if (nearestObject < 0)
-        return miss();
+        return attenuation * miss();
 
     _status.hits.fetch_add(1, std::memory_order_relaxed);
 
@@ -297,7 +297,8 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
 
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
-    vec3f reflectance = schlick(m.specular, dotNV);
+    float r = m.roughness;
+    vec3f reflectance = (1 - r*r) * schlick(m.specular, dotNV);
     vec3f a = attenuation * reflectance;
     if (a.max() > minRadiance)
     {

@@ -54,20 +54,21 @@ struct RayTracer::Context
     }
 };
 
+using Context = RayTracer::Context;
+using Key = Scene::Key;
+
+__global__ void render(Context*);
+
 RayTracer::RayTracer()
 {
     CUDA_CHECK(cudaMalloc(&_ctx, sizeof (Context)));
+    CUDA_CHECK(cudaFuncSetCacheConfig(&rt::render, cudaFuncCachePreferL1));
 }
 
 RayTracer::~RayTracer()
 {
     cudaFree(_ctx);
 }
-
-using Context = RayTracer::Context;
-using Key = Scene::Key;
-
-__global__ void render(Context*);
 
 void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     cudaStream_t stream)
@@ -128,7 +129,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
 }
 
-__global__
+__global__ __launch_bounds__(64)
 void render(Context* ctx)
 {
     auto i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -341,20 +342,20 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
 
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
-    vec3f reflectance = schlick(m.specular, dotNV);
+    float r = m.roughness;
+    vec3f reflectance = (1 - r*r) * schlick(m.specular, dotNV);
     vec3f a = payload.attenuation * reflectance;
     if (a.max() <= minRadiance)
         return false;
 
     // I = -V
     vec3f R = (-V) + 2 * dotNV * N;
-    Ray r
+    payload.ray =
     {
         .origin = P + this->options.eps * R,
         .direction = R,
         .tMax = numeric_limits<float>::infinity()
     };
-    payload.ray = r;
     payload.attenuation = a;
     payload.depth = payload.depth - 1;
     // color += m.opacity * trace(r, attenuation, depth - 1);

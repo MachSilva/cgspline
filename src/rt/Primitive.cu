@@ -1,5 +1,6 @@
 #include "Primitive.h"
 
+#include <geometry/Triangle.h>
 #include <functional>
 #include "../Spline.h"
 
@@ -85,19 +86,75 @@ vec3f Mesh::normal(const Intersection& hit) const
     return rt::normal(*this, hit);
 }
 
-HOST DEVICE bool intersect(const Mesh&, Intersection&, const Ray&)
+void Mesh::buildBVH(BVH& bvh)
 {
-    return {};
+    Buffer<BVH::ElementData> data (this->indexCount / 3);
+    for (int i = 0; i < data.size(); i++)
+    {
+        auto& e = data[i];
+        const uint32_t* v = this->indices + 3*i;
+        const vec3f p0 = this->vertices[v[0]];
+        const vec3f p1 = this->vertices[v[1]];
+        const vec3f p2 = this->vertices[v[2]];
+        e.index = i;
+        e.centroid = (1.0f / 3.0f) * (p0 + p1 + p2);
+        e.bounds = {};
+        e.bounds.inflate(p0);
+        e.bounds.inflate(p1);
+        e.bounds.inflate(p2);
+    }
+    bvh.build(data, 16);
+    this->bvh = &bvh;
 }
 
-HOST DEVICE bool intersect(const Mesh&, const Ray&)
+HOST DEVICE bool intersect(const Mesh& m, Intersection& hit0, const Ray& ray0)
 {
-    return {};
+    auto fn = [&m](Intersection& hit, const Ray& ray, uint32_t index)
+    {
+        cg::Ray3f anotherRay { ray.origin, ray.direction };
+        anotherRay.tMin = ray.tMin;
+        anotherRay.tMax = fmin(ray.tMax, hit.t);
+        const uint32_t* v = m.indices + 3*index;
+        const auto& p0 = m.vertices[v[0]];
+        const auto& p1 = m.vertices[v[1]];
+        const auto& p2 = m.vertices[v[2]];
+        vec3f p;
+        float t;
+        if (triangle::intersect(anotherRay, p0, p1, p2, p, t))
+        {
+            hit.index = index;
+            hit.object = &m;
+            hit.t = t;
+            hit.coordinates = p;
+            return true;
+        }
+        return false;
+    };
+    return m.bvh->hashIntersect(hit0, ray0, fn);
 }
 
-HOST DEVICE vec3f normal(const Mesh&, const Intersection&)
+HOST DEVICE bool intersect(const Mesh& m, const Ray& ray0)
 {
-    return {};
+    auto fn = [&m](const Ray& ray, uint32_t index)
+    {
+        cg::Ray3f anotherRay { ray.origin, ray.direction };
+        anotherRay.tMin = ray.tMin;
+        anotherRay.tMax = ray.tMax;
+        const uint32_t* v = m.indices + 3*index;
+        const auto& p0 = m.vertices[v[0]];
+        const auto& p1 = m.vertices[v[1]];
+        const auto& p2 = m.vertices[v[2]];
+        vec3f p;
+        float t;
+        return triangle::intersect(anotherRay, p0, p1, p2, p, t);
+    };
+    return m.bvh->hashIntersect(ray0, fn);
+}
+
+HOST DEVICE vec3f normal(const Mesh& m, const Intersection& hit)
+{
+    const uint32_t* v = m.indices + 3*hit.index;
+    return triangle::normal(m.vertices[v[0]], m.vertices[v[1]], m.vertices[v[2]]);
 }
 
 // BezierSurface

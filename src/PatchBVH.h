@@ -7,16 +7,6 @@
 namespace cg
 {
 
-namespace spline
-{
-
-bool bezierClipping(std::span<vec4f> vertices,
-    std::span<uint32_t,16> patch,
-    const Ray3f&,
-    Intersection&);
-
-} // namespace spline
-
 /**
  * @brief BVH for surface objects consisting of multiple patches.
  */
