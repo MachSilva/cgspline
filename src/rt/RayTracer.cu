@@ -129,7 +129,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
 }
 
-__global__ __launch_bounds__(64)
+__global__ //__launch_bounds__(64)
 void render(Context* ctx)
 {
     auto i = blockIdx.x * blockDim.x + threadIdx.x;

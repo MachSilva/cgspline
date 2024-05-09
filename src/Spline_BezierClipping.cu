@@ -7,6 +7,8 @@
 #include <cuda/std/utility>
 #include "rt/Frame.h"
 
+// #define SPL_BC_HEATMAP
+
 namespace cg::rt
 {
 
@@ -78,6 +80,20 @@ float distance(const vec2f& N, const vec2f& O, const vec2f& P)
 {
     return N.dot(P - O);
 }
+
+/**
+ * @brief Performs Bézier clipping on an already projected non-rational patch.
+ *        Intersection points lie in the origin (0,0) of the projected space.
+ * 
+ * @param onHit Callback to receive all the intersection coordinates.
+ * @param patch Bézier patch in 2D with control points (x, y).
+ * @param tol Required precision for each dimension.
+ * @retval Returns if an intersection was found.
+ */
+HOST DEVICE
+bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
+    const vec2f patch[16],
+    float tol = 0x1p-12f);
 
 HOST DEVICE
 bool doBezierClipping(Intersection& hit,
@@ -208,13 +224,39 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
     return true;
 }
 
-HOST DEVICE
-bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
+static HOST DEVICE
+bool approximateIntersection(std::predicate<vec2f> auto onHit,
+    const Patch<vec2f>& p, vec2f pmin, vec2f pmax, vec2f psize)
+{
+    bool found = false;
+    // there are cases where is impossible to clip the patch because
+    // it is already so small that it is a plane and the intersection
+    // has been already found
+    // thus, the infinite subdivision must be stopped
+
+    // intersect triangles to avoid multiple intersection problem
+    auto p00 = p.point(0,0);   // (u,v) = (0,0)
+    auto p10 = p.point(3,0);   // (1,0)
+    auto p01 = p.point(0,3);   // (0,1)
+    auto p11 = p.point(3,3);   // (1,1)
+
+    vec2f coord;
+    if (triangleOriginIntersection(coord, p00, p10, p01))
+    {
+        found |= onHit(pmin + coord * psize);
+    }
+    if (triangleOriginIntersection(coord, p11, p01, p10))
+    {
+        found |= onHit(pmax - coord * psize);
+    }
+    return found;
+}
+
+static HOST DEVICE
+bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
     const vec2f patch[16],
     float tol)
 {
-    // constexpr float eps = numeric_limits<float>::epsilon();
-    namespace std = ::cuda::std;
     struct State
     {
         vec2f patch[16];
@@ -228,9 +270,16 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
         } cutside;
     };
 
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
+    int maxDepth = 1; // we already start with one element
+#endif
     bool found = false;
-    // int maxDepth = 1; // we already start with one element
+#if !defined(__CUDA_ARCH__)
+    std::vector<State> S;
+#else
+    namespace std = ::cuda::std;
     FixedArray<State,16> S; // a stack
+#endif
 
     S.push_back({
         .min = {0,0}, .max = {1,1},
@@ -274,26 +323,7 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
         float d1 = (p.point(3,3) - p.point(0,0)).length();
         if (d0 < tol && d1 < tol)
         {
-            // there are cases where is impossible to clip the patch because
-            // it is already so small that it is a plane and the intersection
-            // has been already found
-            // thus, the infinite subdivision must be stopped
-
-            // intersect triangles to avoid multiple intersection problem
-            auto p00 = p.point(0,0);   // (u,v) = (0,0)
-            auto p10 = p.point(3,0);   // (1,0)
-            auto p01 = p.point(0,3);   // (0,1)
-            auto p11 = p.point(3,3);   // (1,1)
-
-            vec2f coord;
-            if (triangleOriginIntersection(coord, p00, p10, p01))
-            {
-                found |= onHit(e.min + coord * e.size);
-            }
-            if (triangleOriginIntersection(coord, p11, p01, p10))
-            {
-                found |= onHit(e.max - coord * e.size);
-            }
+            found |= approximateIntersection(onHit, p, e.min, e.max, e.size);
             S.pop_back();
             continue;
         }
@@ -423,10 +453,8 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
 #endif
 
         float delta = upper - lower;
-#if __CUDA_ARCH__ >= 500
-        __builtin_assume(delta <= 1.0f);
-        __builtin_assume(lower >= 0.0f && upper <= 1.0f);
-#endif
+        assert(delta <= 1.0f);
+        assert(lower >= 0.0f && upper <= 1.0f);
 
         if (delta < 0)
         { // no intersection
@@ -464,16 +492,10 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
                 subpatchV(s1.patch, 0.5f, 1.0f);
             }
             S.push_back(std::move(s1));
-            // maxDepth = std::max(maxDepth, (int) S.size());
 
-#if !defined(__CUDA_ARCH__)
-            if (S.size() > 32)
-            {
-                fprintf(stderr,
-                    "warning: the stack has too many elements (%zu)\n", S.size());
-                break;
-            }
-#endif            
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
+            maxDepth = std::max(maxDepth, (int) S.size());
+#endif
         }
         else
         { // clip
@@ -501,16 +523,7 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
     }
     while (!S.empty());
 
-#if defined(__CUDA_ARCH__) && defined(SPL_BC_HEATMAP)
-    if (auto m = rt::g_BezierClippingHeatMap)
-    {
-        auto i = blockIdx.x * blockDim.x + threadIdx.x;
-        auto j = blockIdx.y * blockDim.y + threadIdx.y;
-        m->at(i, j) = std::max(m->at(i, j), (uint32_t) maxDepth);
-    }
-#endif
-
-#if !defined(__CUDA_ARCH__) && defined(SPL_BC_STATS)
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
     if (searchData)
     {
         auto& m = searchData->maxStackDepth;
@@ -519,6 +532,285 @@ bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
 #endif
 
     return found;
+}
+
+
+constexpr DEVICE
+void patchCopy(vec2f* q, const vec2f patch[16], vec2f cmin, vec2f cmax)
+{
+    for (int i = 0; i < 16; i++)
+        q[i] = patch[i];
+
+    subpatchU(q, cmin.x, cmax.x);
+    subpatchV(q, cmin.y, cmax.y);
+}
+
+static DEVICE
+bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
+    const vec2f patch[16],
+    float tol)
+{
+    namespace std = ::cuda::std;
+    struct State
+    {
+        vec2f min;
+        vec2f max;
+        enum Side
+        {
+            eU = 0,
+            eV = 1
+        } cutside;
+    };
+
+#ifdef SPL_BC_HEATMAP
+    int maxDepth = 1; // we already start with one element
+#endif
+    bool found = false;
+    FixedArray<State,16> S; // a stack
+
+    S.push_back({
+        .min = {0,0}, .max = {1,1}, .cutside = State::eU
+    });
+
+    float distancePatch[16];
+    Patch d (distancePatch);
+
+    vec2f buffer[16];
+    Patch p (buffer);
+
+    for (int i = 0; i < 16; i++)
+        buffer[i] = patch[i];
+
+    do
+    {
+        auto &e = S.back();
+        const vec2f csize = e.max - e.min;
+    
+        // check tolerance
+        float d0 = (p.point(3,0) - p.point(0,3)).length();
+        float d1 = (p.point(3,3) - p.point(0,0)).length();
+        if (d0 < tol && d1 < tol)
+        {
+            found |= approximateIntersection(onHit, p, e.min, e.max, csize);
+            S.pop_back();
+            if (!S.empty())
+            {
+                State& s = S.back();
+                patchCopy(buffer, patch, s.min, s.max);
+            }
+            continue;
+        }
+
+        vec2f L0, L1;
+        // find line L
+        if (e.cutside == State::eU)
+        {
+            L0 = p.point(0,3) - p.point(0,0);
+            L1 = p.point(3,3) - p.point(3,0);
+        }
+        else // State::eV
+        {
+            L0 = p.point(3,0) - p.point(0,0);
+            L1 = p.point(3,3) - p.point(0,3);
+        }
+        // vector parallel to the line L
+        const vec2f L = (L0 + L1).versor();
+        // vector perpendicular to the line L
+        const vec2f N = {-L.y, L.x};
+
+        // compute the distance patch
+        for (int i = 0; i < 16; i++)
+            d[i] = N.dot(p[i]);
+
+        // find regions to clip
+        constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
+        float lower = 1.0f, upper = 0.0f;
+        // compute where does the convex hull intersect the x-axis
+        float ytop[4]; // y top
+        float ybot[4]; // y bottom
+        // one branch instead of 16
+        if (e.cutside == State::eU)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                ybot[i] = ytop[i] = d.point(i,0);
+                for (int k = 1; k < 4; k++)
+                {
+                    float y = d.point(i,k);
+                    ytop[i] = fmax(ytop[i], y);
+                    ybot[i] = fmin(ybot[i], y);
+                }
+            }
+        }
+        else // State::eV
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                ybot[i] = ytop[i] = d.point(0,i);
+                for (int k = 1; k < 4; k++)
+                {
+                    float y = d.point(k,i);
+                    ytop[i] = fmax(ytop[i], y);
+                    ybot[i] = fmin(ybot[i], y);
+                }
+            }
+        }
+        // find convex hull and its intersection
+        // graham scan
+        vec2f hull[9];
+        int len = 0;
+        // first and second points
+        hull[len++] = {over3[0], ybot[0]};
+        hull[len++] = {over3[1], ybot[1]};
+        // bottom points
+        for (int i = 2; i < 4; i++)
+        {
+            vec2f P3 {over3[i], ybot[i]};
+            auto& P2 = hull[len-1];
+            auto& P1 = hull[len-2];
+            if (isCCW(P2 - P1, P3 - P1) >= 0)
+                hull[len++] = P3;
+            else
+                hull[len-1] = P3;
+        }
+        // first top point (right to left)
+        hull[len++] = {over3[3], ytop[3]};
+        // top points
+        for (int i = 2; i >= 0; i--)
+        {
+            vec2f P3 = {over3[i], ytop[i]};
+            auto& P2 = hull[len-1];
+            auto& P1 = hull[len-2];
+            if (isCCW(P2 - P1, P3 - P1) >= 0)
+                hull[len++] = P3;
+            else
+                hull[len-1] = P3;
+        }
+        // duplicate the first point to close the cycle
+        hull[len++] = hull[0];
+        // find intersection and the clip range
+        for (int i = 1; i < len; i++)
+        {
+            vec2f A = hull[i-1];
+            vec2f B = hull[i];
+            vec2f s;
+            if (xAxisIntersection(s, A, B))
+            {
+                if (s.x > s.y)
+                    std::swap(s.x, s.y);
+                lower = fmin(lower, s.x);
+                upper = fmax(upper, s.y);
+            }
+        }
+
+        // TODO Improve this step
+        if (lower <= upper)
+        { // preventing the algorithm from creating long and narrow subpatches
+            constexpr float minspan = 0.01f;
+            auto mid = 0.5f * (lower + upper);
+            if (upper - lower < minspan)
+            {
+                lower = fmax(0.0f, mid - 0.5f * minspan);
+                upper = fmin(1.0f, mid + 0.5f * minspan);
+            }
+        }
+
+        float delta = upper - lower;
+        __builtin_assume(delta <= 1.0f);
+        __builtin_assume(lower >= 0.0f && upper <= 1.0f);
+
+        if (delta < 0)
+        { // no intersection
+            S.pop_back();
+            if (!S.empty())
+            {
+                State& s = S.back();
+                patchCopy(buffer, patch, s.min, s.max);
+            }
+        }
+        else if (delta > 0.8f)
+        { // clipping too small; thus, subdivide
+            State s1;
+            if (e.cutside == State::eU)
+            {
+                float hs = 0.5f * csize.x;
+                float hx = e.min.x + hs;
+                s1.max = e.max;
+                s1.min = { hx, e.min.y };
+                e.max = { hx, e.max.y };
+                // e.min = e.min;
+                // s1.size = e.size = { hs, e.size.y };
+                s1.cutside = e.cutside = State::eV;
+                // subpatchU(buffer2, 0.0f, 0.5f);
+                subpatchU(buffer, 0.5f, 1.0f);
+            }
+            else // State::eV
+            {
+                float hs = 0.5f * csize.y;
+                float hy = e.min.y + hs;
+                s1.max = e.max;
+                s1.min = { e.min.x, hy };
+                e.max = { e.max.x, hy };
+                // e.min = e.min;
+                // s1.size = e.size = { e.size.x, hs };
+                s1.cutside = e.cutside = State::eU;
+                // subpatchV(buffer2, 0.0f, 0.5f);
+                subpatchV(buffer, 0.5f, 1.0f);
+            }
+            S.push_back(std::move(s1));
+
+#ifdef SPL_BC_HEATMAP
+            maxDepth = std::max(maxDepth, (int) S.size());         
+#endif
+        }
+        else
+        { // clip
+            if (e.cutside == State::eU)
+            {
+                float u0 = e.min.x + csize.x * lower;
+                float u1 = e.max.x - csize.x * (1.0f - upper);
+                subpatchU(buffer, lower, upper);
+                e.min.x = u0;
+                e.max.x = u1;
+                e.cutside = State::eV;
+            }
+            else // State::eV
+            {
+                float v0 = e.min.y + csize.y * lower;
+                float v1 = e.max.y - csize.y * (1.0f - upper);
+                subpatchV(buffer, lower, upper);
+                e.min.y = v0;
+                e.max.y = v1;
+                e.cutside = State::eU;
+            }
+        }
+    }
+    while (!S.empty());
+
+#ifdef SPL_BC_HEATMAP
+    if (auto m = rt::g_BezierClippingHeatMap)
+    {
+        auto i = blockIdx.x * blockDim.x + threadIdx.x;
+        auto j = blockIdx.y * blockDim.y + threadIdx.y;
+        m->at(i, j) = std::max(m->at(i, j), (uint32_t) maxDepth);
+    }
+#endif
+
+    return found;
+}
+
+HOST DEVICE
+bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
+    const vec2f patch[16],
+    float tol)
+{
+#ifndef __CUDA_ARCH__
+    return doBezierClipping2D_host(onHit, patch, tol);
+#elif __CUDA_ARCH__ >= 500
+    return doBezierClipping2D_device(onHit, patch, tol);
+#else
+#pragma error "Not yet implemented"
+#endif
 }
 
 } // namespace cg::spline

@@ -154,7 +154,7 @@ void MainWindow::initializeScene()
     // auto obj = createCameraObject(aspect, "Main Camera");
     // obj->transform()->setLocalPosition({0,0,10});
 
-    auto light = Ref(new Light());
+    Reference light = new Light();
     light->color = Color(0.4f, 0.4f, 0.4f);
     obj = createObject("The Light", graph::LightProxy::New(*light));
     obj->transform()->setLocalEulerAngles({50,130,0});

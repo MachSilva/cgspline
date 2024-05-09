@@ -487,20 +487,6 @@ Bounds3<real> subpatchBoundingbox(
     return boundingbox(subp, subp+16);
 }
 
-/**
- * @brief Performs Bézier clipping on an already projected non-rational patch.
- *        Intersection points lie in the origin (0,0) of the projected space.
- * 
- * @param onHit Callback to receive all the intersection coordinates.
- * @param patch Bézier patch in 2D with control points (x, y).
- * @param tol Required precision for each dimension.
- * @retval Returns if an intersection was found.
- */
-HOST DEVICE
-bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
-    const vec2f patch[16],
-    float tol = 0x1p-12f);
-
 // HOST DEVICE
 // bool doBezierClipping(rt::Intersection& hit,
 //     const rt::Ray& ray,

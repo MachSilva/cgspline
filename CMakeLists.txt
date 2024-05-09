@@ -19,9 +19,9 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_CUDA_ARCHITECTURES 75)
-if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-    set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")
-endif()
+# if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+#     set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")
+# endif()
 
 add_subdirectory(external/stb)
 add_subdirectory(Ds)
@@ -56,15 +56,11 @@ add_executable(cgspline
     src/rt/SoA.cpp
 )
 
-set_source_files_properties(
-    # src/Spline.cu
-    # src/Spline_BezierClipping.cu
-    # src/rt/PBR.cu
-    # src/rt/Primitive.cu
-    src/rt/RayTracer.cu
-    # src/rt/Scene.cu
-    PROPERTIES
-    COMPILE_OPTIONS "--ptxas-options;--verbose")
+target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+    -lineinfo -rdc=true -maxrregcount=128
+    --generate-code arch=compute_75,code=lto_75
+    -Xptxas=-v -Xnvlink=-dlto
+>)
 
 get_target_property(cgdemo_src cgdemo SOURCE_DIR)
 
@@ -80,8 +76,6 @@ target_sources(cgspline PRIVATE
 )
 
 target_include_directories(cgspline PRIVATE ${cgdemo_src})
-
-# target_compile_definitions(cgspline PRIVATE SPL_BC_STATS)
 
 if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
     target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)
