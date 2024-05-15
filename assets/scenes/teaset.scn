@@ -9,17 +9,15 @@ material "SilverSpecular"
   specular Silver * 0.5
 }
 
-texture "tex:env" { "../textures/je_gray_park_4k.hdr" }
+texture "je_gray_park_4k" { "../textures/je_gray_park_4k.hdr" }
 
-texture "tex:ScratchedIron:BaseColor" { "../textures/ScratchedIron_BaseColor.png" }
-texture "tex:ScratchedIron:MR" { "../textures/ScratchedIron_MetalRoughness.png" }
+texture "Metal042A:BaseColor" { "../textures/Metal042A_4K-JPG_Color.jpg" }
 
-pbrmaterial "ScratchedIron"
+pbrmaterial "Metal042A"
 {
-  color     texture "tex:ScratchedIron:BaseColor"
   metalness 1
-  roughness 1
-  texture   "tex:ScratchedIron:MR"
+  roughness 0
+  texture "Metal042A:BaseColor"
 }
 
 surface "teacup"    { bezier "../bezier/teacup" }
@@ -30,25 +28,19 @@ scene
 {
   environment
   {
-    background VeryLightGray
+    background DarkGray
     ambient DarkGray
-    texture "tex:env"
+    texture "je_gray_park_4k"
   }
 
-  object "Main Camera"
+  object "Floor"
   {
-    define pos <3,3.3,6>
-
     transform
     {
-      position pos
-      rotation <-25,20,0>
+      position <0,-0.4,0>
+      scale <10,0.4,10>
     }
-    camera
-    {
-      perspective
-      angle 40
-    }
+    //mesh "Box"
   }
 
   object "Lights"
@@ -119,7 +111,7 @@ scene
         rotation <-90,0,0>
         scale vec3(0.5)
       }
-      surface "teapot" pbrmaterial "ScratchedIron"
+      surface "teapot" pbrmaterial "Metal042A"
     }
 
     object "Teacup"

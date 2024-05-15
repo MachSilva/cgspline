@@ -70,10 +70,7 @@ Asset:
 | Texture
 
 Material:
-  MATERIAL ResourceName? MaterialDef?
-
-MaterialDef:
-  "{" MaterialItem* "}"
+  MATERIAL ResourceName "{" MaterialItem* "}"
 
 MaterialItem:
   AMBIENT Color
@@ -85,40 +82,29 @@ MaterialItem:
 | TRANSPARENCY Color
 
 PbrMaterial:
-  PBRMATERIAL ResourceName? PbrMaterialDef?
-
-PbrMaterialDef:
-  "{" PbrMaterialItem* "}"
+  PBRMATERIAL ResourceName "{" PbrMaterialItem* "}"
 
 PbrMaterialItem:
-  COLOR (Color | Texture)
+  COLOR Color
 | METALNESS Float
 | ROUGHNESS Float
-| Texture
+| TEXTURE ResourceName
+| "metal_rough_texture" ResourceName
 
 Mesh:
-  MESH ResourceName MeshDef?
-
-MeshDef:
-  "{" Filename "}"
+  MESH ResourceName "{" Filename "}"
 
 Surface:
-  SURFACE ResourceName SurfaceDef?
-
-SurfaceDef:
-  "{" SurfaceType Filename "}"
+  SURFACE ResourceName "{" SurfaceType Filename "}"
 
 SurfaceType:
   BEZIER
 
 Texture:
-  TEXTURE ResourceName TextureDef?
-
-TextureDef:
-  "{" Filename "}"
+  TEXTURE ResourceName "{" Filename "}"
 
 Scene:
-  SCENE ResourceName?
+  SCENE STRING?
   "{"
       Declaration*
       Environment?
@@ -131,7 +117,7 @@ Environment:
 EnvironmentItem:
   AMBIENT Color
 | BACKGROUND Color
-| Texture
+| TEXTURE ResourceName
 
 ObjectBlock:
   (Object | Declaration)* "}"

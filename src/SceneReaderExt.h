@@ -172,8 +172,6 @@ protected:
 
     virtual Ref<graph::Component> parseComponent(int, graph::SceneObject&);
 
-    std::variant<Color,Ref<gl::Texture>> matchColorOrTexture();
-
 private:
     SceneReaderExt* _reader;
 

@@ -163,20 +163,20 @@ SceneReaderExt::Parser::preamble()
         // Asset
         // {
         case _MATERIAL:
-            (void)matchMaterial();
+            (void)parseMaterialDefinition();
             break;
         case _PBRMATERIAL:
-            (void)matchPBRMaterial();
+            (void)parsePBRMaterialDefinition();
             break;
         case _COMPONENT:
         {
             if (_tokenValue.integer == _MESH)
-                (void)matchMesh();
+                (void)parseMeshDefinition();
             else if (_tokenValue.integer == _SURFACE)
-                (void)matchSurface();
+                (void)parseSurfaceDefinition();
         } break;
         case _TEXTURE:
-            (void)matchTexture();
+            (void)parseTextureDefinition();
             break;
         // }
         default:
@@ -226,8 +226,18 @@ SceneReaderExt::Parser::declaration()
 inline Ref<Material>
 SceneReaderExt::Parser::parseMaterialDefinition()
 {
-    Ref<Material> material = new Material(Color::black);
-    for (;;)
+    // _MATERIAL
+    advance();
+
+    auto name = matchString();
+    if (_reader->materials.contains(name))
+        error(MATERIAL_ALREADY_DEFINED, name.c_str());
+
+    match('{');
+
+    Reference material = new Material(Color::black);
+    bool item = true;
+    while (item)
         switch (_token)
         {
         case _AMBIENT:
@@ -252,12 +262,10 @@ SceneReaderExt::Parser::parseMaterialDefinition()
         case _SPECULAR:
             advance();
             material->specular = matchColor();
-            ;
             break;
         case _TRANSPARENCY:
             advance();
             material->transparency = matchColor();
-            ;
             break;
         case _IOR:
             advance();
@@ -267,28 +275,34 @@ SceneReaderExt::Parser::parseMaterialDefinition()
                 material->ior = ior;
             break;
         default:
-            return material;
+            item = false;
         }
-    return material;
+    match('}');
+    return _reader->materials[name] = material;
 }
 
 inline Ref<PBRMaterial>
 SceneReaderExt::Parser::parsePBRMaterialDefinition()
 {
+    // _PBRMATERIAL
+    advance();
+
+    auto name = matchString();
+    if (_reader->pbrMaterials.contains(name))
+        error(PBRMATERIAL_ALREADY_DEFINED, name.c_str());
+
+    match('{');
+
     auto material = Reference(new PBRMaterial);
     float value;
-    for (;;)
+    bool item = true;
+    while (item)
         switch (_token)
         {
         case _COLOR:
-        {
             advance();
-            auto result = matchColorOrTexture();
-            if (std::holds_alternative<Color>(result))
-                material->baseColor = std::get<Color>(result);
-            else
-                material->texBaseColor = std::get<Ref<gl::Texture>>(result);
-        } break;
+            material->baseColor = matchColor();
+            break;
         case _METALNESS:
             advance();
             value = matchFloat();
@@ -304,12 +318,20 @@ SceneReaderExt::Parser::parsePBRMaterialDefinition()
             material->roughness= value;
             break;
         case _TEXTURE:
-            material->texMetalRough = matchTexture()->second;
+            advance();
+            material->texBaseColor = matchTexture()->second;
             break;
+        case _NAME:
+            if (matchName() == "metal_rough_texture")
+            {
+                material->texMetalRough = matchTexture()->second;
+                break;
+            }
         default:
-            return material;
+            item = false;
         }
-    return material;
+    match('}');
+    return _reader->pbrMaterials[name] = material;
 }
 
 inline Ref<TriangleMesh>
@@ -321,62 +343,59 @@ SceneReaderExt::Parser::parseMeshDefinition()
 
 inline Ref<Surface>
 SceneReaderExt::Parser::parseSurfaceDefinition()
-try
 {
+    // _SURFACE
+    advance();
+
+    auto name = matchString();
+    if (_reader->surfaces.contains(name))
+        error(SURFACE_ALREADY_DEFINED, name.c_str());
+
+    match('{');
     match(_BEZIER);
     auto filename = matchString();
     auto file = _reader->_currentPath / filename;
 
     if (std::filesystem::exists(file) == false)
         error(FILE_DOESNT_EXIST, file.c_str());
+    
+    match('}');
 
-    return GLBezierSurface::load(file.string().c_str());
-}
-catch (const std::runtime_error& e)
-{
-    error(ASSET_PARSING_FAILED, "surface", e.what());
-    return {};
+    return _reader->surfaces[name] = GLBezierSurface::load(file.string().c_str());
 }
 
 inline Ref<gl::Texture>
 SceneReaderExt::Parser::parseTextureDefinition()
 {
+    // _TEXTURE
+    advance();
+
+    auto name = matchString();
+    if (_reader->textures.contains(name))
+        error(TEXTURE_ALREADY_DEFINED, name.c_str());
+
+    match('{');
+
     auto filename = matchString();
     auto file = _reader->_currentPath / filename;
 
     if (std::filesystem::exists(file) == false)
         error(FILE_DOESNT_EXIST, file.c_str());
 
-    return gl::Texture::from(file.string().c_str());
+    match('}');
+
+    return _reader->textures[name] = gl::Texture::from(file.string().c_str());
 }
 
 MaterialMap::iterator
 SceneReaderExt::Parser::matchMaterial()
 {
-    // _MATERIAL
-    advance();
-
     auto name = matchString();
     auto it = _reader->materials.find(name);
 
-    Ref<Material> material {};
     if (it == _reader->materials.end())
-    { // Material not found
-        if (_token == '{')
-        {
-            advance();
-            material = parseMaterialDefinition();
-            material->setName(name.c_str());
-            matchEndOfBlock();
-            it = _reader->materials.emplace(name, material).first;
-        }
-        else
-            error(COULD_NOT_FIND_MATERIAL, name.c_str());
-    }
-    else
-    { // Material found
-        if (_token == '{') // Redefinition
-            error(MATERIAL_ALREADY_DEFINED, name.c_str());
+    {
+        error(COULD_NOT_FIND_MATERIAL, name.c_str());
     }
     return it;
 }
@@ -384,137 +403,53 @@ SceneReaderExt::Parser::matchMaterial()
 PBRMaterialMap::iterator
 SceneReaderExt::Parser::matchPBRMaterial()
 {
-    // _PBRMATERIAL
-    advance();
-
     auto name = matchString();
     auto it = _reader->pbrMaterials.find(name);
 
-    Ref<PBRMaterial> material {};
     if (it == _reader->pbrMaterials.end())
-    { // PBR material not found
-        if (_token == '{')
-        {
-            advance();
-            material = parsePBRMaterialDefinition();
-            material->setName(name.c_str());
-            matchEndOfBlock();
-            it = _reader->pbrMaterials.emplace(name, material).first;
-        }
-        else
-            error(COULD_NOT_FIND_PBRMATERIAL, name.c_str());
+    {
+        error(COULD_NOT_FIND_PBRMATERIAL, name.c_str());
     }
-    else
-    { // PBR material found
-        if (_token == '{') // Redefinition
-            error(PBRMATERIAL_ALREADY_DEFINED, name.c_str());
-    }
-
     return it;
 }
 
 TriangleMeshMap::iterator
 SceneReaderExt::Parser::matchMesh()
 {
-    // _COMPONENT (_MESH)
-    advance();
-
     auto name = matchString();
     auto it = _reader->meshes.find(name);
 
-    Ref<TriangleMesh> mesh {};
     if (it == _reader->meshes.end())
-    { // Mesh not found
-        // if (_token == '{')
-        // {
-        //     // Not yet implemented
-        //     mesh = new TriangleMesh();
-        //     advance();
-        //     parseMeshDefinition(*mesh);
-        //     matchEndOfBlock();
-        //     it = _reader->meshes.emplace(name, mesh).first;
-        // }
-        // else
-            error(COULD_NOT_FIND_MESH, name.c_str());
+    {
+        error(COULD_NOT_FIND_MESH, name.c_str());
     }
-    else
-    { // Mesh found
-        if (_token == '{') // Redefinition
-            error(MESH_ALREADY_DEFINED, name.c_str());
-    }
-
     return it;
 }
 
 SurfaceMap::iterator
 SceneReaderExt::Parser::matchSurface()
 {
-    // _COMPONENT (_SURFACE)
-    advance();
-
     auto name = matchString();
     auto it = _reader->surfaces.find(name);
 
-    Ref<Surface> surface {};
     if (it == _reader->surfaces.end())
-    { // Surface not found
-        if (_token == '{')
-        {
-            advance();
-            surface = parseSurfaceDefinition();
-            matchEndOfBlock();
-            it = _reader->surfaces.emplace(name, surface).first;
-        }
-        else
-            error(COULD_NOT_FIND_SURFACE, name.c_str());
+    {
+        error(COULD_NOT_FIND_SURFACE, name.c_str());
     }
-    else
-    { // Surface found
-        if (_token == '{') // Redefinition
-            error(SURFACE_ALREADY_DEFINED, name.c_str());
-    }
-
     return it;
 }
 
 TextureMap::iterator
 SceneReaderExt::Parser::matchTexture()
 {
-    // _COMPONENT (_TEXTURE)
-    advance();
-
     auto name = matchString();
     auto it = _reader->textures.find(name);
 
-    Ref<gl::Texture> texture {};
     if (it == _reader->textures.end())
-    { // Texture not found
-        if (_token == '{')
-        {
-            advance();
-            texture = parseTextureDefinition();
-            matchEndOfBlock();
-            it = _reader->textures.emplace(name, texture).first;
-        }
-        else
-            error(COULD_NOT_FIND_TEXTURE, name.c_str());
+    {
+        error(COULD_NOT_FIND_TEXTURE, name.c_str());
     }
-    else
-    { // Texture found
-        if (_token == '{') // Redefinition
-            error(TEXTURE_ALREADY_DEFINED, name.c_str());
-    }
-
     return it;
-}
-
-inline std::variant<Color,Ref<gl::Texture>>
-SceneReaderExt::Parser::matchColorOrTexture()
-{
-    if (_token == _TEXTURE)
-        return matchTexture()->second;
-    else
-        return matchColor();
 }
 
 inline void
@@ -536,7 +471,7 @@ SceneReaderExt::Parser::parseSceneEnvironment()
         }
         else if (_token == _TEXTURE)
         {
-            // advance();
+            advance();
             _reader->environment = matchTexture()->second;
         }
         else
@@ -776,6 +711,7 @@ SceneReaderExt::Parser::matchPrimitive(int type)
 
         if (_token == _MATERIAL)
         {
+            advance();
             auto [_, material] = *matchMaterial();
             proxy->mapper()->primitive()->setMaterial(material);
         }
@@ -790,17 +726,20 @@ SceneReaderExt::Parser::matchPrimitive(int type)
     {
         Ref<SurfaceProxy> proxy {};
 
+        advance();
         auto [name, surface] = *matchSurface();
         Ref<SurfacePrimitive> primitive = new SurfacePrimitive(
             dynamic_cast<GLBezierSurface*>(surface.get()));
 
         if (_token == _MATERIAL)
         {
+            advance();
             auto [_, material] = *matchMaterial();
             primitive->setMaterial(material);
         }
         else if (_token ==_PBRMATERIAL)
         {
+            advance();
             auto [_, material] = *matchPBRMaterial();
             primitive->pbrMaterial = material;
         }

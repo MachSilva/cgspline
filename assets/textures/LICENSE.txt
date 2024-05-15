@@ -4,5 +4,9 @@ Here are a list of the files in this directory along with their licenses:
     License: CC0
     Source: https://polyhaven.com/a/je_gray_park
 
+`Metal042A_4K-JPG_Color.jpg"`:
+    License: CC0 1.0
+    Source https://ambientcg.com/view?id=Metal042A
+
 The contributors of this repository would like to thank the authors of the
 assets listed here for their work.
