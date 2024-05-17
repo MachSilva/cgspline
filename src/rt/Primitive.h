@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cinttypes>
-#include <math/Vector4.h>
 #include "BVH.h"
 #include "CUDAUtility.h"
 
@@ -22,7 +21,7 @@ struct __align__(8) Primitive
     virtual Bounds3f bounds() const = 0;
 
     HOST DEVICE
-    virtual Bounds3f bounds(const mat4f& transform) const = 0;
+    virtual Bounds3f bounds(const mat4& transform) const = 0;
 
     HOST DEVICE
     virtual bool intersect(Intersection& hit, const Ray& ray) const = 0;
@@ -31,7 +30,7 @@ struct __align__(8) Primitive
     virtual bool intersect(const Ray& ray) const = 0;
 
     HOST DEVICE
-    virtual vec3f normal(const Intersection& hit) const = 0;
+    virtual vec3 normal(const Intersection& hit) const = 0;
 };
 
 struct Sphere final : public Primitive
@@ -40,7 +39,7 @@ struct Sphere final : public Primitive
     Bounds3f bounds() const override;
 
     HOST DEVICE
-    Bounds3f bounds(const mat4f& transform) const override;
+    Bounds3f bounds(const mat4& transform) const override;
 
     HOST DEVICE
     bool intersect(Intersection& hit, const Ray& ray) const override;
@@ -49,9 +48,9 @@ struct Sphere final : public Primitive
     bool intersect(const Ray& ray) const override;
 
     HOST DEVICE
-    vec3f normal(const Intersection& hit) const override;
+    vec3 normal(const Intersection& hit) const override;
 
-    vec4f position;
+    vec4 position;
     float radius;
 };
 
@@ -61,7 +60,7 @@ struct Mesh final : public Primitive
     Bounds3f bounds() const override;
 
     HOST DEVICE
-    Bounds3f bounds(const mat4f& transform) const override;
+    Bounds3f bounds(const mat4& transform) const override;
 
     HOST DEVICE
     bool intersect(Intersection& hit, const Ray& ray) const override;
@@ -70,7 +69,7 @@ struct Mesh final : public Primitive
     bool intersect(const Ray& ray) const override;
 
     HOST DEVICE
-    vec3f normal(const Intersection& hit) const override;
+    vec3 normal(const Intersection& hit) const override;
 
     void buildBVH(BVH& bvh);
 
@@ -79,8 +78,8 @@ struct Mesh final : public Primitive
      * Each triangle is a set of 3 vertices.
      */
     const BVH* bvh;
-    vec3f* vertices;
-    vec3f* normals;
+    vec3* vertices;
+    vec3* normals;
     uint32_t* indices; // Index of the first triangle at index array.
     uint32_t indexCount;
 };
@@ -95,7 +94,7 @@ struct BezierSurface final : public Primitive
     Bounds3f bounds() const override;
 
     HOST DEVICE
-    Bounds3f bounds(const mat4f& transform) const override;
+    Bounds3f bounds(const mat4& transform) const override;
 
     HOST DEVICE
     bool intersect(Intersection& hit, const Ray& ray) const override;
@@ -104,7 +103,7 @@ struct BezierSurface final : public Primitive
     bool intersect(const Ray& ray) const override;
 
     HOST DEVICE
-    vec3f normal(const Intersection& hit) const override;
+    vec3 normal(const Intersection& hit) const override;
 
     void buildBVH(BVH& bvh);
 
@@ -112,7 +111,7 @@ struct BezierSurface final : public Primitive
     auto patchCount() const noexcept { return this->indexCount / 16; }
 
     const BVH* bvh;
-    vec4f* vertices;
+    vec4* vertices;
     uint32_t* indices; // Index of the first patch at index array.
     uint32_t indexCount;
 };
@@ -128,8 +127,8 @@ HOST DEVICE bool intersect(const Sphere&, const Ray&);
 HOST DEVICE bool intersect(const Mesh&, const Ray&);
 HOST DEVICE bool intersect(const BezierSurface&, const Ray&);
 
-HOST DEVICE vec3f normal(const Sphere&, const Intersection&);
-HOST DEVICE vec3f normal(const Mesh&, const Intersection&);
-HOST DEVICE vec3f normal(const BezierSurface&, const Intersection&);
+HOST DEVICE vec3 normal(const Sphere&, const Intersection&);
+HOST DEVICE vec3 normal(const Mesh&, const Intersection&);
+HOST DEVICE vec3 normal(const BezierSurface&, const Intersection&);
 
 } // namespace cg::rt

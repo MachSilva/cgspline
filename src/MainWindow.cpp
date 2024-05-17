@@ -154,6 +154,8 @@ void MainWindow::initializeScene()
     // auto obj = createCameraObject(aspect, "Main Camera");
     // obj->transform()->setLocalPosition({0,0,10});
 
+    _sceneEnvironment = gl::Texture::from("assets/textures/je_gray_park_4k.hdr");
+
     Reference light = new Light();
     light->color = Color(0.4f, 0.4f, 0.4f);
     obj = createObject("The Light", graph::LightProxy::New(*light));
@@ -333,7 +335,7 @@ void MainWindow::convertScene()
     std::pmr::memory_resource* memoryResource = rt::ManagedResource::instance();
     auto objCount = _scene->actorCount();
     _rtScene = std::make_unique<rt::Scene>(objCount, memoryResource);
-    _rtScene->backgroundColor = _scene->backgroundColor;
+    _rtScene->backgroundColor = vec3(_scene->backgroundColor);
 
     auto& lights = _rtScene->lights;
     lights.clear();
@@ -387,14 +389,14 @@ void MainWindow::convertScene()
         auto last = objects.size();
         objects.emplace_back();
 
-        objects.get<Key::eLocal2WorldMatrix>(last) = p->localToWorldMatrix();
-        objects.get<Key::eWorld2LocalMatrix>(last) = p->worldToLocalMatrix();
+        objects.get<Key::eLocal2WorldMatrix>(last) = mat4(p->localToWorldMatrix());
+        objects.get<Key::eWorld2LocalMatrix>(last) = mat4(p->worldToLocalMatrix());
 
         objects.get<Key::eMaterial>(last) =
         {
-            .diffuse = vec3f(m->diffuse),
-            .specular = vec3f(m->specular),
-            .transparency = vec3f(m->transparency),
+            .diffuse = vec3(m->diffuse),
+            .specular = vec3(m->specular),
+            .transparency = vec3(m->transparency),
             .metalness = m->metalness,
             .roughness = m->roughness,
             .refractiveIndex = m->ior,
@@ -405,8 +407,8 @@ void MainWindow::convertScene()
             auto& data = p->mesh()->data();
             auto& mesh = _rtScene->meshes.emplace_back();
             mesh.indexCount = 3 * data.triangleCount;
-            mesh.vertices = _rtScene->createBuffer<vec3f>(data.vertexCount);
-            mesh.normals = _rtScene->createBuffer<vec3f>(data.vertexCount);
+            mesh.vertices = _rtScene->createBuffer<vec3>(data.vertexCount);
+            mesh.normals = _rtScene->createBuffer<vec3>(data.vertexCount);
             mesh.indices = _rtScene->createBuffer<uint32_t>(mesh.indexCount);
             std::copy_n(data.vertices, data.vertexCount, mesh.vertices);
             std::copy_n(data.vertexNormals, data.vertexCount, mesh.normals);
@@ -431,7 +433,7 @@ void MainWindow::convertScene()
             auto pointsPtr = points->map(GL_READ_ONLY);
             auto indicesPtr = indices->map(GL_READ_ONLY);
             auto& surface = _rtScene->surfaces.emplace_back();
-            surface.vertices = _rtScene->createBuffer<vec4f>(points->size());
+            surface.vertices = _rtScene->createBuffer<vec4>(points->size());
             surface.indices = _rtScene->createBuffer<uint32_t>(indices->size());
             surface.indexCount = indices->size();
             std::copy_n(pointsPtr.get(), points->size(), surface.vertices);

@@ -3,14 +3,14 @@
 namespace cg::rt
 {
 
-mat4f Transform::matrix() const
+mat4 Transform::matrix() const
 {
-    return mat4f::TRS(position, rotation, scale);
+    return mat4(mat4f::TRS(position, rotation, scale));
 }
 
-mat4f Transform::inverseMatrix() const
+mat4 Transform::inverseMatrix() const
 {
-    mat3f R {rotation};
+    mat3 R {rotation};
     R[0] *= (1.0f / scale.x);
     R[1] *= (1.0f / scale.y);
     R[2] *= (1.0f / scale.z);
@@ -18,7 +18,7 @@ mat4f Transform::inverseMatrix() const
     // internal error: assertion failed at: "interpret.c", line 2607 in get_runtime_array_pos
     //           { R[0][1], R[1][1], R[2][1], 0 },
     //                          ^
-    return mat4f
+    return mat4
     { // columns
         { R[0][0], R[1][0], R[2][0], 0 },
         { R[0][1], R[1].y , R[2][1], 0 },
@@ -27,9 +27,9 @@ mat4f Transform::inverseMatrix() const
     };
 }
 
-mat3f Transform::normalMatrix() const
+mat3 Transform::normalMatrix() const
 {
-    mat3f R {rotation};
+    mat3 R {rotation};
     R[0] *= (1.0f / scale.x);
     R[1] *= (1.0f / scale.y);
     R[2] *= (1.0f / scale.z);

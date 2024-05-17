@@ -17,7 +17,7 @@ PatchBVH::PatchBVH(const GLBezierSurface* patches) : BVHBase(1)
 
     std::vector<uint32_t> indices
         (p0.get(), p0.get() + patches->indices()->size());
-    std::vector<vec4f> points
+    std::vector<vec4> points
         (p1.get(), p1.get() + patches->points()->size());
 
     _patches = new BezierSurface(std::move(points), std::move(indices));

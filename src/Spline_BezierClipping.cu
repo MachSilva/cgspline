@@ -6,6 +6,7 @@
 #include <cuda/std/limits>
 #include <cuda/std/utility>
 #include "rt/Frame.h"
+#include "SplineMat.h"
 
 // #define SPL_BC_HEATMAP
 
@@ -29,28 +30,6 @@ bool g_BezierClippingEnable = true;
 } // namespace stats
 #endif
 
-mat3f rotation(const vec3f& v, float angle)
-{
-    const auto c = cosf(angle);
-    const auto s = sinf(angle);
-    const auto c1 = 1.0f - c;
-    const auto xx = v.x * v.x;
-    const auto yy = v.y * v.y;
-    const auto zz = v.z * v.z;
-    const auto xy = v.x * v.y;
-    const auto xz = v.x * v.z;
-    const auto yz = v.y * v.z;
-    const auto sx = s * v.x;
-    const auto sy = s * v.y;
-    const auto sz = s * v.z;
-    return mat3f
-    { // columns
-        {c1 * xx + c,  c1 * xy + sz, c1 * xz - sy},
-        {c1 * xy - sz, c1 * yy + c,  c1 * yz + sx},
-        {c1 * xz + sy, c1 * yz - sx, c1 * zz + c}
-    };
-}
-
 /**
  * @brief Computes the distance between a point P and a plane represented by the
  *        normal vector N and origin O.
@@ -61,7 +40,7 @@ mat3f rotation(const vec3f& v, float angle)
  * @return float The computed distance
  */
 _SPL_CONSTEXPR_ATTR
-float distance(const vec3f& N, const vec3f& O, const vec3f& P)
+float distance(const vec3& N, const vec3& O, const vec3& P)
 {
     return N.dot(P - O);
 }
@@ -76,7 +55,7 @@ float distance(const vec3f& N, const vec3f& O, const vec3f& P)
  * @return float The computed distance
  */
 _SPL_CONSTEXPR_ATTR
-float distance(const vec2f& N, const vec2f& O, const vec2f& P)
+float distance(const vec2& N, const vec2& O, const vec2& P)
 {
     return N.dot(P - O);
 }
@@ -91,29 +70,29 @@ float distance(const vec2f& N, const vec2f& O, const vec2f& P)
  * @retval Returns if an intersection was found.
  */
 HOST DEVICE
-bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
-    const vec2f patch[16],
+bool doBezierClipping2D(std::predicate<vec2> auto onHit,
+    const vec2 patch[16],
     float tol = 0x1p-12f);
 
 HOST DEVICE
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
-    const vec4f buffer[],
+    const vec4 buffer[],
     const uint32_t patch[16],
     float tol)
 {
     // project patch into a 2D plane perpendicular to the ray direction
-    vec2f patch2D[16];
+    vec2 patch2D[16];
 
     // find two planes whose intersection is a line that contains the ray
     const auto& d = ray.direction;
-    const vec3f axis0 = d.cross(d + vec3f{0, 0, 10.f}).versor();
-    const vec3f axis1 = d.cross(axis0).versor();
+    const vec3 axis0 = d.cross(d + vec3{0, 0, 10.f}).versor();
+    const vec3 axis1 = d.cross(axis0).versor();
 
     for (int i = 0; i < 16; i++)
     {
         const auto& P = buffer[patch[i]];
-        const vec3f Q {P.x, P.y, P.z};
+        const vec3 Q {P.x, P.y, P.z};
         patch2D[i] =
         {
             distance(axis0, ray.origin, Q),
@@ -122,14 +101,14 @@ bool doBezierClipping(Intersection& hit,
     }
 
     PatchRef S (buffer, patch);
-    auto onHit = [&](vec2f e) -> bool
+    auto onHit = [&](vec2 e) -> bool
     {
         auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
         float t = V.length();
         if (t < hit.distance && V.dot(ray.direction) > 0)
         {
             hit.distance = t;
-            hit.p = e;
+            hit.p = {e.x, e.y};
             return true;
         }
         return false;
@@ -149,7 +128,7 @@ bool doBezierClipping(Intersection& hit,
  * @return false No intersection
  */
 _SPL_CONSTEXPR_ATTR
-bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
+bool xAxisIntersection(vec2& result, const vec2 A, const vec2 B)
 {
     constexpr float eps = numeric_limits<float>::epsilon();
     // find where does the x-axis intersects with points A and B
@@ -182,23 +161,23 @@ bool xAxisIntersection(vec2f& result, const vec2f A, const vec2f B)
 // clockwise by less than 180º; otherwise, returns a negative value; or zero
 // if both vectors are parallel.
 _SPL_CONSTEXPR_ATTR
-float isCCW(vec2f P, vec2f Q)
+float isCCW(vec2 P, vec2 Q)
 {
     return P.x*Q.y - P.y*Q.x;
 }
 
 // Returns a vector perpendicular to the segment AB. A and B are points.
 _SPL_CONSTEXPR_ATTR
-vec2f perpendicular(vec2f A, vec2f B)
+vec2 perpendicular(vec2 A, vec2 B)
 {
     return {A.y - B.y, B.x - A.x}; // rotate (B - A) by 90° degrees ccw
 }
 
 static HOST DEVICE
-bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
+bool triangleOriginIntersection(vec2 &coord, vec2 P, vec2 A, vec2 B)
 {
-    vec2f p = A - P;
-    vec2f q = B - P;
+    vec2 p = A - P;
+    vec2 q = B - P;
     float det = p.x*q.y - q.x*p.y;
 
     // `det` will be often small (< 1e-7) but not zero
@@ -209,8 +188,8 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
     det = 1.0f / det;
 
     // 2x2 inversion matrix
-    vec2f m0 = vec2f( q.y, -q.x); // first line
-    vec2f m1 = vec2f(-p.y,  p.x); // second line
+    vec2 m0 = vec2( q.y, -q.x); // first line
+    vec2 m1 = vec2(-p.y,  p.x); // second line
 
     auto u = det * m0.dot(-P);
     if (u < 0 || u > 1)
@@ -225,8 +204,8 @@ bool triangleOriginIntersection(vec2f &coord, vec2f P, vec2f A, vec2f B)
 }
 
 static HOST DEVICE
-bool approximateIntersection(std::predicate<vec2f> auto onHit,
-    const Patch<vec2f>& p, vec2f pmin, vec2f pmax, vec2f psize)
+bool approximateIntersection(std::predicate<vec2> auto onHit,
+    const Patch<vec2>& p, vec2 pmin, vec2 pmax, vec2 psize)
 {
     bool found = false;
     // there are cases where is impossible to clip the patch because
@@ -240,7 +219,7 @@ bool approximateIntersection(std::predicate<vec2f> auto onHit,
     auto p01 = p.point(0,3);   // (0,1)
     auto p11 = p.point(3,3);   // (1,1)
 
-    vec2f coord;
+    vec2 coord;
     if (triangleOriginIntersection(coord, p00, p10, p01))
     {
         found |= onHit(pmin + coord * psize);
@@ -253,16 +232,16 @@ bool approximateIntersection(std::predicate<vec2f> auto onHit,
 }
 
 static HOST DEVICE
-bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
-    const vec2f patch[16],
+bool doBezierClipping2D_host(std::predicate<vec2> auto onHit,
+    const vec2 patch[16],
     float tol)
 {
     struct State
     {
-        vec2f patch[16];
-        vec2f min;
-        vec2f max;
-        vec2f size;
+        vec2 patch[16];
+        vec2 min;
+        vec2 max;
+        vec2 size;
         enum Side
         {
             eU = 0,
@@ -328,7 +307,7 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
             continue;
         }
 
-        vec2f L0, L1;
+        vec2 L0, L1;
         // find line L
         if (e.cutside == State::eU)
         {
@@ -341,9 +320,9 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
             L1 = p.point(3,3) - p.point(0,3);
         }
         // vector parallel to the line L
-        const vec2f L = (L0 + L1).versor();
+        const vec2 L = (L0 + L1).versor();
         // vector perpendicular to the line L
-        const vec2f N = {-L.y, L.x};
+        const vec2 N = {-L.y, L.x};
 
         // compute the distance patch
         for (int i = 0; i < 16; i++)
@@ -384,7 +363,7 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
         }
         // find convex hull and its intersection
         // graham scan
-        vec2f hull[9];
+        vec2 hull[9];
         int len = 0;
         // first and second points
         hull[len++] = {over3[0], ybot[0]};
@@ -392,7 +371,7 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
         // bottom points
         for (int i = 2; i < 4; i++)
         {
-            vec2f P3 {over3[i], ybot[i]};
+            vec2 P3 {over3[i], ybot[i]};
             auto& P2 = hull[len-1];
             auto& P1 = hull[len-2];
             if (isCCW(P2 - P1, P3 - P1) >= 0)
@@ -405,7 +384,7 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
         // top points
         for (int i = 2; i >= 0; i--)
         {
-            vec2f P3 = {over3[i], ytop[i]};
+            vec2 P3 = {over3[i], ytop[i]};
             auto& P2 = hull[len-1];
             auto& P1 = hull[len-2];
             if (isCCW(P2 - P1, P3 - P1) >= 0)
@@ -418,9 +397,9 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
         // find intersection and the clip range
         for (int i = 1; i < len; i++)
         {
-            vec2f A = hull[i-1];
-            vec2f B = hull[i];
-            vec2f s;
+            vec2 A = hull[i-1];
+            vec2 B = hull[i];
+            vec2 s;
             if (xAxisIntersection(s, A, B))
             {
                 if (s.x > s.y)
@@ -536,7 +515,7 @@ bool doBezierClipping2D_host(std::predicate<vec2f> auto onHit,
 
 
 constexpr DEVICE
-void patchCopy(vec2f* q, const vec2f patch[16], vec2f cmin, vec2f cmax)
+void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
 {
     for (int i = 0; i < 16; i++)
         q[i] = patch[i];
@@ -546,15 +525,15 @@ void patchCopy(vec2f* q, const vec2f patch[16], vec2f cmin, vec2f cmax)
 }
 
 static DEVICE
-bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
-    const vec2f patch[16],
+bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
+    const vec2 patch[16],
     float tol)
 {
     namespace std = ::cuda::std;
     struct State
     {
-        vec2f min;
-        vec2f max;
+        vec2 min;
+        vec2 max;
         enum Side
         {
             eU = 0,
@@ -575,7 +554,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
     float distancePatch[16];
     Patch d (distancePatch);
 
-    vec2f buffer[16];
+    vec2 buffer[16];
     Patch p (buffer);
 
     for (int i = 0; i < 16; i++)
@@ -584,7 +563,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
     do
     {
         auto &e = S.back();
-        const vec2f csize = e.max - e.min;
+        const vec2 csize = e.max - e.min;
     
         // check tolerance
         float d0 = (p.point(3,0) - p.point(0,3)).length();
@@ -601,7 +580,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
             continue;
         }
 
-        vec2f L0, L1;
+        vec2 L0, L1;
         // find line L
         if (e.cutside == State::eU)
         {
@@ -614,9 +593,9 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
             L1 = p.point(3,3) - p.point(0,3);
         }
         // vector parallel to the line L
-        const vec2f L = (L0 + L1).versor();
+        const vec2 L = (L0 + L1).versor();
         // vector perpendicular to the line L
-        const vec2f N = {-L.y, L.x};
+        const vec2 N = {-L.y, L.x};
 
         // compute the distance patch
         for (int i = 0; i < 16; i++)
@@ -657,7 +636,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
         }
         // find convex hull and its intersection
         // graham scan
-        vec2f hull[9];
+        vec2 hull[9];
         int len = 0;
         // first and second points
         hull[len++] = {over3[0], ybot[0]};
@@ -665,7 +644,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
         // bottom points
         for (int i = 2; i < 4; i++)
         {
-            vec2f P3 {over3[i], ybot[i]};
+            vec2 P3 {over3[i], ybot[i]};
             auto& P2 = hull[len-1];
             auto& P1 = hull[len-2];
             if (isCCW(P2 - P1, P3 - P1) >= 0)
@@ -678,7 +657,7 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
         // top points
         for (int i = 2; i >= 0; i--)
         {
-            vec2f P3 = {over3[i], ytop[i]};
+            vec2 P3 = {over3[i], ytop[i]};
             auto& P2 = hull[len-1];
             auto& P1 = hull[len-2];
             if (isCCW(P2 - P1, P3 - P1) >= 0)
@@ -691,9 +670,9 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
         // find intersection and the clip range
         for (int i = 1; i < len; i++)
         {
-            vec2f A = hull[i-1];
-            vec2f B = hull[i];
-            vec2f s;
+            vec2 A = hull[i-1];
+            vec2 B = hull[i];
+            vec2 s;
             if (xAxisIntersection(s, A, B))
             {
                 if (s.x > s.y)
@@ -800,8 +779,8 @@ bool doBezierClipping2D_device(std::predicate<vec2f> auto onHit,
 }
 
 HOST DEVICE
-bool doBezierClipping2D(std::predicate<vec2f> auto onHit,
-    const vec2f patch[16],
+bool doBezierClipping2D(std::predicate<vec2> auto onHit,
+    const vec2 patch[16],
     float tol)
 {
 #ifndef __CUDA_ARCH__

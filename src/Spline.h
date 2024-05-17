@@ -4,6 +4,7 @@
 #include <geometry/Index3.h>
 #include <geometry/Intersection.h>
 #include <cuda/std/concepts>
+#include "AlignedTypes.h"
 #include "ArrayAdaptor.h"
 #include "rt/Intersection.h"
 
@@ -21,9 +22,6 @@
 
 namespace cg::spline
 {
-
-template<typename T>
-using LocalArray = FixedArray<T,SPL_MAX_LOCAL_ARRAY_SIZE>;
 
 template<typename V, typename C>
 concept is_vector_component_type =
@@ -64,34 +62,34 @@ class Patch
 public:
     using point_type = vec;
 
-    _SPL_CONSTEXPR_ATTR explicit
+    _SPL_CONSTEXPR explicit
     Patch(vec* controlPoints) : _points{controlPoints} {}
 
-    _SPL_CONSTEXPR_ATTR Patch() = default;
-    _SPL_CONSTEXPR_ATTR Patch(Patch&&) = default;
-    _SPL_CONSTEXPR_ATTR Patch(const Patch&) = default;
+    _SPL_CONSTEXPR Patch() = default;
+    _SPL_CONSTEXPR Patch(Patch&&) = default;
+    _SPL_CONSTEXPR Patch(const Patch&) = default;
 
-    _SPL_CONSTEXPR_ATTR Patch& operator= (Patch&&) = default;
-    _SPL_CONSTEXPR_ATTR Patch& operator= (const Patch&) = default;
+    _SPL_CONSTEXPR Patch& operator= (Patch&&) = default;
+    _SPL_CONSTEXPR Patch& operator= (const Patch&) = default;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const vec& operator[] (uint32_t i) const { return _points[i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     vec& operator[] (uint32_t i) { return _points[i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const vec& point(uint32_t i, uint32_t j) const { return (*this)[4*j + i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     vec& point(uint32_t i, uint32_t j) { return (*this)[4*j + i]; }
 
-    _SPL_CONSTEXPR_ATTR uint32_t shape(uint32_t i) const noexcept
+    _SPL_CONSTEXPR uint32_t shape(uint32_t i) const noexcept
     {
         return i < 2 ? 4 : 0;
     }
 
-    _SPL_CONSTEXPR_ATTR uint32_t size() const noexcept { return 16; }
+    _SPL_CONSTEXPR uint32_t size() const noexcept { return 16; }
 
 protected:
     vec* _points {};
@@ -118,36 +116,36 @@ public:
     using point_type = vec;
     using index_type = idx;
 
-    _SPL_CONSTEXPR_ATTR explicit
+    _SPL_CONSTEXPR explicit
     PatchRef(vec* pointBuffer, idx* patchIndexes)
         : _points{pointBuffer}, _indexes{patchIndexes} {}
 
-    _SPL_CONSTEXPR_ATTR explicit
+    _SPL_CONSTEXPR explicit
     PatchRef(vec* pointBuffer, idx* indexBuffer, idx patchNumber)
         : PatchRef(pointBuffer, indexBuffer + 16*patchNumber) {}
 
-    _SPL_CONSTEXPR_ATTR PatchRef() = default;
-    _SPL_CONSTEXPR_ATTR PatchRef(PatchRef&&) = default;
-    _SPL_CONSTEXPR_ATTR PatchRef(const PatchRef&) = default;
+    _SPL_CONSTEXPR PatchRef() = default;
+    _SPL_CONSTEXPR PatchRef(PatchRef&&) = default;
+    _SPL_CONSTEXPR PatchRef(const PatchRef&) = default;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const vec& operator[] (uint32_t i) const { return _points[_indexes[i]]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     vec& operator[] (uint32_t i) { return _points[_indexes[i]]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const vec& point(uint32_t i, uint32_t j) const { return (*this)[4*j + i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     vec& point(uint32_t i, uint32_t j) { return (*this)[4*j + i]; }
 
-    _SPL_CONSTEXPR_ATTR uint32_t shape(uint32_t i) const noexcept
+    _SPL_CONSTEXPR uint32_t shape(uint32_t i) const noexcept
     {
         return i < 2 ? 4 : 0;
     }
 
-    _SPL_CONSTEXPR_ATTR uint32_t size() const noexcept { return 16; }
+    _SPL_CONSTEXPR uint32_t size() const noexcept { return 16; }
 
 #ifndef _SPL_DISABLED_WHILE_RANGES_NOT_IMPLEMENTED_FOR_LIBCUXX
     auto asRange() const
@@ -168,7 +166,7 @@ protected:
  * De Casteljau algorithm for computing a cubic Bézier curve.
  */
 template<typename vec, typename real = typename vec::value_type>
-_SPL_CONSTEXPR_ATTR vec& deCasteljau(vec p[4], real u)
+_SPL_CONSTEXPR vec& deCasteljau(vec p[4], real u)
 {
     // deCasteljau algorithm (The NURBS Book, page 24)
     const real t = 1 - u;
@@ -183,7 +181,7 @@ _SPL_CONSTEXPR_ATTR vec& deCasteljau(vec p[4], real u)
  * De Casteljau algorithm for computing a cubic Bézier curve derivative.
  */
 template<typename vec, typename real = typename vec::value_type>
-_SPL_CONSTEXPR_ATTR vec& deCasteljauDx(vec p[4], real u)
+_SPL_CONSTEXPR vec& deCasteljauDx(vec p[4], real u)
 {
     const real t = 1 - u;
 
@@ -197,7 +195,7 @@ _SPL_CONSTEXPR_ATTR vec& deCasteljauDx(vec p[4], real u)
 }
 
 template<surface_cage S, typename real = S::point_type::value_type>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto interpolate(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -216,7 +214,7 @@ auto interpolate(const S& s, real u, real v) ->
 }
 
 template<surface_cage S, typename real = S::point_type::value_type>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto derivativeU(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -236,7 +234,7 @@ auto derivativeU(const S& s, real u, real v) ->
 }
 
 template<surface_cage S, typename real = S::point_type::value_type>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto derivativeV(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -260,7 +258,7 @@ auto derivativeV(const S& s, real u, real v) ->
  * @warning Not tested with rational Bézier surfaces. Be careful!
  * @warning Normal not normalized.
  */
-HOST DEVICE vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v);
+HOST DEVICE vec3 normal(const PatchRef<vec4,uint32_t> &s, float u, float v);
 
 /**
  * Cubic bézier curve splitting at point t.
@@ -286,7 +284,7 @@ HOST DEVICE vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v);
 // Curve equivalent: [0, t]
 template<typename vec, typename real>
 requires is_vector_component_type<vec,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void split0(vec C[4], real t)
 {
     assert(0.0 <= t && t <= 1.0);
@@ -306,7 +304,7 @@ void split0(vec C[4], real t)
 // Curve equivalent: [t, 1]
 template<typename vec, typename real>
 requires is_vector_component_type<vec,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void split1(vec C[4], real t)
 {
     assert(0.0 <= t && t <= 1.0);
@@ -326,7 +324,7 @@ void split1(vec C[4], real t)
 // Curve equivalent: [u, v]
 template<uint32_t _stride = 1, typename vec, typename real>
 requires is_vector_component_type<vec,real> && (_stride > 0)
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void slice(vec *curve, real u, real v)
 {
     assert(u <= v);
@@ -367,7 +365,7 @@ void slice(vec *curve, real u, real v)
 
 template<typename vec, typename real>
 // requires is_vector_component_type<vec,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void subpatchU(vec *patch, real umin, real umax)
 {
     for (int i = 0; i < 4; i++)
@@ -376,7 +374,7 @@ void subpatchU(vec *patch, real umin, real umax)
 
 template<typename vec, typename real>
 // requires is_vector_component_type<vec,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void subpatchV(vec *patch, real vmin, real vmax)
 {
     for (int i = 0; i < 4; i++)
@@ -385,7 +383,7 @@ void subpatchV(vec *patch, real vmin, real vmax)
 
 template<typename vec, typename real>
 // requires is_vector_component_type<vec,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 void subpatch(
     vec patch[16],
     real umin,
@@ -395,14 +393,6 @@ void subpatch(
 {
     subpatchV(patch, vmin, vmax);
     subpatchU(patch, umin, umax);
-}
-
-template<typename real>
-_SPL_CONSTEXPR_ATTR
-Vector3<real> project(const Vector4<real> &p)
-{
-    assert(math::isZero(p.w) == false);
-    return Vector3<real>(p.x / p.w, p.y / p.w, p.z / p.w);
 }
 
 template<std::forward_iterator It>
@@ -498,14 +488,14 @@ Bounds3<real> subpatchBoundingbox(
 HOST DEVICE
 bool doBezierClipping(Intersection& hit,
     const Ray3f& ray,
-    const vec4f buffer[],
+    const vec4 buffer[],
     const uint32_t patch[16],
     float tol = 0x1p-12f);
 
 HOST // ONLY
 bool doSubdivision(Intersection& hit,
     const Ray3f& ray,
-    const vec4f buffer[],
+    const vec4 buffer[],
     const uint32_t patch[16],
     float threshold = 0x1p-4f);
 
@@ -551,7 +541,7 @@ auto& deCasteljauDx(V p, real u)
 #endif
 
 template<typename vec, typename real = typename vec::value_type>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 vec& deCasteljau(unsigned size, vec p[], real u)
 {
     // deCasteljau algorithm (The NURBS Book, page 24)
@@ -564,7 +554,7 @@ vec& deCasteljau(unsigned size, vec p[], real u)
 }
 
 template<typename vec, typename real = typename vec::value_type>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 vec& deCasteljauDx(unsigned size, vec p[], real u)
 {
     const real t = 1 - u;
@@ -580,7 +570,7 @@ vec& deCasteljauDx(unsigned size, vec p[], real u)
 
 template<surface_cage S, typename real>
 requires is_vector_component_type<typename S::point_type, real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto interpolate(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -604,7 +594,7 @@ auto interpolate(const S& s, real u, real v) ->
 
 template<surface_cage S, typename real>
 requires is_vector_component_type<typename S::point_type,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto derivativeU(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {
@@ -629,7 +619,7 @@ auto derivativeU(const S& s, real u, real v) ->
 
 template<surface_cage S, typename real>
 requires is_vector_component_type<typename S::point_type,real>
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 auto derivativeV(const S& s, real u, real v) ->
     std::remove_cvref_t<typename S::point_type>
 {

@@ -46,7 +46,7 @@ struct BVH
     struct ElementData
     {
         Bounds3f bounds;
-        vec3f centroid;
+        vec3 centroid;
         uint32_t index;
     };
 
@@ -136,7 +136,7 @@ int ctz(unsigned int x)
 static inline
 __host__ __device__
 bool _node_intersect(float& tMin, float& tMax, const Bounds3f& bounds,
-    const vec3f& origin, const vec3f& directionInverse)
+    const vec3& origin, const vec3& directionInverse)
 {
     using flt = numeric_limits<float>;
     static_assert(flt::is_iec559, "Quiet NaNs and infinities required");
@@ -168,7 +168,7 @@ __host__ __device__
 bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
     std::predicate<Intersection&,const Ray&,uint32_t> auto intersectfn) const
 {
-    const vec3f D_1 = ray.direction.inverse();
+    const vec3 D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;
@@ -289,7 +289,7 @@ __host__ __device__
 bool BVH::hashIntersect(const Ray& ray,
     std::predicate<const Ray&,uint32_t> auto intersectfn) const
 {
-    const vec3f D_1 = ray.direction.inverse();
+    const vec3 D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
     uint32_t key = BVH::ROOT_KEY;
     uint32_t postponed = 0;

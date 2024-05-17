@@ -15,21 +15,21 @@ namespace cg::rt
 
 struct __align__(4) Transform
 {
-    [[nodiscard]] mat4f matrix() const;
-    [[nodiscard]] mat4f inverseMatrix() const;
-    [[nodiscard]] mat3f normalMatrix() const;
+    [[nodiscard]] mat4 matrix() const;
+    [[nodiscard]] mat4 inverseMatrix() const;
+    [[nodiscard]] mat3 normalMatrix() const;
 
-    quatf rotation = quatf::identity();
-    vec3f position {0};
+    quat rotation = quat::identity();
+    vec3 position {0};
     float __padding0;
-    vec3f scale {1};
+    vec3 scale {1};
     float __padding1;
 };
 
 struct Camera
 {
-    constexpr static vec3f viewForward {0,0,1};
-    constexpr static vec3f viewUp {0,1,0};
+    constexpr static vec3 viewForward {0,0,1};
+    constexpr static vec3 viewUp {0,1,0};
 
     const auto& position() const { return transform.position; }
 
@@ -47,11 +47,11 @@ struct Camera
 struct __align__(4) Light
 {
     // Radiance for each primary wavelength.
-    vec3f color;
+    vec3 color;
     float strength;
-    vec3f position;
+    vec3 position;
     float range; // range (== 0 INFINITE)
-    vec3f direction;
+    vec3 direction;
     float angle; // spot light angle (if < 0.01: directional; if > 1.57: point)
 
     enum Type
@@ -78,10 +78,10 @@ struct __align__(4) Light
 
 struct __align__(4) Material
 {
-    vec3f diffuse;
+    vec3 diffuse;
     // Spectral reflectance distribution for use with Schilick's approximation
-    vec3f specular;
-    vec3f transparency;
+    vec3 specular;
+    vec3 transparency;
     float metalness; // [0,1]
     float roughness; // [0,1]
     float refractiveIndex;
@@ -99,7 +99,7 @@ struct Scene
         ePrimitiveType,
     };
 
-    using ObjectArrays = SoA<uint32_t,mat4f,mat4f,Transform,Material,
+    using ObjectArrays = SoA<uint32_t,mat4,mat4,Transform,Material,
         Primitive*,PrimitiveType>;
 
     ObjectArrays objects;
@@ -108,7 +108,7 @@ struct Scene
     Array<BezierSurface> surfaces {};
     Array<BVH> bvhs {};
     BVH topLevelBVH {};
-    vec3f backgroundColor {0.1f, 0.1f, 0.1f};
+    vec3 backgroundColor {0.1f, 0.1f, 0.1f};
 
     Scene() = default;
     Scene(uint32_t capacity, std::pmr::memory_resource* mr)

@@ -16,7 +16,7 @@ Bounds3f Sphere::bounds() const
 }
 
 HOST DEVICE
-Bounds3f Sphere::bounds(const mat4f& M) const
+Bounds3f Sphere::bounds(const mat4& M) const
 {
     return {};
 }
@@ -34,7 +34,7 @@ bool Sphere::intersect(const Ray& ray) const
 }
 
 HOST DEVICE
-vec3f Sphere::normal(const Intersection& hit) const
+vec3 Sphere::normal(const Intersection& hit) const
 {
     return rt::normal(*this, hit);
 }
@@ -49,7 +49,7 @@ HOST DEVICE bool intersect(const Sphere&, const Ray&)
     return {};
 }
 
-HOST DEVICE vec3f normal(const Sphere&, const Intersection&)
+HOST DEVICE vec3 normal(const Sphere&, const Intersection&)
 {
     return {};
 }
@@ -63,7 +63,7 @@ Bounds3f Mesh::bounds() const
 }
 
 HOST DEVICE
-Bounds3f Mesh::bounds(const mat4f& M) const
+Bounds3f Mesh::bounds(const mat4& M) const
 {
     return {};
 }
@@ -81,7 +81,7 @@ bool Mesh::intersect(const Ray& ray) const
 }
 
 HOST DEVICE
-vec3f Mesh::normal(const Intersection& hit) const
+vec3 Mesh::normal(const Intersection& hit) const
 {
     return rt::normal(*this, hit);
 }
@@ -93,9 +93,9 @@ void Mesh::buildBVH(BVH& bvh)
     {
         auto& e = data[i];
         const uint32_t* v = this->indices + 3*i;
-        const vec3f p0 = this->vertices[v[0]];
-        const vec3f p1 = this->vertices[v[1]];
-        const vec3f p2 = this->vertices[v[2]];
+        const vec3 p0 = this->vertices[v[0]];
+        const vec3 p1 = this->vertices[v[1]];
+        const vec3 p2 = this->vertices[v[2]];
         e.index = i;
         e.centroid = (1.0f / 3.0f) * (p0 + p1 + p2);
         e.bounds = {};
@@ -118,7 +118,7 @@ HOST DEVICE bool intersect(const Mesh& m, Intersection& hit0, const Ray& ray0)
         const auto& p0 = m.vertices[v[0]];
         const auto& p1 = m.vertices[v[1]];
         const auto& p2 = m.vertices[v[2]];
-        vec3f p;
+        vec3 p;
         float t;
         if (triangle::intersect(anotherRay, p0, p1, p2, p, t))
         {
@@ -144,14 +144,14 @@ HOST DEVICE bool intersect(const Mesh& m, const Ray& ray0)
         const auto& p0 = m.vertices[v[0]];
         const auto& p1 = m.vertices[v[1]];
         const auto& p2 = m.vertices[v[2]];
-        vec3f p;
+        vec3 p;
         float t;
         return triangle::intersect(anotherRay, p0, p1, p2, p, t);
     };
     return m.bvh->hashIntersect(ray0, fn);
 }
 
-HOST DEVICE vec3f normal(const Mesh& m, const Intersection& hit)
+HOST DEVICE vec3 normal(const Mesh& m, const Intersection& hit)
 {
     const uint32_t* v = m.indices + 3*hit.index;
     return triangle::normal(m.vertices[v[0]], m.vertices[v[1]], m.vertices[v[2]]);
@@ -164,16 +164,16 @@ Bounds3f BezierSurface::bounds() const
 {
     return spline::boundingbox<float>(
         this->indices, this->indices + this->indexCount,
-        [&](uint32_t i) -> vec4f { return this->vertices[i]; }
+        [&](uint32_t i) -> vec4 { return this->vertices[i]; }
     );
 }
 
 HOST DEVICE
-Bounds3f BezierSurface::bounds(const mat4f& M) const
+Bounds3f BezierSurface::bounds(const mat4& M) const
 {
     return spline::boundingbox<float>(
         this->indices, this->indices + this->indexCount,
-        [&](uint32_t i) -> vec4f { return M * this->vertices[i]; }
+        [&](uint32_t i) -> vec4 { return M * this->vertices[i]; }
     );
 }
 
@@ -190,7 +190,7 @@ bool BezierSurface::intersect(const Ray& ray) const
 }
 
 HOST DEVICE
-vec3f BezierSurface::normal(const Intersection& hit) const
+vec3 BezierSurface::normal(const Intersection& hit) const
 {
     return rt::normal(*this, hit);
 }
@@ -203,13 +203,13 @@ void BezierSurface::buildBVH(BVH& bvh)
         auto& e = patchData[i];
         const uint32_t* patch = this->indices + 16*i;
         e.bounds = {};
-        e.centroid = vec3f{0};
+        e.centroid = vec3{0};
         e.index = i;
         constexpr float inv = 1.0f / 16.0f;
         for (int j = 0; j < 16; j++)
         {
-            vec4f& wp = this->vertices[patch[j]];
-            vec3f p = spline::project(wp);
+            vec4& wp = this->vertices[patch[j]];
+            vec3 p = spline::project(wp);
             e.bounds.inflate(p);
             e.centroid += inv * p;
         }
@@ -257,7 +257,7 @@ HOST DEVICE bool intersect(const BezierSurface& s, const Ray& ray0)
     return s.bvh->hashIntersect(ray0, fn);
 }
 
-HOST DEVICE vec3f normal(const BezierSurface& s, const Intersection& hit)
+HOST DEVICE vec3 normal(const BezierSurface& s, const Intersection& hit)
 {
     auto [u, v, _] = hit.coordinates;
     spline::PatchRef patch (s.vertices, s.indices, uint32_t(hit.index));

@@ -16,20 +16,20 @@ __managed__ Frame* g_BezierClippingHeatMap;
 struct RayPayload
 {
     Ray ray;
-    vec3f color;
-    vec3f attenuation;
+    vec3 color;
+    vec3 attenuation;
     int depth;
 };
 
 struct RayTracer::Context
 {
-    __align__(8) Raw<Frame> frame;
-    __align__(8) Raw<const Scene> scene;
-    __align__(8) Options options;
-    __align__(16) mat4f cameraToWorld;
-    __align__(16) mat3f cameraNormalToWorld;
-    __align__(16) vec3f cameraPosition;
-    vec2f topLeftCorner;
+    __align__(16) Raw<Frame> frame;
+    __align__(16) Raw<const Scene> scene;
+    __align__(16) Options options;
+    __align__(16) mat4 cameraToWorld;
+    __align__(16) mat3 cameraNormalToWorld;
+    __align__(16) vec3 cameraPosition;
+    vec2 topLeftCorner;
     float half_dx;
     float half_dy;
 
@@ -41,16 +41,17 @@ struct RayTracer::Context
     __device__ bool trace(RayPayload&) const;
 
     __device__
-    vec3f pixelRayDirection(int x, int y) const
+    vec3 pixelRayDirection(int x, int y) const
     {
-        vec3f P
+        vec4 P
         {
             this->topLeftCorner.x + this->half_dx * (2*x),
             this->topLeftCorner.y - this->half_dy * (2*y),
-            -1.0f
+            -1.0f,
+            1.0f
         };
-        P = this->cameraToWorld.transform3x4(P);
-        return (P - this->cameraPosition).versor();
+        P = this->cameraToWorld.transform(P);
+        return (project(P) - this->cameraPosition).versor();
     }
 };
 
@@ -119,11 +120,12 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
             cudaMemcpyHostToDevice, stream));
     }
 
-    dim3 threadsPerBlock (8, 8);
+    constexpr auto N = 16;
+    dim3 threadsPerBlock (N, N);
     dim3 blocksPerGrid
     {
-        (w / 8) + (w % 8 ? 1 : 0),
-        (h / 8) + (h % 8 ? 1 : 0)
+        (w / N) + (w % N ? 1 : 0),
+        (h / N) + (h % N ? 1 : 0)
     };
 
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
@@ -189,8 +191,8 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
         auto& M_1 = objs.get<Key::eWorld2LocalMatrix>(i);
         Ray localRay
         {
-            .origin = M_1.transform(ray.origin),
-            .direction = M_1.transformVector(ray.direction),
+            .origin = project(M_1.transform(vec4(ray.origin, 1))),
+            .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
         localRay.tMin = ray.tMin * d;
@@ -241,8 +243,8 @@ bool Context::intersect(const Ray& ray0) const
         auto& M_1 = objs.get<Key::eWorld2LocalMatrix>(i);
         Ray localRay
         {
-            .origin = M_1.transform(ray.origin),
-            .direction = M_1.transformVector(ray.direction),
+            .origin = project(M_1.transform(vec4(ray.origin, 1))),
+            .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
         localRay.tMin = ray.tMin * d;
@@ -298,7 +300,7 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     default:
         __builtin_unreachable();
     }
-    N = (mat3f(M_1).transposed() * N).versor();
+    N = (mat3(M_1).transposed() * N).versor();
 
     // bool backfaced = false;
     float dotNV = vec3f::dot(N, V);

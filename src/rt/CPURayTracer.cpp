@@ -181,8 +181,8 @@ int CPURayTracer::intersect(Intersection& hit0, const Ray& ray0) const
         auto& M_1 = _scene->objects.get<Key::eWorld2LocalMatrix>(i);
         Ray localRay
         {
-            .origin = M_1.transform(ray.origin),
-            .direction = M_1.transformVector(ray.direction),
+            .origin = project(M_1.transform(vec4(ray.origin, 1))),
+            .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
         localRay.tMin = ray.tMin * d;
@@ -217,8 +217,8 @@ bool CPURayTracer::intersect(const Ray& ray0) const
         auto& M_1 = _scene->objects.get<Key::eWorld2LocalMatrix>(i);
         Ray localRay
         {
-            .origin = M_1.transform(ray.origin),
-            .direction = M_1.transformVector(ray.direction),
+            .origin = project(M_1.transform(vec4(ray.origin, 1))),
+            .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
         localRay.tMin = ray.tMin * d;
@@ -253,7 +253,7 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     // From the point to the camera; BRDF uses this vector orientation.
     vec3f V = - ray.direction;
     // vec3f N = p->normal(hit);
-    vec3f N = (mat3f(M_1).transposed() * p->normal(hit)).versor();
+    vec3f N = (mat3(M_1).transposed() * p->normal(hit)).versor();
 
     bool backfaced = false;
     float dotNV = vec3f::dot(N, V);

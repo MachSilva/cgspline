@@ -69,16 +69,17 @@ private:
 
     void progress(int done, int total) const;
 
-    vec3f pixelRayDirection(int x, int y) const
+    vec3 pixelRayDirection(int x, int y) const
     {
-        vec3f P
+        vec4 P
         {
             _topLeftCorner.x + _half_dx * (2*x),
             _topLeftCorner.y - _half_dy * (2*y),
-            -1.0f
+            -1.0f,
+            1.0f
         };
-        P = _cameraToWorld.transform3x4(P);
-        return (P - _cameraPosition).versor();
+        P = _cameraToWorld * P;
+        return (project(P) - _cameraPosition).versor();
     }
 
     struct Tile { uint16_t x, y; };
@@ -94,13 +95,13 @@ private:
     uint16_t _countX;
     uint16_t _countY;
 
-    vec2f _topLeftCorner;
+    vec2 _topLeftCorner;
     float _half_dx;
     float _half_dy;
 
-    mat4f _cameraToWorld;
-    mat3f _cameraNormalToWorld;
-    vec3f _cameraPosition;
+    mat4 _cameraToWorld;
+    mat3 _cameraNormalToWorld;
+    vec3 _cameraPosition;
     Camera::ProjectionType _cameraProjection;
 
     Stopwatch clock;

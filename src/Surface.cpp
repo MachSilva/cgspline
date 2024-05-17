@@ -448,6 +448,7 @@ void SurfaceMapper::updateMatrixBlock(GLRenderer& renderer) const
     b->mvMatrix = mv;
     b->mvpMatrix = c->projectionMatrix() * mv;
     b->normalMatrix = mat3f{c->worldToCameraMatrix()} * _surface->normalMatrix();
+    b->cameraToWorldMatrix = mat3f{c->cameraToWorldMatrix()};
 
     glUnmapNamedBuffer(renderer.matrixBlock());
 }
@@ -467,10 +468,13 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
         if (pbr->texBaseColor != nullptr)
         {
             v[0] = 1;
+            v[1] = 1;
             glActiveTexture(GL_TEXTURE0 + s.sDiffuse.textureUnit);
             glBindTexture(GL_TEXTURE_2D, *pbr->texBaseColor);
+            // specular
+            glActiveTexture(GL_TEXTURE0 + s.sSpecular.textureUnit);
+            glBindTexture(GL_TEXTURE_2D, *pbr->texBaseColor);
         }
-        // no specular, only base color
         if (pbr->texMetalRough != nullptr)
         {
             v[2] = 1;
@@ -478,6 +482,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
             glBindTexture(GL_TEXTURE_2D, *pbr->texMetalRough);
         }
     }
+    renderer.renderMaterial(*_surface->material());
     glNamedBufferSubData(
         renderer.configBlock(),
         offsetof (GLSL::ConfigBlock, hasDiffuseTexture),
@@ -490,8 +495,6 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
     pipeline->use();
     // TODO Review if this function call is `SurfaceMapper`'s responsability.
     pipeline->beforeDrawing(renderer);
-
-    renderer.renderMaterial(*_surface->material());
 
     s->bind();
 

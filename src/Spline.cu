@@ -8,12 +8,12 @@ namespace cg::spline
 {
 
 HOST DEVICE
-vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v)
+vec3 normal(const PatchRef<vec4,uint32_t> &s, float u, float v)
 {
     constexpr float e = SPL_NORMAL_FIXVALUE;
 
-    vec4f derU = derivativeU(s, u, v);
-    vec4f derV = derivativeV(s, u, v);
+    vec4 derU = derivativeU(s, u, v);
+    vec4 derV = derivativeV(s, u, v);
     // Fix for degenerated patches.
     if (derU.x == 0 && derU.y == 0 && derU.z == 0)
     {
@@ -23,7 +23,7 @@ vec3f normal(const PatchRef<vec4f,uint32_t> &s, float u, float v)
     {
         derV = derivativeV(s, std::abs(u - e), v);
     }
-    return vec3f::cross(vec3f(derU), vec3f(derV));
+    return vec3(derU).cross(vec3f(derV));
 }
 
 } // namespace cg::spline
