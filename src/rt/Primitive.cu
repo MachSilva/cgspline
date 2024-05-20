@@ -3,6 +3,7 @@
 #include <geometry/Triangle.h>
 #include <functional>
 #include "../Spline.h"
+#include "../SplineMat.h"
 
 namespace cg::rt
 {
@@ -261,7 +262,7 @@ HOST DEVICE vec3 normal(const BezierSurface& s, const Intersection& hit)
 {
     auto [u, v, _] = hit.coordinates;
     spline::PatchRef patch (s.vertices, s.indices, uint32_t(hit.index));
-    return spline::normal(patch, u, v).versor();
+    return spline::mat::normal(patch, u, v).versor();
 }
 
 } // namespace cg::rt

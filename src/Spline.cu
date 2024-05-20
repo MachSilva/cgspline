@@ -23,7 +23,7 @@ vec3 normal(const PatchRef<vec4,uint32_t> &s, float u, float v)
     {
         derV = derivativeV(s, std::abs(u - e), v);
     }
-    return vec3(derU).cross(vec3f(derV));
+    return vec3(derU).cross(vec3(derV));
 }
 
 } // namespace cg::spline

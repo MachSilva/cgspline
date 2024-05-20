@@ -91,7 +91,14 @@ bool doBezierClipping(Intersection& hit,
 
     for (int i = 0; i < 16; i++)
     {
-        const auto& P = buffer[patch[i]];
+#if !defined(__CUDA_ARCH__)
+        const vec4 P = buffer[patch[i]];
+#else
+        const vec4 P
+        {
+            __ldg((const float4*) buffer + __ldg(patch+i))
+        };
+#endif
         const vec3 Q {P.x, P.y, P.z};
         patch2D[i] =
         {
@@ -100,11 +107,26 @@ bool doBezierClipping(Intersection& hit,
         };
     }
 
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
+    stats::BCData* data = nullptr;
+    if (stats::g_BezierClippingEnable)
+    {
+        stats::g_BezierClippingData.push_back({ .patch2D = std::to_array(patch2D) });
+        data = &stats::g_BezierClippingData.back();
+    }
+#endif
+
     PatchRef S (buffer, patch);
     auto onHit = [&](vec2 e) -> bool
     {
-        auto V = project(interpolate(S, e.x, e.y)) - ray.origin;
+        auto V = project(mat::interpolate(S, e.x, e.y)) - ray.origin;
         float t = V.length();
+
+#if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
+        if (data)
+            data->hits.push_back({ .distance = t, .coord = e});
+#endif
+
         if (t < hit.distance && V.dot(ray.direction) > 0)
         {
             hit.distance = t;
@@ -534,22 +556,24 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
     {
         vec2 min;
         vec2 max;
-        enum Side
-        {
-            eU = 0,
-            eV = 1
-        } cutside;
+    };
+
+    enum Side
+    {
+        eU = 0,
+        eV = 1
     };
 
 #ifdef SPL_BC_HEATMAP
     int maxDepth = 1; // we already start with one element
 #endif
+    bool spilled = false;
     bool found = false;
-    FixedArray<State,16> S; // a stack
+    int cutsideStack = 0;
+    State localStack[4];
+    ArrayAdaptor<State> S (localStack, 4); // a stack
 
-    S.push_back({
-        .min = {0,0}, .max = {1,1}, .cutside = State::eU
-    });
+    S.push_back({ .min = {0,0}, .max = {1,1} });
 
     float distancePatch[16];
     Patch d (distancePatch);
@@ -564,6 +588,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
     {
         auto &e = S.back();
         const vec2 csize = e.max - e.min;
+        const bool cutside = cutsideStack & 1;
     
         // check tolerance
         float d0 = (p.point(3,0) - p.point(0,3)).length();
@@ -571,10 +596,11 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         if (d0 < tol && d1 < tol)
         {
             found |= approximateIntersection(onHit, p, e.min, e.max, csize);
+            cutsideStack >>= 1;
             S.pop_back();
             if (!S.empty())
             {
-                State& s = S.back();
+                State s = S.back();
                 patchCopy(buffer, patch, s.min, s.max);
             }
             continue;
@@ -582,12 +608,12 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 
         vec2 L0, L1;
         // find line L
-        if (e.cutside == State::eU)
+        if (cutside == Side::eU)
         {
             L0 = p.point(0,3) - p.point(0,0);
             L1 = p.point(3,3) - p.point(3,0);
         }
-        else // State::eV
+        else // Side::eV
         {
             L0 = p.point(3,0) - p.point(0,0);
             L1 = p.point(3,3) - p.point(0,3);
@@ -608,7 +634,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         float ytop[4]; // y top
         float ybot[4]; // y bottom
         // one branch instead of 16
-        if (e.cutside == State::eU)
+        if (cutside == Side::eU)
         {
             for (int i = 0; i < 4; i++)
             {
@@ -621,7 +647,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 }
             }
         }
-        else // State::eV
+        else // Side::eV
         {
             for (int i = 0; i < 4; i++)
             {
@@ -695,48 +721,58 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         }
 
         float delta = upper - lower;
-        __builtin_assume(delta <= 1.0f);
-        __builtin_assume(lower >= 0.0f && upper <= 1.0f);
+        __builtin_assume (delta <= 1.0f);
+        __builtin_assume (lower >= 0.0f && upper <= 1.0f);
 
         if (delta < 0)
         { // no intersection
+            cutsideStack >>= 1;
             S.pop_back();
             if (!S.empty())
             {
-                State& s = S.back();
+                State s = S.back();
                 patchCopy(buffer, patch, s.min, s.max);
             }
         }
         else if (delta > 0.8f)
         { // clipping too small; thus, subdivide
             State s1;
-            if (e.cutside == State::eU)
+            if (cutside == Side::eU)
             {
                 float hs = 0.5f * csize.x;
                 float hx = e.min.x + hs;
                 s1.max = e.max;
                 s1.min = { hx, e.min.y };
-                e.max = { hx, e.max.y };
-                // e.min = e.min;
-                // s1.size = e.size = { hs, e.size.y };
-                s1.cutside = e.cutside = State::eV;
-                // subpatchU(buffer2, 0.0f, 0.5f);
+                e.max.x = hx;
+                // e.min.x = e.min.x;
+                cutsideStack <<= 1;
+                cutsideStack |= 3;
+                // subpatchU(buffer2, 0.0, 0.5);
                 subpatchU(buffer, 0.5f, 1.0f);
             }
-            else // State::eV
+            else // Side::eV
             {
                 float hs = 0.5f * csize.y;
                 float hy = e.min.y + hs;
                 s1.max = e.max;
                 s1.min = { e.min.x, hy };
-                e.max = { e.max.x, hy };
-                // e.min = e.min;
-                // s1.size = e.size = { e.size.x, hs };
-                s1.cutside = e.cutside = State::eU;
-                // subpatchV(buffer2, 0.0f, 0.5f);
+                e.max.y = hy;
+                // e.min.y = e.min.y;
+                cutsideStack <<= 1;
+                cutsideStack &= ~3;
+                // subpatchV(buffer2, 0.0, 0.5);
                 subpatchV(buffer, 0.5f, 1.0f);
             }
-            S.push_back(std::move(s1));
+            if (__builtin_expect (S.size() == S.capacity() && !spilled, 0))
+            {
+                auto s = S.size();
+                auto p = alloca(16 * sizeof (State));
+                spilled = true;
+                S = ArrayAdaptor<State>((State*) p, 16);
+                for (int i = 0; i < s; i++)
+                    S.push_back(localStack[i]);
+            }
+            S.push_back(s1);
 
 #ifdef SPL_BC_HEATMAP
             maxDepth = std::max(maxDepth, (int) S.size());         
@@ -744,24 +780,25 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         }
         else
         { // clip
-            if (e.cutside == State::eU)
+            if (cutside == Side::eU)
             {
                 float u0 = e.min.x + csize.x * lower;
                 float u1 = e.max.x - csize.x * (1.0f - upper);
                 subpatchU(buffer, lower, upper);
                 e.min.x = u0;
                 e.max.x = u1;
-                e.cutside = State::eV;
+                // e.cutside = Side::eV;
             }
-            else // State::eV
+            else // Side::eV
             {
                 float v0 = e.min.y + csize.y * lower;
                 float v1 = e.max.y - csize.y * (1.0f - upper);
                 subpatchV(buffer, lower, upper);
                 e.min.y = v0;
                 e.max.y = v1;
-                e.cutside = State::eU;
+                // e.cutside = Side::eU;
             }
+            cutsideStack ^= 1; // switch
         }
     }
     while (!S.empty());

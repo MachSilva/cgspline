@@ -41,6 +41,8 @@ struct alignas(16) vec4 : Vector<float,4>
 
     _SPL_CONSTEXPR vec4(const Vector& v) : Vector(v) {}
     // _SPL_CONSTEXPR vec4& operator =(const Vector& v) { x = v.x, y = v.y, z = v.z, w = v.w; return *this; }
+
+    _SPL_CONSTEXPR vec4& operator =(const float4& v) { x = v.x, y = v.y, z = v.z, w = v.w; return *this; }
     _SPL_CONSTEXPR operator float4() const { return {x, y, z, w}; }
 };
 
@@ -141,9 +143,9 @@ struct alignas(16) mat4
         : column{{d,0,0,0}, {0,d,0,0}, {0,0,d,0}, {0,0,0,d}} {}
 
     /// Reads @a v as a row-major contiguous 4x4 matrix.
-    _SPL_CONSTEXPR mat4(const float* v)
-        : column{{v[0],v[4],v[8],v[12]}, {v[1],v[5],v[9],v[13]}
-        , {v[2],v[6],v[10],v[14]}, {v[3],v[7],v[11],v[15]}} {}
+    // _SPL_CONSTEXPR mat4(const float* v)
+    //     : column{{v[0],v[4],v[8],v[12]}, {v[1],v[5],v[9],v[13]}
+    //     , {v[2],v[6],v[10],v[14]}, {v[3],v[7],v[11],v[15]}} {}
 
     _SPL_CONSTEXPR mat4(const vec4 v[4]) : column{v[0], v[1], v[2], v[3]} {}
 
@@ -180,7 +182,7 @@ struct alignas(16) mat4
         return (*this) * v;
     }
 
-    _SPL_CONSTEXPR vec4 transformTransposed(const vec4& v) const
+    _SPL_CONSTEXPR vec4 transpose_transform(const vec4& v) const
     {
         return { column[0].dot(v), column[1].dot(v), column[2].dot(v), column[3].dot(v) };
     }

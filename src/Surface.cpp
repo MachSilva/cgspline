@@ -3,6 +3,7 @@
 #include <graphics/GLRenderer.h>
 #include <graph/Scene.h>
 #include "Spline.h"
+#include "SplineMat.h"
 
 #define STRINGIFY(s) #s
 

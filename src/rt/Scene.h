@@ -44,7 +44,7 @@ struct Camera
     } projection;
 };
 
-struct __align__(4) Light
+struct Light
 {
     // Radiance for each primary wavelength.
     vec3 color;
@@ -76,7 +76,7 @@ struct __align__(4) Light
     bool isPoint() const { return angle > 1.57f; } // > ~179° (1.57 rad)
 };
 
-struct __align__(4) Material
+struct Material
 {
     vec3 diffuse;
     // Spectral reflectance distribution for use with Schilick's approximation

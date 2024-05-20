@@ -141,7 +141,7 @@ public:
 /**
  * @brief An array that does not own its memory
  */
-template<typename T, typename SizeT = uint32_t>
+template<typename T, typename SizeT = int>
 class ArrayAdaptor : public detail::ArrayBase<T,SizeT>
 {
 public:
@@ -154,11 +154,11 @@ public:
 
     _SPL_CONSTEXPR_ATTR
     ArrayAdaptor(T* p, size_type max_size)
-        : base_type{ ._data = p, ._size = 0}, _capacity{max_size} {}
+        : _capacity{max_size} { this->_data = p, this->_size = 0; }
 
     _SPL_CONSTEXPR_ATTR
     ArrayAdaptor(T* p, size_type n, size_type max_size)
-        : base_type{ ._data = p, ._size = n}, _capacity{max_size} {}
+        : _capacity{max_size} { this->_data = p, this->_size = n; }
 
     _SPL_CONSTEXPR_ATTR
     size_type capacity() const

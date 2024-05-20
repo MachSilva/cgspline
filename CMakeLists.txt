@@ -56,6 +56,8 @@ add_executable(cgspline
     src/rt/SoA.cpp
 )
 
+target_compile_definitions(cgspline PRIVATE SPL_BC_STATS)
+
 target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
     -lineinfo -rdc=true -maxrregcount=128
     --generate-code arch=compute_75,code=lto_75

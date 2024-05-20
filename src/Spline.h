@@ -672,9 +672,9 @@ namespace stats
 {
 struct BCSearchStep
 {
-    vec2f L; // midline
-    vec2f min;
-    vec2f max;
+    vec2 L; // midline
+    vec2 min;
+    vec2 max;
     char cutside; // "U" or "V"
     float lower;
     float upper;
@@ -683,12 +683,12 @@ struct BCSearchStep
 struct BCSearchHit
 {
     float distance;
-    vec2f coord;
+    vec2 coord;
 };
 
 struct BCData
 {
-    custd::array<vec2f,16> patch2D;
+    std::array<vec2,16> patch2D;
     std::vector<BCSearchStep> steps {};
     std::vector<BCSearchHit> hits {};
     int maxStackDepth = 0;

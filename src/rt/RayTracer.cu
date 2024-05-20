@@ -120,12 +120,11 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
             cudaMemcpyHostToDevice, stream));
     }
 
-    constexpr auto N = 16;
-    dim3 threadsPerBlock (N, N);
+    constexpr dim3 threadsPerBlock (8, 16);
     dim3 blocksPerGrid
     {
-        (w / N) + (w % N ? 1 : 0),
-        (h / N) + (h % N ? 1 : 0)
+        (w / threadsPerBlock.x) + (w % threadsPerBlock.x ? 1 : 0),
+        (h / threadsPerBlock.y) + (h % threadsPerBlock.y ? 1 : 0)
     };
 
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
@@ -148,12 +147,12 @@ void render(Context* ctx)
             .tMin = 0.001f,
             .tMax = numeric_limits<float>::infinity()
         },
-        .color = vec3f(0),
-        .attenuation = vec3f(1),
+        .color = vec3(0),
+        .attenuation = vec3(1),
         .depth = ctx->options.recursionDepth
     };
     while (ctx->trace(payload));
-    vec3f c = payload.color;
+    vec3 c = payload.color;
     c.x = __saturatef(c.x);
     c.y = __saturatef(c.y);
     c.z = __saturatef(c.z);
@@ -283,12 +282,12 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     const auto p = this->scene->objects.get<Key::ePrimitive>(object);
     const auto& m = this->scene->objects.get<Key::eMaterial>(object);
     const auto& M_1 = this->scene->objects.get<Key::eWorld2LocalMatrix>(object);
-    vec3f color {0};
+    vec3 color {0};
 
     // From the point to the camera; BRDF uses this vector orientation.
-    vec3f V = - payload.ray.direction;
+    vec3 V = - payload.ray.direction;
 
-    vec3f N;
+    vec3 N;
     switch (this->scene->objects.get<Key::ePrimitiveType>(object))
     {
     case PrimitiveType::eBezierSurface:
@@ -303,7 +302,7 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     N = (mat3(M_1).transposed() * N).versor();
 
     // bool backfaced = false;
-    float dotNV = vec3f::dot(N, V);
+    float dotNV = vec3::dot(N, V);
 
     if (dotNV < 0)
     {
@@ -312,19 +311,19 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
         dotNV = -dotNV;
     }
 
-    vec3f P = payload.ray.origin + hit.t * payload.ray.direction;
+    vec3 P = payload.ray.origin + hit.t * payload.ray.direction;
 
     const auto& lights = this->scene->lights;
     for (int i = 0; i < lights.size(); i++)
     {
-        vec3f I;
-        vec3f L;
+        vec3 I;
+        vec3 L;
         float d;
 
         if (!lightVector(d, L, P, lights[i]))
             continue;
 
-        const float dotNL = vec3f::dot(N, L);
+        const float dotNL = vec3::dot(N, L);
         if (dotNL < 1e-14f) // Avoid division by zero and backfaced lights
             continue;
 
@@ -345,13 +344,13 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
     float r = m.roughness;
-    vec3f reflectance = (1 - r*r) * schlick(m.specular, dotNV);
-    vec3f a = payload.attenuation * reflectance;
+    vec3 reflectance = (1 - r*r) * schlick(m.specular, dotNV);
+    vec3 a = payload.attenuation * reflectance;
     if (a.max() <= minRadiance)
         return false;
 
     // I = -V
-    vec3f R = (-V) + 2 * dotNV * N;
+    vec3 R = (-V) + 2 * dotNV * N;
     payload.ray =
     {
         .origin = P + this->options.eps * R,

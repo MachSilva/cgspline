@@ -136,7 +136,7 @@ void CPURayTracer::renderTile(
                 .tMin = 0.001f,
                 .tMax = numeric_limits<float>::infinity()
             };
-            vec3f c = trace(pixelRay, vec3f(1), _options.recursionDepth);
+            vec3 c = trace(pixelRay, vec3(1), _options.recursionDepth);
             c.x = std::clamp(c.x, 0.0f, 1.0f);
             c.y = std::clamp(c.y, 0.0f, 1.0f);
             c.z = std::clamp(c.z, 0.0f, 1.0f);
@@ -145,7 +145,7 @@ void CPURayTracer::renderTile(
     }
 }
 
-vec3f CPURayTracer::trace(const Ray& ray, vec3f attenuation, int depth) const
+vec3 CPURayTracer::trace(const Ray& ray, vec3 attenuation, int depth) const
 {
     Intersection hit
     {
@@ -230,33 +230,33 @@ bool CPURayTracer::intersect(const Ray& ray0) const
     return _scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
-vec3f CPURayTracer::miss() const
+vec3 CPURayTracer::miss() const
 {
     return _scene->backgroundColor;
 }
 
-// vec3f CPURayTracer::anyHit()
+// vec3 CPURayTracer::anyHit()
 // {
 
 // }
 
-vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
-    vec3f attenuation, uint32_t object, int depth) const
+vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
+    vec3 attenuation, uint32_t object, int depth) const
 {
     const auto p = _scene->objects.get<Key::ePrimitive>(object);
     const auto& m = _scene->objects.get<Key::eMaterial>(object);
     const auto& M_1 = _scene->objects.get<Key::eWorld2LocalMatrix>(object);
-    vec3f color {0};
+    vec3 color {0};
 
-    // m.specular.xyz = max(m.specular.xyz, vec3f(0.04));
+    // m.specular.xyz = max(m.specular.xyz, vec3(0.04));
 
     // From the point to the camera; BRDF uses this vector orientation.
-    vec3f V = - ray.direction;
-    // vec3f N = p->normal(hit);
-    vec3f N = (mat3(M_1).transposed() * p->normal(hit)).versor();
+    vec3 V = - ray.direction;
+    // vec3 N = p->normal(hit);
+    vec3 N = (mat3(M_1).transposed() * p->normal(hit)).versor();
 
     bool backfaced = false;
-    float dotNV = vec3f::dot(N, V);
+    float dotNV = vec3::dot(N, V);
 
     if (dotNV < 0)
     {
@@ -265,19 +265,19 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
         dotNV = -dotNV;
     }
 
-    vec3f P = ray.origin + hit.t * ray.direction;
+    vec3 P = ray.origin + hit.t * ray.direction;
 
     const auto& lights = _scene->lights;
     for (int i = 0; i < lights.size(); i++)
     {
-        vec3f I;
-        vec3f L;
+        vec3 I;
+        vec3 L;
         float d;
 
         if (!lightVector(d, L, P, lights[i]))
             continue;
 
-        const float dotNL = vec3f::dot(N, L);
+        const float dotNL = vec3::dot(N, L);
         if (dotNL < 1e-14f) // Avoid division by zero and backfaced lights
             continue;
 
@@ -298,12 +298,12 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
     float r = m.roughness;
-    vec3f reflectance = (1 - r*r) * schlick(m.specular, dotNV);
-    vec3f a = attenuation * reflectance;
+    vec3 reflectance = (1 - r*r) * schlick(m.specular, dotNV);
+    vec3 a = attenuation * reflectance;
     if (a.max() > minRadiance)
     {
         // I = -V
-        vec3f R = (-V) + 2 * dotNV * N;
+        vec3 R = (-V) + 2 * dotNV * N;
         Ray r
         {
             .origin = P + _options.eps * R,
@@ -315,7 +315,7 @@ vec3f CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     }
 
     // Refraction
-    // vec3f transmittance = vec3f(1) - reflectance;
+    // vec3 transmittance = vec3(1) - reflectance;
     // // Metals end up absorbing transmitted light
     // a = attenuation * transmittance * m.transparency * (1 - m.metalness);
     // if (a.max() > minRadiance)

@@ -4,44 +4,44 @@ namespace cg::rt
 {
 
 __host__ __device__
-inline vec3f BRDF_diffuse(const Material& m)
+inline vec3 BRDF_diffuse(const Material& m)
 {
     // Lambertian diffuse
     return m.diffuse * std::numbers::inv_pi_v<float>;
 }
 
 __host__ __device__
-inline vec3f BRDF_specular(
-    const vec3f& L,
-    const vec3f& V,
-    const vec3f& N,
+inline vec3 BRDF_specular(
+    const vec3& L,
+    const vec3& V,
+    const vec3& N,
     float dotNV,
     float dotNL,
     float roughness,
-    const vec3f& R0)
+    const vec3& R0)
 {
-    vec3f H = (L + V).versor();
-    return schlick(R0, vec3f::dot(L, H))
-        * BRDF_microfacet(dotNV, dotNL, vec3f::dot(H, N), roughness);
+    vec3 H = (L + V).versor();
+    return schlick(R0, vec3::dot(L, H))
+        * BRDF_microfacet(dotNV, dotNL, vec3::dot(H, N), roughness);
 }
 
 __host__ __device__
-vec3f BRDF(
-    const vec3f& I,
-    const vec3f& L,
-    const vec3f& V,
-    const vec3f& N,
+vec3 BRDF(
+    const vec3& I,
+    const vec3& L,
+    const vec3& V,
+    const vec3& N,
     float dotNV,
     float dotNL,
     const Material& m)
 {
-    vec3f d = BRDF_diffuse(m);
-    vec3f s = BRDF_specular(L, V, N, dotNV, dotNL, m.roughness, m.specular);
+    vec3 d = BRDF_diffuse(m);
+    vec3 s = BRDF_specular(L, V, N, dotNV, dotNL, m.roughness, m.specular);
     return I * mix(d, s, m.metalness) * dotNL;
 }
 
 __host__ __device__
-bool lightVector(float& d, vec3f& L, const vec3f& P, const Light& light)
+bool lightVector(float& d, vec3& L, const vec3& P, const Light& light)
 {
     if (light.isDirectional())
     {
@@ -60,12 +60,12 @@ bool lightVector(float& d, vec3f& L, const vec3f& P, const Light& light)
         return true;
 
     // spot
-    float DL = vec3f::dot(light.direction, L);
+    float DL = vec3::dot(light.direction, L);
     return DL < 0 && light.angle > 2 * acosf(DL);
 }
 
 __host__ __device__
-vec3f lightColor(float d, const Light& light)
+vec3 lightColor(float d, const Light& light)
 {
     // directional light
     if (light.isDirectional())

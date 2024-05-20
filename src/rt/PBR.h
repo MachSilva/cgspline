@@ -2,7 +2,6 @@
 
 #include <cuda/std/cmath>
 #include <graphics/Color.h>
-#include <math/Vector4.h>
 #include <numbers>
 #include "RTNamespace.h"
 #include "Scene.h"
@@ -20,17 +19,17 @@ namespace cg::rt
  * @return bool If point @a P is illuminated by the light
  */
 __host__ __device__
-bool lightVector(float& d, vec3f& L, const vec3f& P, const Light& light);
+bool lightVector(float& d, vec3& L, const vec3& P, const Light& light);
 
 __host__ __device__
-vec3f lightColor(float d, const Light& light);
+vec3 lightColor(float d, const Light& light);
 
 __host__ __device__
-vec3f BRDF(
-    const vec3f& I,
-    const vec3f& L,
-    const vec3f& V,
-    const vec3f& N,
+vec3 BRDF(
+    const vec3& I,
+    const vec3& L,
+    const vec3& V,
+    const vec3& N,
     float dotNV,
     float dotNL,
     const Material& m);
@@ -73,11 +72,11 @@ static inline float BRDF_microfacet(
 
 // Schlick's approximation for Fresnel reflectance for each wavelength
 __host__ __device__
-static inline vec3f schlick(const vec3f& R0, float dotLH)
+static inline vec3 schlick(const vec3& R0, float dotLH)
 {
     float b = 1 - dotLH;
     float b2 = b*b;
-    return R0 + (vec3f(1) - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
+    return R0 + (vec3(1) - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
 }
 
 __host__ __device__
@@ -92,9 +91,9 @@ static inline float schlick(float R0, float dotLH)
 //   eta: relative refractive index
 // TODO
 // __host__ __device__
-// static inline vec3f fresnel(const vec3f& R0, float dotLH, float eta)
+// static inline vec3 fresnel(const vec3& R0, float dotLH, float eta)
 // {
-//     return R0 + (vec3f(1) - R0) * powf(1 - dotLH, 5);
+//     return R0 + (vec3(1) - R0) * powf(1 - dotLH, 5);
 // }
 
 template<typename T, std::floating_point real>

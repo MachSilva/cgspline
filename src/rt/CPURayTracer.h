@@ -46,15 +46,15 @@ public:
 private:
     using Key = Scene::Key;
 
-    vec3f trace(const Ray& ray, vec3f attenuation, int depth) const;
+    vec3 trace(const Ray& ray, vec3 attenuation, int depth) const;
 
-    vec3f miss() const;
+    vec3 miss() const;
 
-    vec3f anyHit(const Intersection& hit, const Ray& ray,
+    vec3 anyHit(const Intersection& hit, const Ray& ray,
         uint32_t object, int depth) const;
 
-    vec3f closestHit(const Intersection& hit, const Ray& ray,
-        vec3f attenuation, uint32_t object, int depth) const;
+    vec3 closestHit(const Intersection& hit, const Ray& ray,
+        vec3 attenuation, uint32_t object, int depth) const;
 
     int intersect(Intersection& hit, const Ray& ray) const;
 
