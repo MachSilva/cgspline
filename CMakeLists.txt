@@ -19,9 +19,6 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_CUDA_ARCHITECTURES 75)
-# if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
-#     set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS} "-g -G")
-# endif()
 
 add_subdirectory(external/stb)
 add_subdirectory(Ds)
@@ -56,13 +53,21 @@ add_executable(cgspline
     src/rt/SoA.cpp
 )
 
-target_compile_definitions(cgspline PRIVATE SPL_BC_STATS)
+# target_compile_definitions(cgspline PRIVATE SPL_BC_STATS)
 
-target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-    -lineinfo -rdc=true -maxrregcount=128
-    --generate-code arch=compute_75,code=lto_75
-    -Xptxas=-v -Xnvlink=-dlto
->)
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+    target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+        -g -G
+        --generate-code arch=compute_75,code=sm_75
+        -Xptxas=-v
+    >)
+else()
+    target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+        -lineinfo -rdc=true -maxrregcount=128
+        --generate-code arch=compute_75,code=lto_75
+        -Xptxas=-v -Xnvlink=-dlto
+    >)
+endif()
 
 get_target_property(cgdemo_src cgdemo SOURCE_DIR)
 
@@ -84,3 +89,14 @@ if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
 endif()
 
 target_link_libraries(cgspline cgcuda stb)
+
+target_precompile_headers(cgspline PRIVATE
+    <imgui.h>
+    <imgui_internal.h>
+    <stb_image.h>
+    <cuda_runtime.h>
+    <math/Vector4.h>
+    <math/Matrix4x4.h>
+    <geometry/Bounds3.h>
+    <graph/SceneWindow.h>
+)

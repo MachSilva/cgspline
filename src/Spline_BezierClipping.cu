@@ -542,8 +542,8 @@ void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
     for (int i = 0; i < 16; i++)
         q[i] = patch[i];
 
-    subpatchU(q, cmin.x, cmax.x);
-    subpatchV(q, cmin.y, cmax.y);
+    mat::subpatchU(q, cmin.x, cmax.x);
+    mat::subpatchV(q, cmin.y, cmax.y);
 }
 
 static DEVICE
@@ -552,6 +552,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
     float tol)
 {
     namespace std = ::cuda::std;
+    using namespace mat;
     struct State
     {
         vec2 min;
@@ -763,12 +764,13 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 // subpatchV(buffer2, 0.0, 0.5);
                 subpatchV(buffer, 0.5f, 1.0f);
             }
-            if (__builtin_expect (S.size() == S.capacity() && !spilled, 0))
+            if (__builtin_expect (S.size() >= S.capacity() && !spilled, 0))
             {
+                constexpr int n = 32;
                 auto s = S.size();
-                auto p = alloca(16 * sizeof (State));
+                auto p = alloca(n * sizeof (State));
                 spilled = true;
-                S = ArrayAdaptor<State>((State*) p, 16);
+                S = ArrayAdaptor<State>((State*) p, n);
                 for (int i = 0; i < s; i++)
                     S.push_back(localStack[i]);
             }

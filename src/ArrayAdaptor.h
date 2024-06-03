@@ -14,6 +14,32 @@ namespace custd = ::cuda::std;
 namespace detail
 {
 
+template<typename T, typename... Args>
+_SPL_CONSTEXPR_ATTR T& construct_at(T* p, Args... args)
+{
+    ::new (p) T(std::forward<Args>(args)...);
+}
+
+template<typename T>
+_SPL_CONSTEXPR_ATTR void destroy_at(T* p) noexcept
+{
+    p->~T();
+}
+
+template<typename T>
+_SPL_CONSTEXPR_ATTR void destroy_n(T* p, int n) noexcept
+{
+    for (int i = 0; i < n; i++)
+        destroy_at(p+i);
+}
+
+template<typename T>
+_SPL_CONSTEXPR_ATTR void destroy(T* p, T* q) noexcept
+{
+    for (; p < q; p++)
+        destroy_at(p);
+}
+
 template<typename T, typename SizeT, typename DataT = T*>
 class ArrayBase
 {
@@ -24,7 +50,7 @@ public:
     _SPL_CONSTEXPR_ATTR
     void clear()
     {
-        custd::destroy_n(_data, _size);
+        detail::destroy_n(_data, _size);
         _size = 0;
     }
 
@@ -106,11 +132,11 @@ public:
         {
             assert(n <= capacity());
             while (this->_size < n)
-                custd::construct_at(this->_data + (this->_size++));
+                detail::construct_at(this->_data + (this->_size++));
         }
         else if (n < this->_size)
         {
-            custd::destroy(this->_data+n, this->_data+this->_size);
+            detail::destroy(this->_data+n, this->_data+this->_size);
             this->_size = n;
         }
     }
@@ -120,7 +146,7 @@ public:
     T& emplace_back(Args&&... args)
     {
         assert(this->_size+1 <= capacity());
-        custd::construct_at(this->_data + (this->_size++), custd::forward<Args>(args)...);
+        detail::construct_at(this->_data + (this->_size++), std::forward<Args>(args)...);
         return this->back();
     }
 
@@ -128,13 +154,13 @@ public:
     void push_back(const T& t)
     {
         assert(this->_size+1 <= capacity());
-        custd::construct_at(this->_data + (this->_size++), t);
+        detail::construct_at(this->_data + (this->_size++), t);
     }
 
     _SPL_CONSTEXPR_ATTR
     void pop_back()
     {
-        custd::destroy_at(this->_data + (--this->_size));
+        detail::destroy_at(this->_data + (--this->_size));
     }
 };
 
@@ -177,7 +203,7 @@ public:
         }
         else if (n < this->_size)
         {
-            custd::destroy(this->_data+n, this->_data+this->_size);
+            detail::destroy(this->_data+n, this->_data+this->_size);
             this->_size = n;
         }
     }
@@ -187,7 +213,7 @@ public:
     T& emplace_back(Args&&... args)
     {
         assert(this->_size+1 <= _capacity);
-        new (this->_data + (this->_size++)) T(custd::forward<Args>(args)...);
+        new (this->_data + (this->_size++)) T(std::forward<Args>(args)...);
         return this->back();
     }
 
@@ -201,7 +227,7 @@ public:
     _SPL_CONSTEXPR_ATTR
     void pop_back()
     {
-        custd::destroy_at(this->_data + (--this->_size));
+        detail::destroy_at(this->_data + (--this->_size));
     }
 
 protected:

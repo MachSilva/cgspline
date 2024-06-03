@@ -3,7 +3,11 @@
 #include <cuda_runtime.h>
 #include <math/Matrix4x4.h>
 
+#if defined(__CUDA_ARCH__)
 #define _SPL_CONSTEXPR __host__ __device__ constexpr
+#else
+#define _SPL_CONSTEXPR constexpr
+#endif
 
 namespace cg::spline
 {
@@ -16,7 +20,12 @@ struct alignas(8) vec2 : Vector<float,2>
 {
     using Vector::Vector;
 
-    _SPL_CONSTEXPR vec2(const Vector& v) : Vector(v.x, v.y) {}
+    // _SPL_CONSTEXPR vec2() {}
+    // _SPL_CONSTEXPR vec2(float _x, float _y) : Vector(_x, _y) {}
+
+    _SPL_CONSTEXPR vec2(const Vector<float,2>& v) : Vector(v) {}
+    // template<typename V> _SPL_CONSTEXPR vec2(const V& v) : Vector(v) {}
+
     // _SPL_CONSTEXPR vec2& operator =(const Vector& v) { x = v.x, y = v.y; return *this; }
     _SPL_CONSTEXPR operator float2() const { return {x, y}; }
 };
@@ -25,10 +34,13 @@ struct alignas(16) vec3 : Vector<float,3>
 {
     using Vector::Vector;
 
+    // _SPL_CONSTEXPR vec3() {}
+    // _SPL_CONSTEXPR vec3(float _x, float _y, float _z) : Vector(_x, _y, _z) {}
     _SPL_CONSTEXPR vec3(const vec2& v, float _z) : Vector(v.x, v.y, _z) {}
 
-    _SPL_CONSTEXPR vec3(const Vector& v) : Vector(v.x, v.y, v.z) {}
-    // _SPL_CONSTEXPR vec3& operator =(const Vector& v) { x = v.x, y = v.y, z = v.z; return *this; }
+    _SPL_CONSTEXPR vec3(const Vector<float,3>& v) : Vector(v) {}
+    // template<typename V> _SPL_CONSTEXPR vec3(const V& v) : Vector(v) {}
+
     _SPL_CONSTEXPR operator float3() const { return {x, y, z}; }
 };
 
@@ -36,13 +48,15 @@ struct alignas(16) vec4 : Vector<float,4>
 {
     using Vector::Vector;
 
+    // _SPL_CONSTEXPR vec4() {}
+    // _SPL_CONSTEXPR vec4(float _x, float _y, float _z, float _w) : Vector(_x, _y, _z, _w) {}
     _SPL_CONSTEXPR vec4(const vec2& v, float _z, float _w) : Vector(v.x, v.y, _z, _w) {}
     _SPL_CONSTEXPR vec4(const vec3& v, float _w) : Vector(v.x, v.y, v.z, _w) {}
 
-    _SPL_CONSTEXPR vec4(const Vector& v) : Vector(v) {}
-    // _SPL_CONSTEXPR vec4& operator =(const Vector& v) { x = v.x, y = v.y, z = v.z, w = v.w; return *this; }
+    _SPL_CONSTEXPR vec4(const Vector<float,4>& v) : Vector(v) {}
+    // template<typename V> _SPL_CONSTEXPR vec4(const V& v) : Vector(v) {}
 
-    _SPL_CONSTEXPR vec4& operator =(const float4& v) { x = v.x, y = v.y, z = v.z, w = v.w; return *this; }
+    // _SPL_CONSTEXPR vec4& operator =(const float4& v) { x = v.x, y = v.y, z = v.z, w = v.w; return *this; }
     _SPL_CONSTEXPR operator float4() const { return {x, y, z, w}; }
 };
 
@@ -58,6 +72,12 @@ struct alignas(16) quat : Quaternion<float>
     _SPL_CONSTEXPR quat(const Quaternion& q) : Quaternion(q) {}
     // _SPL_CONSTEXPR quat& operator =(const Quaternion& q) { x = q.x, y = q.y, z = q.z, w = q.w; return *this; }
     _SPL_CONSTEXPR operator float4() const { return {x, y, z, w}; }
+};
+
+template<unsigned N, unsigned M>
+struct matrix
+{
+
 };
 
 struct alignas(16) mat3
@@ -194,6 +214,12 @@ struct alignas(16) mat4
             {c0.z, c1.z, c2.z, c3.z}, {c0.w, c1.w, c2.w, c3.w}};
     }
 };
+
+// template<typename T>
+// _SPL_CONSTEXPR vec3 reverse(const vec3& v)
+// {
+//     return {v.z, v.y, v.x};
+// }
 
 _SPL_CONSTEXPR mat3 rotation(const vec3& v, float angle)
 {

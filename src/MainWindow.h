@@ -119,7 +119,7 @@ protected:
         eCPU, eCUDA
     } _renderMethod = RenderMethod::eCPU;
 
-    Intersection _lastPickHit;
+    Intersection _lastPickHit {};
     Ref<gl::Texture> _image;
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;
@@ -150,12 +150,15 @@ protected:
       cudaDeviceProp properties;
     } _cuda;
 
-#if SPL_BC_STATS
+// #if SPL_BC_STATS
     Ref<graph::SceneObject> _debugObject;
     Ref<GLBezierSurface> _debugPatch2D;
     uint32_t _debugPatchIndex {};
     uint32_t _debugStep {};
-#endif
+// #endif
+
+    vec2 _debugClip[2] {{0, 1}, {0, 1}};
+    bool _matClip = false;
 };
 
 } // namespace cg

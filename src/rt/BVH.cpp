@@ -1,5 +1,6 @@
 #include "BVH.h"
 
+#include <algorithm>
 #include <stack>
 
 namespace cg::rt

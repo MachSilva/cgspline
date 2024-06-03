@@ -8,8 +8,10 @@
 #include <map>
 #include <ranges>
 #include "Framebuffer.h"
-#include "SceneReaderExt.h"
 #include "Log.h"
+#include "SceneReaderExt.h"
+// #include "Surface.h"
+#include "SplineMat.h"
 #include "rt/ScopeClock.h"
 
 namespace cg
@@ -203,7 +205,7 @@ void MainWindow::initializeScene()
 
     _texRenderer = new SplRenderer();
 
-#if SPL_BC_STATS
+// #if SPL_BC_STATS
     {
         const uint32_t indexArray[]
         {
@@ -222,7 +224,7 @@ void MainWindow::initializeScene()
         points->setData(vertexArray);
         _debugObject = createSurfaceObject(*_debugPatch2D, "Debug Object");
     }
-#endif
+// #endif
 }
 
 void MainWindow::render()
@@ -246,30 +248,30 @@ void MainWindow::render()
         return;
     }
 
-#if SPL_BC_STATS
-    vec3f __debugLine {};
-    auto n = spline::stats::g_BezierClippingData.size();
-    if (n > 1 && _debugPatchIndex < n)
-    {
-        vec4f buffer[16];
-        auto& data = spline::stats::g_BezierClippingData[_debugPatchIndex];
-        auto& step = data.steps[_debugStep];
-        auto patch2D = data.patch2D;
-        if (_debugStep > 0)
-        {
-            auto [u0, v0] = step.min;
-            auto [u1, v1] = step.max;
-            spline::subpatch(patch2D.data(), u0, u1, v0, v1);
-        }
-        for (int i = 0; i < 16; i++)
-        {
-            auto& v = patch2D[i];
-            buffer[i] = {v.x, 0, v.y, 1};
-        }
-        _debugPatch2D->points()->setData(buffer);
-        __debugLine = {step.L.x, 0, step.L.y};
-    }
-#endif
+// #if SPL_BC_STATS
+    // vec3f __debugLine {};
+    // auto n = spline::stats::g_BezierClippingData.size();
+    // if (n > 1 && _debugPatchIndex < n)
+    // {
+    //     vec4f buffer[16];
+    //     auto& data = spline::stats::g_BezierClippingData[_debugPatchIndex];
+    //     auto& step = data.steps[_debugStep];
+    //     auto patch2D = data.patch2D;
+    //     if (_debugStep > 0)
+    //     {
+    //         auto [u0, v0] = step.min;
+    //         auto [u1, v1] = step.max;
+    //         spline::subpatch(patch2D.data(), u0, u1, v0, v1);
+    //     }
+    //     for (int i = 0; i < 16; i++)
+    //     {
+    //         auto& v = patch2D[i];
+    //         buffer[i] = {v.x, 0, v.y, 1};
+    //     }
+    //     _debugPatch2D->points()->setData(buffer);
+    //     __debugLine = {step.L.x, 0, step.L.y};
+    // }
+// #endif
 
     if (_sceneEnvironment)
     {
@@ -314,6 +316,36 @@ void MainWindow::render()
             e->drawVector(Q, n, e->pixelsLength(100.0));
         }
     }
+
+    if (auto obj = (const graph::SceneObject*) _lastPickHit.object)
+    {
+        const SurfaceProxy* ptr = nullptr;
+        for (const graph::Component* c : obj->components())
+        {
+            if (ptr = dynamic_cast<const SurfaceProxy*>(c))
+            {
+                auto s = ptr->mapper()->surface().patches();
+                auto points = s->points()->map(GL_READ_ONLY);
+                auto indices = s->indices()->map(GL_READ_ONLY);
+                int base = 16 * _lastPickHit.triangleIndex;
+                vec4 buffer[16];
+                for (int i = 0; i < 16; i++)
+                {
+                    buffer[i] = points[indices[base + i]];
+                }
+                auto [u0, u1] = _debugClip[0];
+                auto [v0, v1] = _debugClip[1];
+                _matClip
+                    ? spline::mat::subpatch(buffer, u0, u1, v0, v1)
+                    : spline::subpatch(buffer, u0, u1, v0, v1);
+                _debugPatch2D->points()->setData(buffer);
+                break;
+            }
+        }
+    }
+
+    // draw debug object
+    drawSelectedObject(*_debugObject);
 
 #if SPL_BC_STATS
     // draw debug object

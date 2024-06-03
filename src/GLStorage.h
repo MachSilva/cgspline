@@ -48,6 +48,7 @@ public:
 
     auto map(GLenum access = GL_READ_WRITE)
     {
+        assert(access == GL_READ_ONLY || access == GL_WRITE_ONLY || access == GL_READ_WRITE);
         return guard(static_cast<T*>(glMapNamedBuffer(_buffer, access)));
     }
 

@@ -339,6 +339,30 @@ void MainWindow::controlWindow()
         ImGui::ColorButton(label.c_str(), *(ImVec4*)&color.x);
     }
 
+    ImGui::Separator();
+    ImGui::DragFloatRange2("Clip U", &_debugClip[0].x, &_debugClip[0].y, 0.001f);
+    ImGui::DragFloatRange2("Clip V", &_debugClip[1].x, &_debugClip[1].y, 0.001f);
+
+    if (ImGui::Button("Reset Clip"))
+    {
+        _debugClip[1] = _debugClip[0] = {0, 1};
+    }
+
+    if (ImGui::Checkbox("Use matrix version", &_matClip))
+    {
+
+    }
+
+    auto t = _debugObject->transform();
+    float scale = std::log10(t->localScale().x);
+    float slidermin = -3;
+    float slidermax = 20;
+    if (ImGui::SliderScalar("Debug Obj Zoom", ImGuiDataType_Float, &scale,
+        &slidermin, &slidermax))
+    {
+        t->setLocalScale(std::pow(10, scale));
+    }
+
 #if SPL_BC_STATS
     ImGui::Separator();
     auto t = _debugObject->transform();
