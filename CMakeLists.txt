@@ -42,6 +42,9 @@ add_executable(cgspline
     src/SplRenderer.cpp
     src/Surface.cpp
     src/Texture.cpp
+    src/reader/DescriptionLanguage.cpp
+    src/reader/Parser.cpp
+    src/reader/SceneReader.cpp
     src/rt/BVH.cpp
     src/rt/CPURayTracer.cpp
     src/rt/CUDAUtility.cpp

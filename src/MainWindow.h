@@ -151,7 +151,7 @@ protected:
     } _cuda;
 
 // #if SPL_BC_STATS
-    Ref<graph::SceneObject> _debugObject;
+    graph::SceneObject* _debugObject {};
     Ref<GLBezierSurface> _debugPatch2D;
     uint32_t _debugPatchIndex {};
     uint32_t _debugStep {};

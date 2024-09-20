@@ -1,0 +1,155 @@
+// let GoldSc      = (0.8*0.3,0.498039*0.3,0.196078*0.3)
+// let BronzeSc    = (0.55*0.3,0.47*0.3,0.14*0.3)
+let Gold        = (0.8  0.498039    0.196078)
+let Copper      = (0.72 0.45 0.20)
+let Bronze      = (0.55 0.47 0.14)
+let Silver      = (0.90 0.91 0.98)
+let Black       = (0 0 0)
+let White       = (1 1 1)
+let DarkGray    = (0.025 0.025 0.025)
+
+Texture("je_gray_park_4k" "../textures/je_gray_park_4k.hdr")
+Texture("Metal042A_BaseColor" "../textures/Metal042A_4K-JPG_Color.jpg")
+
+Material
+{
+  name:     "SilverSp"
+  ambient:  *(0.5 Silver)
+  diffuse:  Black
+  spot:     Silver
+  shine:    100
+  specular: *(0.5 Silver)
+}
+
+PBRMaterial
+{
+  name: "Metal042A"
+  metalness: 1
+  roughness: 0
+  texture: Get("Metal042A_BaseColor")
+}
+
+Surface { name: "teacup"    bezier: "../bezier/teacup" }
+Surface { name: "teapot"    bezier: "../bezier/teapot" }
+Surface { name: "teaspoon"  bezier: "../bezier/teaspoon" }
+
+Scene
+{
+  environment:
+  {
+    background: DarkGray
+    ambient: DarkGray
+    // texture: Get("je_gray_park_4k")
+  }
+  objects:
+  [
+    {
+      name: "Floor"
+      transform:
+      {
+        position: (0 -0.4 0)
+        scale: (10 0.4 10)
+      }
+      // mesh: { name: "Box" }
+    }
+
+    {
+      name: "Lights"
+      objects:
+      [
+        {
+          transform:
+          {
+            position: (-10 5 +5)
+          }
+          light:
+          {
+            type: "point"
+            color: White
+            falloff: 0
+          }
+        }
+        {
+          transform:
+          {
+            position: (-10 5 -5)
+          }
+          light:
+          {
+            type: "point"
+            color: White
+            falloff: 0
+          }
+        }
+        {
+          transform:
+          {
+            position: (5 5 +10)
+          }
+          light:
+          {
+            type: "point"
+            color: White
+            falloff: 0
+          }
+        }
+        {
+          transform:
+          {
+            position: (5 5 -10)
+          }
+          light:
+          {
+            type: "point"
+            color: White
+            falloff: 1
+          }
+        }
+      ]
+    }
+
+    {
+      name: "Teaset"
+      objects:
+      [
+        {
+          name: "Teapot"
+          transform:
+          {
+            rotation: (-90 0 0)
+            scale: (0.5 0.5 0.5)
+          }
+          surface:
+          {
+            model: Get("teapot")
+            material: Get("Metal042A")
+          }
+        }
+        {
+          name: "Teacup"
+          transform:
+          {
+            position: (2.4 0 0)
+          }
+          surface:
+          {
+            model: Get("teacup")
+            material: Get("SilverSp")
+          }
+        }
+        {
+          name: "Teaspoon"
+          transform:
+          {
+            position: (3.5 1 0)
+          }
+          surface:
+          {
+            model: Get("teaspoon")
+            material: Get("SilverSp")
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -12,6 +12,7 @@
 #include "SceneReaderExt.h"
 // #include "Surface.h"
 #include "SplineMat.h"
+#include "reader/SceneReader.h"
 #include "rt/ScopeClock.h"
 
 namespace cg
@@ -281,6 +282,8 @@ void MainWindow::render()
         glBindTexture(GL_TEXTURE_2D, _sceneEnvironment->handle());
         renderer()->setEnvironmentTextureUnit(unit);
     }
+    else
+        renderer()->setEnvironmentTextureUnit(-1);
 
     e->render();
 
@@ -345,7 +348,7 @@ void MainWindow::render()
     }
 
     // draw debug object
-    drawSelectedObject(*_debugObject);
+    // drawSelectedObject(*_debugObject);
 
 #if SPL_BC_STATS
     // draw debug object
@@ -748,27 +751,55 @@ graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
     return nearest;
 }
 
+// void MainWindow::readScene(std::filesystem::path scenefile)
+// {
+//     util::SceneReaderExt reader {};
+
+//     reader.setInput(scenefile.string());
+//     try
+//     {
+//         reader.execute();
+//         if (reader.scene() == nullptr)
+//             throw std::runtime_error("Scene is null");
+//         setScene(*reader.scene());
+
+//         // auto& materials = Assets::materials();
+//         // for (auto& [name, m] : reader.materials)
+//         //     materials[name] = m;
+
+//         _sceneEnvironment = reader.environment;
+//         _sceneMaterials = std::move(reader.materials);
+//         _scenePBRMaterials = std::move(reader.pbrMaterials);
+//         _sceneSurfaces = std::move(reader.surfaces);
+//         _sceneTextures = std::move(reader.textures);
+//     }
+//     catch (const std::exception& e)
+//     {
+//         std::cerr << std::format("Failed to load scene '{}'. Reason:\n{}\n",
+//             scenefile.filename().string().c_str(), e.what());
+//     }
+// }
+
 void MainWindow::readScene(std::filesystem::path scenefile)
 {
-    util::SceneReaderExt reader {};
+    SceneReader reader {};
 
-    reader.setInput(scenefile.string());
+    auto file = scenefile.string();
+    std::fstream in (file, std::ios::in);
+    if (!in)
+    {
+        log::error("File not found: {}", file);
+        return;
+    }
+
     try
     {
-        reader.execute();
+        reader.parse(scenefile.filename().string(), in, scenefile.parent_path());
         if (reader.scene() == nullptr)
             throw std::runtime_error("Scene is null");
         setScene(*reader.scene());
 
-        // auto& materials = Assets::materials();
-        // for (auto& [name, m] : reader.materials)
-        //     materials[name] = m;
-
         _sceneEnvironment = reader.environment;
-        _sceneMaterials = std::move(reader.materials);
-        _scenePBRMaterials = std::move(reader.pbrMaterials);
-        _sceneSurfaces = std::move(reader.surfaces);
-        _sceneTextures = std::move(reader.textures);
     }
     catch (const std::exception& e)
     {
