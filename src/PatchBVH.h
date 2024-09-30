@@ -2,7 +2,7 @@
 
 #include <geometry/BVH.h>
 #include <span>
-#include "GLBezierSurface.h"
+#include "GLSurface.h"
 
 namespace cg
 {
@@ -13,13 +13,13 @@ namespace cg
 class PatchBVH final : public BVHBase
 {
 public:
-    PatchBVH(const BezierSurface*);
-    PatchBVH(const GLBezierSurface*);
+    PatchBVH(const Surface*);
+    PatchBVH(const GLSurface*);
 
-    BezierSurface* surface() const { return _patches; }
+    Surface* surface() const { return _surface; }
 
 private:
-    Ref<BezierSurface> _patches;
+    Ref<Surface> _surface;
 
     void init();
 

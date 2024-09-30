@@ -3,7 +3,7 @@
 #include <core/SharedObject.h>
 #include <graph/Scene.h>
 #include "DescriptionLanguage.h"
-#include "../Surface.h"
+#include "../SurfacePipeline.h"
 #include "../PBRMaterial.h"
 #include "../Texture.h"
 

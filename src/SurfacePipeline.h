@@ -5,7 +5,7 @@
 #include <graphics/PrimitiveMapper.h>
 #include <graph/ComponentProxy.h>
 #include <graph/PrimitiveProxy.h>
-#include "GLBezierSurface.h"
+#include "GLSurface.h"
 #include "PatchBVH.h"
 #include "PBRMaterial.h"
 
@@ -26,13 +26,13 @@ namespace GLSL
  * - vec4 deCasteljauDx(float u, inout vec4 p[4]);
  * - vec4 derivativeU(float u, float v);
  * - vec4 derivativeV(float u, float v);
+ * - void evalAll(float u, float v, out vec4 P, out vec4 D);
  * 
  * It is up to you to provide the following symbols to your shader:
  * - vec4 pointAt(int i, int j);
  * 
  * @warning It does not work for Rational Bézier Surfaces.
- * @warning The derivative functions return vectors of INCORRECT length,
- * but of CORRECT direction.
+ * @warning The derivative functions DOES NOT normalized returned vectors.
  */
 extern const char * const BICUBIC_DECASTELJAU_FUNCTIONS;
 
@@ -48,15 +48,19 @@ protected:
 public:
     SurfacePrimitive() = default;
 
-    SurfacePrimitive(GLBezierSurface* patches)
+    SurfacePrimitive(Surface* s) { setSurface(s); }
+    SurfacePrimitive(GLSurface* s) { setSurface(s); }
+
+    GLSurface* surface() const { return _surface; }
+    void setSurface(GLSurface* p)
     {
-        setPatches(patches);
+        _surface = p;
+        _bvh = new PatchBVH(p);
     }
 
-    GLBezierSurface* patches() const { return _patches; }
-    void setPatches(GLBezierSurface* p)
+    void setSurface(Surface* p)
     {
-        _patches = p;
+        _surface = new GLSurface(p->patches());
         _bvh = new PatchBVH(p);
     }
 
@@ -67,7 +71,7 @@ public:
     Ref<PBRMaterial> pbrMaterial {nullptr};
 
 private:
-    Ref<GLBezierSurface> _patches;
+    Ref<GLSurface> _surface;
     Ref<PatchBVH> _bvh;
 };
 
@@ -84,7 +88,7 @@ public:
     Bounds3f bounds() const override;
     Primitive* primitive() const override;
 
-    SurfacePrimitive& surface() { return *_surface; }
+    SurfacePrimitive* surface() { return _surface; }
 
 protected:
     Ref<SurfacePrimitive> _surface;

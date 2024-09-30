@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <future>
+#include <map>
 #include <memory_resource>
 #include <vector>
 #include <CUDAHelper.h>
@@ -10,12 +11,12 @@
 #include <graphics/GLImage.h>
 #include <graphics/Renderer.h>
 #include "ColorMap.h"
-#include "GLBezierSurface.h"
+#include "GLSurface.h"
 #include "Framebuffer.h"
-#include "SceneReaderExt.h"
+// #include "SceneReaderExt.h"
 #include "Spline.h"
 #include "SplRenderer.h"
-#include "Surface.h"
+#include "SurfacePipeline.h"
 #include "RayTracer.h"
 #include "rt/CPURayTracer.h"
 #include "rt/RayTracer.h"
@@ -89,14 +90,17 @@ public:
     }, heatMaxValue};
 
 protected:
-    graph::SceneObject* createSurfaceObject(GLBezierSurface& p, const char* name);
+    graph::SceneObject* createSurfaceObject(GLSurface& p, const char* name);
     void drawSelectedObject(const graph::SceneObject& object);
 
     graph::SceneObject* pickObject(graph::SceneObject* obj,
         const Ray3f& ray,
         Intersection& hit) const;
-    
+
+    void createDebugObject(const char * name = "Debug Object");
+
     void readScene(std::filesystem::path scenefile);
+    void setScene(graph::Scene& scene);
     void convertScene();
 
     void assetWindow();
@@ -119,7 +123,6 @@ protected:
         eCPU, eCUDA
     } _renderMethod = RenderMethod::eCPU;
 
-    Intersection _lastPickHit {};
     Ref<gl::Texture> _image;
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;
@@ -134,11 +137,11 @@ protected:
     Ref<gl::Texture> _workbench2DSelectedItem = nullptr;
 
     std::vector<std::filesystem::path> _sceneFileList;
-    MaterialMap _sceneMaterials;
-    util::TriangleMeshMap _sceneMeshes;
-    util::PBRMaterialMap _scenePBRMaterials;
-    util::SurfaceMap _sceneSurfaces;
-    util::TextureMap _sceneTextures;
+    std::map<std::string,Ref<Material>> _sceneMaterials;
+    std::map<std::string,Ref<TriangleMesh>> _sceneMeshes;
+    std::map<std::string,Ref<PBRMaterial>> _scenePBRMaterials;
+    std::map<std::string,Ref<GLSurface>> _sceneSurfaces;
+    std::map<std::string,Ref<gl::Texture>> _sceneTextures;
     Ref<gl::Texture> _sceneEnvironment;
 
     State _state {};
@@ -150,9 +153,16 @@ protected:
       cudaDeviceProp properties;
     } _cuda;
 
+    struct SceneRefs
+    {
+        Intersection lastPickHit {};
+        graph::SceneObject* debugObject {};
+
+        void reset() { *this = {}; }
+    } _sceneRefs;
+
 // #if SPL_BC_STATS
-    graph::SceneObject* _debugObject {};
-    Ref<GLBezierSurface> _debugPatch2D;
+    Ref<GLSurface> _debugPatch2D;
     uint32_t _debugPatchIndex {};
     uint32_t _debugStep {};
 // #endif

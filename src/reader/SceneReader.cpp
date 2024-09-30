@@ -1,6 +1,7 @@
 #include "SceneReader.h"
 
 #include <graphics/Assets.h>
+#include <fstream>
 
 namespace cg
 {
@@ -183,7 +184,8 @@ Value SceneReader::createSurface(const List& args)
         if (std::filesystem::exists(file) == false)
             throw std::runtime_error(_f("file '{}' does not exist", path));
 
-        return it->second = GLBezierSurface::load(file.string().c_str());
+        std::ifstream in (file.string());
+        return it->second = GLSurface::load_be(in);
     }
 
     throw std::runtime_error("surface data or source not provided");
@@ -212,7 +214,7 @@ Ref<graph::PrimitiveProxy> SceneReader::addMesh(const Dict* props)
 
 Ref<SurfaceProxy> SceneReader::addSurface(const Dict* props)
 {
-    auto surface = props->at("model").castTo<GLBezierSurface>();
+    auto surface = props->at("model").castTo<GLSurface>();
     auto primitive = Ref(new SurfacePrimitive(surface));
 
     if (auto p = props->get_ptr("material"))

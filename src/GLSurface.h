@@ -1,49 +1,54 @@
 #pragma once
 
 #include <math/Vector4.h>
-#include <geometry/Index2.h>
-#include "BezierSurface.h"
+#include "Surface.h"
 #include "GLStorage.h"
 
 namespace cg
 {
 
-class GLBezierSurface : public Surface
+class GLSurface : public SharedObject
 {
 public:
-    GLBezierSurface();
-    ~GLBezierSurface() override;
+    GLSurface();
+    ~GLSurface() override;
 
-    GLBezierSurface(const BezierSurface&);
+    GLSurface(const PatchTable&);
 
     auto bind() const { glBindVertexArray(_vao); }
-    auto count() const { return _indices->size() / ((_degree.u+1) * (_degree.v+1)); };
+    // auto count() const { return _count; }
 
-    GLStorage<vec4f>* points() { return _points; }
-    GLStorage<uint32_t>* indices() { return _indices; }
+    auto* points() { return _points.get(); }
+    auto* indices() { return _indices.get(); }
+    auto* matrices() { return _matrices.get(); }
+    // auto* groups() { return _groups.get(); }
 
-    const GLStorage<vec4f>* points() const { return _points; }
-    const GLStorage<uint32_t>* indices() const { return _indices; }
+    const auto* points() const { return _points.get(); }
+    const auto* indices() const { return _indices.get(); }
+    const auto* matrices() const { return _matrices.get(); }
+    // const auto* groups() const { return _groups.get(); }
 
-    static Ref<GLBezierSurface> load(const char* filename)
+    auto& groups() { return _groups; }
+    auto& groups() const { return _groups; }
+
+    static Ref<GLSurface> load(const char* filename)
     {
-        return new GLBezierSurface(*BezierSurface::load(filename));
+        auto s = Ref(Surface::load(filename));
+        return new GLSurface(s->patches());
     }
 
-    static Ref<GLBezierSurface> load(std::istream& input)
+    static Ref<GLSurface> load_be(std::istream& input)
     {
-        return new GLBezierSurface(*BezierSurface::load(input));
+        auto s = Ref(Surface::load_be(input));
+        return new GLSurface(s->patches());
     }
 
 private:
     GLuint _vao;
-    Reference<GLStorage<vec4f>> _points {nullptr};
-    Reference<GLStorage<uint32_t>> _indices {nullptr};
-    static constexpr const struct
-    {
-        uint16_t u, v;
-    } _degree { .u = 3U, .v = 3U };
-    // const Index2<uint16_t> _degree {3U,3U};
+    Ref<GLStorage<vec4f>> _points {};
+    Ref<GLStorage<uint32_t>> _indices {};
+    Ref<GLStorage<float>> _matrices {};
+    std::vector<PatchGroup> _groups {};
 };
 
 } // namespace cg

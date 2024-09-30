@@ -5,12 +5,10 @@
 #include <graph/SceneObject.h>
 #include <graph/SceneNode.h>
 #include <format>
-#include <map>
+#include <fstream>
 #include <ranges>
 #include "Framebuffer.h"
 #include "Log.h"
-#include "SceneReaderExt.h"
-// #include "Surface.h"
 #include "SplineMat.h"
 #include "reader/SceneReader.h"
 #include "rt/ScopeClock.h"
@@ -146,8 +144,8 @@ void MainWindow::beginInitialize()
                 _sceneFileList.emplace_back(entry.path());
         }
 
-    _sceneMaterials = Assets::materials();
-    _sceneMeshes = Assets::meshes();
+    // _sceneMaterials = Assets::materials();
+    // _sceneMeshes = Assets::meshes();
 }
 
 void MainWindow::initializeScene()
@@ -178,12 +176,14 @@ void MainWindow::initializeScene()
     for (auto& [s, t, r, sc] : surfaces)
     {
         auto asset = Application::assetFilePath(s);
-        auto p = GLBezierSurface::load(asset.c_str());
+        auto p = GLSurface::load(asset.c_str());
         auto transform = createSurfaceObject(*p, s)->transform();
         transform->translate(t);
         transform->rotate(r);
         transform->setLocalScale(sc);
     }
+
+    createDebugObject();
 
     GLuint fs = *editor()->fragmentShader();
     auto setFragmentUniforms = [](GLRenderer& ctx)
@@ -205,27 +205,6 @@ void MainWindow::initializeScene()
     editor()->camera()->setEulerAngles({-36, 28, 9.5e-6});
 
     _texRenderer = new SplRenderer();
-
-// #if SPL_BC_STATS
-    {
-        const uint32_t indexArray[]
-        {
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-        };
-        vec4f vertexArray[16];
-        for (auto& v : vertexArray)
-            v = {0,0,0,1};
-
-        _debugPatch2D = new GLBezierSurface();
-        auto idxs = _debugPatch2D->indices();
-        idxs->resize(16);
-        idxs->setData(indexArray);
-        auto points = _debugPatch2D->points();
-        points->resize(16);
-        points->setData(vertexArray);
-        _debugObject = createSurfaceObject(*_debugPatch2D, "Debug Object");
-    }
-// #endif
 }
 
 void MainWindow::render()
@@ -308,11 +287,11 @@ void MainWindow::render()
 
         if (_state.cursorMode == CursorMode::NormalInspect
             && p != nullptr
-            && _lastPickHit.object == obj)
+            && _sceneRefs.lastPickHit.object == obj)
         {
-            SurfacePrimitive& s = p->mapper()->surface();
-            vec3f n = s.normal(_lastPickHit);
-            vec4f P = s.point(_lastPickHit);
+            SurfacePrimitive& s = *p->mapper()->surface();
+            vec3f n = s.normal(_sceneRefs.lastPickHit);
+            vec4f P = s.point(_sceneRefs.lastPickHit);
             vec3f Q = vec3f(P.x / P.w, P.y / P.w, P.z / P.w);
             e->setVectorColor(Color{0x9c, 0x27, 0xb0}); // Purple A500
             e->setBasePoint(Q);
@@ -320,17 +299,17 @@ void MainWindow::render()
         }
     }
 
-    if (auto obj = (const graph::SceneObject*) _lastPickHit.object)
+    if (auto obj = (const graph::SceneObject*) _sceneRefs.lastPickHit.object)
     {
         const SurfaceProxy* ptr = nullptr;
         for (const graph::Component* c : obj->components())
         {
             if (ptr = dynamic_cast<const SurfaceProxy*>(c))
             {
-                auto s = ptr->mapper()->surface().patches();
-                auto points = s->points()->map(GL_READ_ONLY);
-                auto indices = s->indices()->map(GL_READ_ONLY);
-                int base = 16 * _lastPickHit.triangleIndex;
+                auto s = ptr->mapper()->surface()->surface();
+                auto points = s->points()->scopedMap();
+                auto indices = s->indices()->scopedMap();
+                int base = 16 * _sceneRefs.lastPickHit.triangleIndex;
                 vec4 buffer[16];
                 for (int i = 0; i < 16; i++)
                 {
@@ -348,12 +327,12 @@ void MainWindow::render()
     }
 
     // draw debug object
-    // drawSelectedObject(*_debugObject);
+    // drawSelectedObject(*_sceneRefs.debugObject);
 
 #if SPL_BC_STATS
     // draw debug object
-    drawSelectedObject(*_debugObject);
-    auto t = _debugObject->transform();
+    drawSelectedObject(*_sceneRefs.debugObject);
+    auto t = _sceneRefs.debugObject->transform();
     vec3f P = t->position();
     vec3f L = t->transformVector(__debugLine);
     e->setLineColor(Color::red);
@@ -462,11 +441,11 @@ void MainWindow::convertScene()
         }
         else if (auto s = dynamic_cast<SurfaceMapper*>(mapper))
         {
-            auto patches = s->surface().patches();
+            auto patches = s->surface()->surface();
             auto points = patches->points();
             auto indices = patches->indices();
-            auto pointsPtr = points->map(GL_READ_ONLY);
-            auto indicesPtr = indices->map(GL_READ_ONLY);
+            auto pointsPtr = points->scopedMap();
+            auto indicesPtr = indices->scopedMap();
             auto& surface = _rtScene->surfaces.emplace_back();
             surface.vertices = _rtScene->createBuffer<vec4>(points->size());
             surface.indices = _rtScene->createBuffer<uint32_t>(indices->size());
@@ -674,11 +653,11 @@ bool MainWindow::onMouseLeftPress(int x, int y)
 #endif
 
     auto ray = makeRay(x, y);
-    _lastPickHit.distance = math::Limits<float>::inf();
-    _lastPickHit.object = nullptr;
-    auto obj = pickObject(_scene->root(), ray, _lastPickHit);
+    _sceneRefs.lastPickHit.distance = math::Limits<float>::inf();
+    _sceneRefs.lastPickHit.object = nullptr;
+    auto obj = pickObject(_scene->root(), ray, _sceneRefs.lastPickHit);
     auto current = this->currentNode();
-    _lastPickHit.object = obj;
+    _sceneRefs.lastPickHit.object = obj;
 
     if (obj && obj->selectable())
     {
@@ -731,7 +710,7 @@ graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
         else if (auto s = dynamic_cast<SurfaceProxy*>(component))
         {
             auto surface = s->mapper()->surface();
-            if (surface.intersect(ray, subhit) == false)
+            if (surface->intersect(ray, subhit) == false)
                 continue;
         }
         else continue; // no component => no hit => next iteration
@@ -808,8 +787,15 @@ void MainWindow::readScene(std::filesystem::path scenefile)
     }
 }
 
+void MainWindow::setScene(graph::Scene& scene)
+{
+    Base::setScene(scene);
+    _sceneRefs.reset();
+    createDebugObject();
+}
+
 graph::SceneObject*
-MainWindow::createSurfaceObject(GLBezierSurface &p, const char *name)
+MainWindow::createSurfaceObject(GLSurface &p, const char *name)
 {
     auto object = graph::SceneObject::New(*_scene);
 
@@ -817,6 +803,31 @@ MainWindow::createSurfaceObject(GLBezierSurface &p, const char *name)
     object->addComponent(new SurfaceProxy(new SurfacePrimitive(&p)));
 
     return object;
+}
+
+void MainWindow::createDebugObject(const char * name)
+{
+    const uint32_t indexArray[]
+    {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
+    vec4f vertexArray[16];
+    for (auto& v : vertexArray)
+        v = {0,0,0,1};
+
+    _debugPatch2D = new GLSurface();
+    auto idxs = _debugPatch2D->indices();
+    idxs->resize(16);
+    idxs->setData(indexArray);
+    auto points = _debugPatch2D->points();
+    points->resize(16);
+    points->setData(vertexArray);
+    _debugPatch2D->groups().push_back(PatchGroup{
+        .type = PatchType_Bezier,
+        .size = 16,
+        .count = 1,
+    });
+    _sceneRefs.debugObject = createSurfaceObject(*_debugPatch2D, name);
 }
 
 } // namespace cg

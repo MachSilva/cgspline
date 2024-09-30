@@ -1,4 +1,4 @@
-#include "Surface.h"
+#include "SurfacePipeline.h"
 
 #include <graphics/GLRenderer.h>
 #include <graph/Scene.h>
@@ -491,7 +491,7 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
         v
     );
 
-    auto s = _surface->patches();
+    auto s = _surface->surface();
 
     pipeline->use();
     // TODO Review if this function call is `SurfaceMapper`'s responsability.
@@ -499,8 +499,14 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
 
     s->bind();
 
-    glPatchParameteri(GL_PATCH_VERTICES, 16);
-    glDrawElements(GL_PATCHES, s->indices()->size(), GL_UNSIGNED_INT, 0);
+    for (auto& g : s->groups())
+    {
+        if (g.type != PatchType_Bezier)
+            continue;
+        glPatchParameteri(GL_PATCH_VERTICES, 16);
+        glDrawElements(GL_PATCHES, g.size * g.count, GL_UNSIGNED_INT,
+            reinterpret_cast<const void*>(g.offset));
+    }
 
     return true;
 }
@@ -512,15 +518,21 @@ bool SurfaceMapper::renderContour(GLRenderer& renderer) const
 
     updateMatrixBlock(renderer);
 
-    auto s = _surface->patches();    
+    auto s = _surface->surface();    
 
     pipeline->use();
     pipeline->beforeDrawing(renderer);
 
     s->bind();
 
-    glPatchParameteri(GL_PATCH_VERTICES, 16);
-    glDrawElements(GL_PATCHES, s->indices()->size(), GL_UNSIGNED_INT, 0);
+    for (auto& g : s->groups())
+    {
+        if (g.type != PatchType_Bezier)
+            continue;
+        glPatchParameteri(GL_PATCH_VERTICES, 16);
+        glDrawElements(GL_PATCHES, g.size * g.count, GL_UNSIGNED_INT,
+            reinterpret_cast<const void*>(g.offset));
+    }
 
     return true;
 }

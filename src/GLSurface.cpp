@@ -1,11 +1,11 @@
-#include "GLBezierSurface.h"
+#include "GLSurface.h"
 
 #include <fstream>
 
 namespace cg
 {
 
-GLBezierSurface::GLBezierSurface()
+GLSurface::GLSurface()
 {
     glGenVertexArrays(1, &_vao);
     glBindVertexArray(_vao);
@@ -19,21 +19,29 @@ GLBezierSurface::GLBezierSurface()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *_indices);
 }
 
-GLBezierSurface::~GLBezierSurface()
+GLSurface::~GLSurface()
 {
     glDeleteVertexArrays(1, &_vao);
 }
 
-GLBezierSurface::GLBezierSurface(const BezierSurface& another)
-    : GLBezierSurface()
+GLSurface::GLSurface(const PatchTable& another)
+    : GLSurface()
 {
-    std::span aPoints = another.points();
-    _points->resize(aPoints.size(), GL_STATIC_DRAW);
-    _points->setData(aPoints.data());
+    _points->resize(another.points.size(), GL_STATIC_DRAW);
+    _points->setData(another.points.data());
     
-    std::span aIndices = another.indices();
-    _indices->resize(aIndices.size(), GL_STATIC_DRAW);
-    _indices->setData(aIndices.data());
+    _indices->resize(another.indices.size(), GL_STATIC_DRAW);
+    _indices->setData(another.indices.data());
+
+    if (!another.matrices.empty())
+    {
+        _matrices = new GLStorage<float>
+            (another.matrices.size(), another.matrices.data(), GL_STATIC_DRAW);
+        // _matrices->resize(another.matrices.size(), GL_STATIC_DRAW);
+        // _matrices->setData(another.matrices.data());
+    }
+
+    _groups = another.groups;
 }
 
 } // namespace cg

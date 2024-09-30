@@ -26,8 +26,9 @@ add_subdirectory(Ds)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(cgspline
-    src/BezierSurface.cpp
-    src/GLBezierSurface.cpp
+    src/GLSurface.cpp
+    src/Surface.cpp
+    src/SurfacePipeline.cpp
     src/Framebuffer.cpp
     src/Log.cpp
     src/Main.cpp
@@ -35,12 +36,11 @@ add_executable(cgspline
     src/MainWindow_UI.cpp
     src/PatchBVH.cpp
     src/RayTracer.cpp
-    src/SceneReaderExt.cpp
+    # src/SceneReaderExt.cpp
     src/Spline_BezierClipping.cu
     src/Spline_Subdivision.cpp
     src/Spline.cu
     src/SplRenderer.cpp
-    src/Surface.cpp
     src/Texture.cpp
     src/reader/DescriptionLanguage.cpp
     src/reader/Parser.cpp
@@ -72,20 +72,20 @@ else()
     >)
 endif()
 
-get_target_property(cgdemo_src cgdemo SOURCE_DIR)
+# get_target_property(cgdemo_src cgdemo SOURCE_DIR)
 
-target_sources(cgspline PRIVATE
-    ${cgdemo_src}/reader/AbstractParser.cpp
-    ${cgdemo_src}/reader/Buffer.cpp
-    ${cgdemo_src}/reader/ErrorHandler.cpp
-    ${cgdemo_src}/reader/Expression.cpp
-    ${cgdemo_src}/reader/FileBuffer.cpp
-    ${cgdemo_src}/reader/ReaderBase.cpp
-    ${cgdemo_src}/reader/SceneReader.cpp
-    ${cgdemo_src}/reader/Scope.cpp
-)
+# target_sources(cgspline PRIVATE
+#     ${cgdemo_src}/reader/AbstractParser.cpp
+#     ${cgdemo_src}/reader/Buffer.cpp
+#     ${cgdemo_src}/reader/ErrorHandler.cpp
+#     ${cgdemo_src}/reader/Expression.cpp
+#     ${cgdemo_src}/reader/FileBuffer.cpp
+#     ${cgdemo_src}/reader/ReaderBase.cpp
+#     ${cgdemo_src}/reader/SceneReader.cpp
+#     ${cgdemo_src}/reader/Scope.cpp
+# )
 
-target_include_directories(cgspline PRIVATE ${cgdemo_src})
+# target_include_directories(cgspline PRIVATE ${cgdemo_src})
 
 if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
     target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)

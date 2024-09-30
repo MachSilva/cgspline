@@ -1,30 +1,39 @@
 #pragma once
 
 #include <cassert>
-#include <core/SharedObject.h>
 #include <graphics/GLBuffer.h>
 #include <memory>
+#include "Ref.h"
 
 namespace cg
 {
 
+namespace detail
+{
+
+struct BufferUnmap
+{
+    GLuint buffer;
+    void operator () (const void*) const
+    {
+        glUnmapNamedBuffer(buffer);
+    }
+};
+
+};
+
+template<typename T>
+auto mapBufferToUniquePtr(GLuint buffer, GLenum access)
+{
+    assert(access == GL_READ_ONLY || access == GL_WRITE_ONLY || access == GL_READ_WRITE);
+    auto ptr = (T*) glMapNamedBuffer(buffer, access);
+    detail::BufferUnmap del (buffer);
+    return std::unique_ptr<T[]>(ptr, del);
+}
+
 template<typename T>
 class GLStorage : public SharedObject
 {
-    auto guard(T* ptr) //-> std::unique_ptr<T[],void(T*)>
-    {
-        assert(ptr);
-        auto del = [this](T*) { this->unmap(); };
-        return std::unique_ptr<T[],decltype(del)>(ptr, del);
-    }
-
-    auto guard(const T* ptr) const //-> std::unique_ptr<const T[],void(const T*)>
-    {
-        assert(ptr);
-        auto del = [this](const T*) { this->unmap(); };
-        return std::unique_ptr<const T[],decltype(del)>(ptr, del);
-    }
-
 public:
     GLStorage() { glCreateBuffers(1, &_buffer); }
 
@@ -39,22 +48,39 @@ public:
 
     ~GLStorage() override { glDeleteBuffers(1, &_buffer); }
 
-    auto map(uint32_t start, uint32_t count, GLenum access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT)
+    auto scopedMap(uint32_t start, uint32_t count, GLenum access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT)
     {
-        return guard(static_cast<T*>(
-            glMapNamedBufferRange(_buffer, start*sizeof (T), count*sizeof (T), access)
-        ));
+        detail::BufferUnmap del (_buffer);
+        return std::unique_ptr<T[], detail::BufferUnmap>
+            (map(start, count, access), del);
     }
 
-    auto map(GLenum access = GL_READ_WRITE)
+    auto scopedMap(GLenum access = GL_READ_ONLY)
+    {
+        detail::BufferUnmap del (_buffer);
+        return std::unique_ptr<T[], detail::BufferUnmap>(map(access), del);
+    }
+
+    auto scopedMap() const
+    {
+        detail::BufferUnmap del (_buffer);
+        return std::unique_ptr<const T[], detail::BufferUnmap>(map(), del);
+    }
+
+    T* map(uint32_t start, uint32_t count, GLenum access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT)
+    {
+        return static_cast<T*>(glMapNamedBufferRange(_buffer, start * sizeof (T), count * sizeof (T), access));
+    }
+
+    T* map(GLenum access = GL_READ_ONLY)
     {
         assert(access == GL_READ_ONLY || access == GL_WRITE_ONLY || access == GL_READ_WRITE);
-        return guard(static_cast<T*>(glMapNamedBuffer(_buffer, access)));
+        return static_cast<T*>(glMapNamedBuffer(_buffer, access));
     }
 
-    auto map() const
+    const T* map() const
     {
-        return guard(static_cast<const T*>(glMapNamedBuffer(_buffer, GL_READ_ONLY)));
+        return static_cast<const T*>(glMapNamedBuffer(_buffer, GL_READ_ONLY));
     }
 
     void unmap() const { glUnmapNamedBuffer(_buffer); }
@@ -79,8 +105,6 @@ public:
 
     operator GLuint () const { return _buffer; }
     auto buffer() const { return _buffer; }
-
-    // operator GLStorage<const >
 
 private:
     GLuint _buffer;

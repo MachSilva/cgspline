@@ -353,28 +353,21 @@ void MainWindow::controlWindow()
 
     }
 
-    auto t = _debugObject->transform();
-    float scale = std::log10(t->localScale().x);
-    float slidermin = -3;
-    float slidermax = 20;
-    if (ImGui::SliderScalar("Debug Obj Zoom", ImGuiDataType_Float, &scale,
-        &slidermin, &slidermax))
+    if (auto ptr = _sceneRefs.debugObject)
     {
-        t->setLocalScale(std::pow(10, scale));
+        ImGui::Separator();
+        auto t = ptr->transform();
+        float scale = std::log10(t->localScale().x);
+        float slidermin = -3;
+        float slidermax = 20;
+        if (ImGui::SliderScalar("Debug Obj Zoom", ImGuiDataType_Float, &scale,
+            &slidermin, &slidermax))
+        {
+            t->setLocalScale(std::pow(10, scale));
+        }
     }
 
 #if SPL_BC_STATS
-    ImGui::Separator();
-    auto t = _debugObject->transform();
-    float scale = std::log10(t->localScale().x);
-    float slidermin = -3;
-    float slidermax = 20;
-    if (ImGui::SliderScalar("Debug Zoom", ImGuiDataType_Float, &scale,
-        &slidermin, &slidermax))
-    {
-        t->setLocalScale(std::pow(10, scale));
-    }
-
     ImGui::Separator();
     char label[128];
     const auto& patches = spline::stats::g_BezierClippingData;
@@ -455,7 +448,7 @@ void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
 {
     ImGui::inputText("Surface", s.sceneObject()->name());
     ImGui::Separator();
-    window.inspectMaterial(s.mapper()->surface());
+    window.inspectMaterial(*s.mapper()->surface());
 }
 
 void MainWindow::workbenchWindow()
