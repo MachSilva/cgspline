@@ -48,7 +48,7 @@ private:
     Ref<GLStorage<vec4f>> _points {};
     Ref<GLStorage<uint32_t>> _indices {};
     Ref<GLStorage<float>> _matrices {};
-    std::vector<PatchGroup> _groups {};
+    std::vector<PatchTable::PatchGroup> _groups {};
 };
 
 } // namespace cg

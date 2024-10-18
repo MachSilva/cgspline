@@ -29,9 +29,9 @@ PBRMaterial
   texture: Get("Metal042A_BaseColor")
 }
 
-Surface { name: "teacup"    bezier: "../bezier/teacup" }
-Surface { name: "teapot"    bezier: "../bezier/teapot" }
-Surface { name: "teaspoon"  bezier: "../bezier/teaspoon" }
+Surface { name: "teacup"    file: "../bezier/teacup" }
+Surface { name: "teapot"    file: "../bezier/teapot" }
+Surface { name: "teaspoon"  file: "../bezier/teaspoon" }
 
 Scene
 {
@@ -51,6 +51,14 @@ Scene
         scale: (10 0.4 10)
       }
       // mesh: { name: "Box" }
+    }
+
+    {
+      name: "Test"
+      surface:
+      {
+        model: Surface { name: "Dice"  file: "../surfaces/dice16.se" }
+      }
     }
 
     {

@@ -822,10 +822,10 @@ void MainWindow::createDebugObject(const char * name)
     auto points = _debugPatch2D->points();
     points->resize(16);
     points->setData(vertexArray);
-    _debugPatch2D->groups().push_back(PatchGroup{
-        .type = PatchType_Bezier,
-        .size = 16,
+    _debugPatch2D->groups().push_back({
         .count = 1,
+        .size = 16,
+        .type = PatchType_Bezier,
     });
     _sceneRefs.debugObject = createSurfaceObject(*_debugPatch2D, name);
 }

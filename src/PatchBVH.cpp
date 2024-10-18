@@ -46,7 +46,7 @@ void PatchBVH::init()
     _primitiveIds.resize(count);
 
     uint32_t i = 0;
-    _surface->patches().forEachPatch([&](PatchData p)
+    _surface->patches().forEachPatch([&](PatchTable::PatchRef p)
     {
         _primitiveIds[i] = i;
         if (p.type == PatchType_Bezier)

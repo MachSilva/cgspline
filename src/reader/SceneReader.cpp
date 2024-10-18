@@ -177,15 +177,16 @@ Value SceneReader::createSurface(const List& args)
         it = insertAsset(_f("Surface_{}", ++_surfaceId), nullptr);
     }
 
-    if (auto p = props->get_ptr("bezier"))
+    if (auto p = props->get_ptr("file"))
     {
         auto& path = std::get<std::string>(*p);
         auto file = this->workingDir() / path;
         if (std::filesystem::exists(file) == false)
             throw std::runtime_error(_f("file '{}' does not exist", path));
 
-        std::ifstream in (file.string());
-        return it->second = GLSurface::load_be(in);
+        // std::ifstream in (file.string());
+        auto s = file.string();
+        return it->second = GLSurface::load(s.c_str());
     }
 
     throw std::runtime_error("surface data or source not provided");

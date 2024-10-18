@@ -36,12 +36,61 @@ constexpr int patchTypeOriginalSize(PatchType t) noexcept
     }
 };
 
-struct PatchData
+
+struct PatchTable
 {
+    struct PatchData;
+    struct PatchGroup;
+    struct PatchRef;
+
+    std::vector<vec4> points;
+    std::vector<uint32_t> indices;
+    std::vector<float> matrices;
+    std::vector<PatchGroup> groups;
+
+    template<std::invocable<PatchRef> F>
+    void forEachPatch(F&& f) const;
+
+    PatchRef find(int i) const;
+
+    void set(std::span<PatchData> data);
+};
+
+struct PatchTable::PatchData
+{
+    std::vector<uint32_t> indices;
+    std::vector<float> matrix;
     PatchType type {};
-    int size = 0;           //< source control point count
+
+    int matrixColumnCount() const noexcept
+    {
+        return indices.size();
+    }
+
+    int matrixRowCount() const noexcept
+    {
+        return patchTypeOriginalSize(type);
+    }
+};
+
+// Group patches of the same type and size
+struct PatchTable::PatchGroup
+{
     int offset = 0;         //< start offset of control point indices
-    int matrixOffset = -1;  //< start offset of patch matrix
+    int matrixOffset = -1;  //< start offset of matrix elements (negative if absent)
+    uint16_t count = 0;     //< patch count
+    uint16_t size = 0;      //< size (no. indices) per patch
+    PatchType type {};
+
+    constexpr bool invalid() const noexcept { return size < 1; }
+};
+
+struct PatchTable::PatchRef
+{
+    int offset = 0;         //< start offset of control point indices
+    int matrixOffset = -1;  //< start offset of patch matrix (negative if absent)
+    uint16_t size = 0;      //< source control point count
+    PatchType type {};
 
     // constexpr int matrixSize() const noexcept
     // {
@@ -49,64 +98,39 @@ struct PatchData
     // }
 };
 
-// Group patches of the same type and size
-struct PatchGroup
+template<std::invocable<PatchTable::PatchRef> F>
+void PatchTable::forEachPatch(F&& f) const
 {
-    PatchType type {};
-    int size = 0;           //< size (no. indices) per patch
-    int count = 0;          //< patch count
-    int offset = 0;         //< start offset of control point indices
-    int matrixOffset = -1;  //< start offset of matrix elements
-
-    constexpr bool invalid() const noexcept { return size < 1; }
-};
-
-struct PatchTable
-{
-    std::vector<vec4> points;
-    std::vector<uint32_t> indices;
-    std::vector<float> matrices;
-    std::vector<PatchGroup> groups;
-
-    template<std::invocable<PatchData> F>
-    void forEachPatch(F&& f) const
+    for (auto& g : groups)
     {
-        for (auto& g : groups)
+        int offsetEnd = g.offset + g.size * g.count;
+        if (g.matrixOffset < 0)
         {
-            int offsetEnd = g.offset + g.size * g.count;
-            if (g.matrixOffset < 0)
+            for (int p = g.offset; p < offsetEnd; p += g.size)
             {
-                for (int p = g.offset; p < offsetEnd; p += g.size)
-                {
-                    f(PatchData{ .type = g.type, .size = g.size, .offset = p,
-                        .matrixOffset = -1 });
-                }
+                f(PatchRef{ .offset = p, .matrixOffset = -1,
+                    .size = g.size, .type = g.type });
             }
-            else
+        }
+        else
+        {
+            int matrixSize = g.size * patchTypeOriginalSize(g.type);
+            int matrixOffset = g.matrixOffset;
+            for (int p = g.offset; p < offsetEnd; p += g.size)
             {
-                int matrixSize = g.size * patchTypeOriginalSize(g.type);
-                int matrixOffset = g.matrixOffset;
-                for (int p = g.offset; p < offsetEnd; p += g.size)
-                {
-                    f(PatchData{ .type = g.type, .size = g.size, .offset = p,
-                        .matrixOffset = matrixOffset });
-                    matrixOffset += matrixSize;
-                }
+                f(PatchRef{ .offset = p, .matrixOffset = matrixOffset,
+                    .size = g.size, .type = g.type });
+                matrixOffset += matrixSize;
             }
         }
     }
-
-    PatchData find(int i) const;
-
-    void group();
-    void set(std::span<const PatchData> data);
-};
+}
 
 class Surface : public SharedObject
 {
 public:
     Surface() = default;
-    ~Surface() override;
+    // ~Surface() override;
 
     Surface(PatchTable&& p) : _patches{std::move(p)} {}
 

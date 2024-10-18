@@ -1,15 +1,18 @@
 #include "Surface.h"
 
+#include <algorithm>
 #include <fstream>
 
 namespace cg
 {
 
-PatchData PatchTable::find(int i) const
+PatchTable::PatchRef PatchTable::find(int i) const
 {
     for (auto& g : groups)
     {
-        if (i < g.count && i >= 0)
+        if (i < 0)
+            break;
+        if (i < g.count)
         {
             int m = -1;
             if (g.matrixOffset >= 0)
@@ -17,12 +20,12 @@ PatchData PatchTable::find(int i) const
                 int matrixSize = g.size * patchTypeOriginalSize(g.type);
                 m = g.matrixOffset + i * matrixSize;
             }
-            return PatchData
+            return PatchRef
             {
-                .type = g.type,
-                .size = g.size,
                 .offset = g.offset + i * g.size,
                 .matrixOffset = m,
+                .size = g.size,
+                .type = g.type,
             };
         }
         // else
@@ -31,17 +34,113 @@ PatchData PatchTable::find(int i) const
     return {};
 }
 
-void PatchTable::group()
+void PatchTable::set(std::span<PatchData> elements)
 {
+    struct Bucket
+    {
+        struct Data
+        {
+            std::vector<uint32_t> indices;
+            std::vector<float> matrix;
+        };
 
+        std::vector<Data> elements;
+        uint16_t nodeCount {};
+        bool hasMatrix {};
+        PatchType type {};
+    };
+
+    std::vector<Bucket> buckets;
+    buckets.reserve(16);
+
+    uint32_t indexDataSize = 0;
+    uint32_t matrixDataSize = 0;
+
+    for (auto& p : elements)
+    { 
+        Bucket* bucket {};
+        uint16_t nodeCount = p.indices.size();
+        uint16_t pointCount = patchTypeOriginalSize(p.type);
+        for (auto& b : buckets)
+        {
+            if (b.type == p.type &&
+                b.nodeCount == nodeCount &&
+                b.hasMatrix == (p.matrix.size() != 0))
+            {
+                bucket = &b;
+                break;
+            }
+        }
+        if (!bucket)
+        {
+            buckets.push_back({
+                .nodeCount = nodeCount,
+                .hasMatrix = (p.matrix.size() != 0),
+                .type = p.type,
+            });
+            bucket = &buckets.back();
+        }
+
+        uint32_t matrixSize = pointCount * nodeCount;
+        indexDataSize += nodeCount;
+        matrixDataSize += matrixSize;
+
+        if (bucket->hasMatrix && p.matrix.size() != matrixSize)
+            throw std::runtime_error("invalid element matrix size");
+
+        // add element to group
+        auto& element = bucket->elements.emplace_back();
+        element.indices = std::move(p.indices);
+        element.matrix = std::move(p.matrix);
+    }
+
+    // group patches and write
+    this->indices.resize(indexDataSize);
+    this->matrices.resize(matrixDataSize);
+    this->groups.reserve(buckets.size());
+
+    int offset = 0;
+    int matrixOffset = 0;
+    for (auto& b : buckets)
+    {
+        this->groups.push_back({
+            .offset = offset,
+            .matrixOffset = b.hasMatrix ? matrixOffset : -1,
+            .size = b.nodeCount,
+            .type = (PatchType)b.type,
+        });
+        if (b.hasMatrix)
+        {
+            const auto matrixSize =
+                b.nodeCount * patchTypeOriginalSize((PatchType)b.type);
+            for (auto& e : b.elements)
+            {
+                assert(e.indices.size() == b.nodeCount);
+                assert(e.matrix.size() == matrixSize);
+
+                std::copy(e.indices.begin(), e.indices.end(),
+                    this->indices.data() + offset);
+                offset += e.indices.size();
+
+                std::copy(e.matrix.begin(), e.matrix.end(),
+                    this->matrices.data() + matrixOffset);
+                matrixOffset += e.matrix.size();
+            }
+        }
+        else
+        {
+            for (auto& e : b.elements)
+            {
+                assert(e.indices.size() == b.nodeCount);
+                std::copy(e.indices.begin(), e.indices.end(),
+                    this->indices.data() + offset);
+                offset += e.indices.size();
+            }
+        }
+    }
 }
 
-void PatchTable::set(std::span<const PatchData> data)
-{
-
-}
-
-Surface::~Surface() {}
+// Surface::~Surface() {}
 
 Ref<Surface> Surface::load_be(std::istream& input)
 {
@@ -62,10 +161,10 @@ Ref<Surface> Surface::load_be(std::istream& input)
         {
             uint32_t value;
             input >> value;
+            if (!input) throw std::runtime_error("Parsing patch failed");
 
             t.indices[16*p + i] = value - 1; // Start index from zero.
 
-            if (!input) throw std::runtime_error("Parsing patch failed");
             // Skip the comma, or any separator, or even the newline.
             input.ignore();
         }
@@ -91,19 +190,157 @@ Ref<Surface> Surface::load_be(std::istream& input)
         }
     }
 
-    t.groups.push_back(PatchGroup{
-        .type = PatchType_Bezier,
-        .size = 16,
-        .count = (int) nPatches,
+    // Check indices
+    for (uint32_t i : t.indices)
+    {
+        if (t.points.size() < i)
+            throw std::runtime_error
+                ("Invalid/corrupted file. Indices out of range");
+    }
+
+    t.groups.push_back({
         .offset = 0,
+        .count = (uint16_t) nPatches,
+        .size = 16,
+        .type = PatchType_Bezier,
     });
 
     return new Surface(std::move(t));
 }
 
+/**
+ * @note {a}[3] is equivalent to {a} {a} {a}
+ * 
+ * Pseudo-Grammar -> {N} Node[N] {E} Element[E]
+ * 
+ * Node -> {id} {position:vec4}
+ * Element ->
+ *      {id} {type} {number of nodes} {degree} {boundary flag}
+ *      {node refs}[number of nodes]
+ *      {unknown}[number of nodes]
+ *      MaybeBoundary<boundary flag>
+ * 
+ * MaybeBoundary<0> -> MatrixLine<type>[number of nodes]
+ * MaybeBoundary<1> -> {:void}
+ * 
+ * MatrixLine<1> -> {:float}[16]
+ * MatrixLine<2> -> {:float}[20]
+ * 
+ * type: BSpline=1, Gregory=2
+ */
 Ref<Surface> Surface::load_se(std::istream& input)
 {
-    return nullptr;
+    PatchTable t;
+    uint32_t nodeCountTotal;
+
+    // discard comments and whitespace
+    auto discard = [&]()
+    {
+        while (true)
+        {
+            int c = input.peek();
+            if (c == '#')
+            {
+                input.get();
+                while ((c = input.get()) >= 0 && c != '\n')
+                    (void)0;
+            }
+            else if (isspace(c))
+                input.get();
+            else return;
+        }
+    };
+
+    discard();
+    input >> std::skipws >> nodeCountTotal;
+    if (!input)
+        throw std::runtime_error("could not read no. points / nodes");
+
+    t.points.resize(nodeCountTotal);
+    for (auto i = 0U; i < nodeCountTotal; i++)
+    {
+        auto& v = t.points[i];
+        uint16_t id;
+        discard();
+        input >> id >> v.x >> v.y >> v.z >> v.w;
+        if (i != id)
+            throw std::runtime_error("unexpected point id");
+    }
+
+    uint32_t elementCount;
+    discard();
+    input >> elementCount;
+
+    uint32_t indexDataSize = 0;
+    uint32_t matrixDataSize = 0;
+
+    std::vector<PatchTable::PatchData> elements;
+    elements.reserve(elementCount);
+
+    for (auto i = 0U; i < elementCount; i++)
+    {
+        uint16_t id, typeRead, nodeCount, degree, boundaryFlag;
+        discard();
+        input >> id >> typeRead >> nodeCount >> degree >> boundaryFlag;
+
+        if (!input)
+            throw std::runtime_error("read failed during element header");
+        if (degree != 3)
+            throw std::runtime_error("degree value unsupported");
+
+        // add element to group
+        auto& element = elements.emplace_back();
+
+        uint16_t lines; // matrix lines
+        if (typeRead == 1) // BSpline
+        {
+            lines = boundaryFlag ? 16 : 0;
+            element.type = PatchType_BSpline;
+        }
+        else if (typeRead == 2) // Gregory
+        {
+            lines = 20;
+            element.type = PatchType_Gregory;
+        }
+        else
+            throw std::runtime_error("unknown patch type");
+
+        int matrixSize = lines * nodeCount;
+        indexDataSize += nodeCount;
+        matrixDataSize += matrixSize;
+
+        // node indices
+        element.indices.resize(nodeCount);
+        discard();
+        for (int j = 0; j < nodeCount; j++)
+        {
+            input >> element.indices[j];
+            if (nodeCountTotal < element.indices[j])
+                throw std::runtime_error
+                    ("Invalid/corrupted file. Indices out of range");
+        }
+
+        // an unknown value array
+        int v;
+        discard();
+        for (int j = 0; j < nodeCount; j++)
+            input >> v;
+
+        // matrix
+        element.matrix.resize(matrixSize);
+        for (int j = 0; j < lines; j++)
+        {
+            discard();
+            for (int k = 0; k < nodeCount; k++)
+            {
+                // transpose matrix
+                input >> element.matrix[j + k*lines];
+            }
+        }
+    }
+
+    t.set(elements);
+    return new Surface(std::move(t));
 }
 
 Ref<Surface> Surface::load(const char* filename)
