@@ -108,6 +108,92 @@ const char * const BICUBIC_DECASTELJAU_FUNCTIONS = STRINGIFY(
     }
 );
 
+const char * const PATCH_EVAL_FUNCTIONS = STRINGIFY(
+    vec4 pointAt(int i, int j);
+
+    vec4 evalBezierBasis(float u)
+    {
+        const float u2 = u*u;
+        const float u3 = u2*u;
+        return vec4(
+            1 - 3*u + 3*u2 - u3,
+            3*u - 6*u2 + 3*u3,
+            3*u2 - 3*u3,
+            u3
+        );
+    }
+
+    // Evaluate bezier base function: B(u)
+    // in  u: coordinate
+    // out b: base function B(u) values per control point
+    //     d: derivative function B'(u) values
+    void evalBezier(float u, out vec4 b, out vec4 d)
+    {
+        const float u2 = u*u;
+        const float u3 = u2*u;
+        const float _3u2 = 3*u2;
+        b = vec4(
+            1 - 3*u + _3u2 - u3,
+            3*u - 6*u2 + 3*u3,
+            _3u2 - 3*u3,
+            u3
+        );
+        d = vec4(
+            -3 + 6*u - _3u2,
+            3 - 12*u + 9*u2,
+            6*u - 9*u2,
+            _3u2
+        );
+    }
+
+    const float fixValue = 0.0001;
+
+    // Evaluate surface point: S(u,v)
+    // out s:
+    //     s[0]: S(u,v)
+    //     s[1]: S'u(u,v)
+    //     s[2]: S'v(u,v)
+    void eval(float u, float v, out vec3 s[3])
+    {
+        vec4 bu;
+        vec4 bdu;
+        vec4 bv;
+        vec4 bdv;
+        evalBezier(u, bu, bdu);
+        evalBezier(v, bv, bdv);
+        s[0] = vec3(0);
+        s[1] = vec3(0);
+        s[2] = vec3(0);
+        for (int j = 0; j < 4; j++)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                const vec3 P = pointAt(i,j).xyz;
+                s[0] += (bu[i] * bv[j]) * P;
+                s[1] += (bdu[i] * bv[j]) * P;
+                s[2] += (bu[i] * bdv[j]) * P;
+            }
+        }
+        // Fix for degenerated patches
+        if (length(s[1]) <= 1e-6)
+        {
+            s[1] = vec3(0);
+            bv = evalBezierBasis(abs(v - fixValue));
+            for (int j = 0; j < 4; j++)
+                for (int i = 0; i < 4; i++)
+                    s[1] += (bdu[i] * bv[j]) * pointAt(i,j).xyz;
+        }
+        if (length(s[2]) <= 1e-6)
+        {
+            s[2] = vec3(0);
+            bu = evalBezierBasis(abs(u - fixValue));
+            for (int j = 0; j < 4; j++)
+                for (int i = 0; i < 4; i++)
+                    s[2] += (bu[i] * bdv[j]) * pointAt(i,j).xyz;
+        }
+    }
+);
+
 } // namespace GLSL
 
 static const char* _glslVersion = "#version 430 core\n";
@@ -201,13 +287,19 @@ static const char* _tes = STRINGIFY(
         return gl_in[4*j + i].gl_Position;
     }
 
-    vec4 eval(float u, float v);
-    vec3 evalNormal(float u, float v);
+    void eval(float u, float v, out vec3 s[3]);
+    // vec4 eval(float u, float v);
+    // vec3 evalNormal(float u, float v);
 
     void main()
     {
-        vec4 P = eval(gl_TessCoord.x, gl_TessCoord.y);
-        vec3 N = normalize(normalMatrix * evalNormal(gl_TessCoord.x, gl_TessCoord.y));
+        // vec4 P = eval(gl_TessCoord.x, gl_TessCoord.y);
+        // vec3 N = normalize(normalMatrix * evalNormal(gl_TessCoord.x, gl_TessCoord.y));
+
+        vec3 S[3]; // [P, Du, Dv]
+        eval(gl_TessCoord.x, gl_TessCoord.y, S);
+        vec3 N = normalize(normalMatrix * normalize(cross(S[1], S[2])));
+        vec4 P = vec4(S[0], 1.0);
         gl_Position = mvpMatrix * P;
         vec4 Q = mvMatrix * P;
         v_position = Q.xyz / Q.w;
@@ -363,7 +455,8 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode)
         _program.setShader(GL_TESS_EVALUATION_SHADER, {
             _glslVersion,
             GLSL::MATRIX_BLOCK_DECLARATION,
-            GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
+            // GLSL::BICUBIC_DECASTELJAU_FUNCTIONS,
+            GLSL::PATCH_EVAL_FUNCTIONS,
             _tes
         });
         break;
