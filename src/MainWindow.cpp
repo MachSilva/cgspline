@@ -161,6 +161,7 @@ void MainWindow::initializeScene()
     light->color = Color(0.4f, 0.4f, 0.4f);
     obj = createObject("The Light", graph::LightProxy::New(*light));
     obj->transform()->setLocalEulerAngles({50,130,0});
+    obj->transform()->setPosition({0, 4, 0});
 
     obj = createPrimitiveObject(*GLGraphics3::box(), "Box");
     obj->transform()->setLocalScale({10, 0.5f, 10});
@@ -191,13 +192,9 @@ void MainWindow::initializeScene()
         ctx.defaultFragmentSubroutines();
     };
 
-    auto p0 = new SurfacePipeline(0, fs, SurfacePipeline::Mode::Standard3D);
+    auto p0 = new SurfacePipeline(0, fs);
     p0->beforeDrawing = setFragmentUniforms;
     editor()->setPipeline(GLRenderer::Surface, p0);
-
-    auto p1 = new SurfacePipeline(0, fs, SurfacePipeline::Mode::ContourCurves);
-    p1->beforeDrawing = setFragmentUniforms;
-    editor()->setPipeline("SurfCont"_ID, p1);
 
     registerInspectFunction(inspectSurface);
 

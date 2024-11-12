@@ -29,7 +29,7 @@ namespace GLSL
  * - void evalAll(float u, float v, out vec4 P, out vec4 D);
  * 
  * It is up to you to provide the following symbols to your shader:
- * - vec4 pointAt(int i, int j);
+ * - vec4 point(int i);
  * 
  * @warning It does not work for Rational Bézier Surfaces.
  * @warning The derivative functions DOES NOT normalized returned vectors.
@@ -116,19 +116,35 @@ protected:
 class SurfacePipeline : public GLRenderer::Pipeline
 {
 public:
-    enum Mode
+    enum Variant
     {
-        Standard3D,
-        ContourCurves,
+        eBezierElement,
+        eBSplineElement,
+        eGregoryElement,
+        eBezierContour,
+        eBSplineContour,
+        eGregoryContour
     };
 
-    SurfacePipeline(GLuint vertex, GLuint fragment, Mode mode = Standard3D);
+    SurfacePipeline(GLuint vertex, GLuint fragment);
     ~SurfacePipeline() override;
 
-    GLSL::Program& tessellationProgram() { return _program; }
+    GLuint get(Variant i) const { return i == 0 ? _pipeline : _extraPipelines[i-1]; }
+
+    auto getPatch16TCS() const { return _Patch16TCS; }
+    auto getPatch20TCS() const { return _Patch20TCS; }
+    auto getBezierTES() const { return _BezierTES; }
+    auto getBSplineTES() const { return _BSplineTES; }
+    auto getGregoryTES() const { return _GregoryTES; }
 
 protected:
-    GLSL::Program _program;
+    Ref<GLSL::ShaderProgram> _passthroughVS,
+        _Patch16TCS, _Patch20TCS,
+        _BezierTES, _BSplineTES, _GregoryTES,
+        _Patch16ContourTCS, _Patch20ContourTCS,
+        _BezierContourTES, _BSplineContourTES, _GregoryContourTES;
+
+    GLuint _extraPipelines[5];
 };
 
 } // namespace cg
