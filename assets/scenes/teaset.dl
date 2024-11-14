@@ -54,7 +54,16 @@ Scene
     }
 
     {
-      name: "Test"
+      name: "Tube"
+      surface:
+      {
+        model: Surface { name: "Tube"  file: "../surfaces/tube.se" }
+      }
+    }
+
+    {
+      name: "Dice"
+      transform: { position: (-5 0.5 -0.5) }
       surface:
       {
         model: Surface { name: "Dice"  file: "../surfaces/dice16.se" }
@@ -120,19 +129,19 @@ Scene
       name: "Teaset"
       objects:
       [
-        {
-          name: "Teapot"
-          transform:
-          {
-            rotation: (-90 0 0)
-            scale: (0.5 0.5 0.5)
-          }
-          surface:
-          {
-            model: Get("teapot")
-            material: Get("Metal042A")
-          }
-        }
+        // {
+        //   name: "Teapot"
+        //   transform:
+        //   {
+        //     rotation: (-90 0 0)
+        //     scale: (0.5 0.5 0.5)
+        //   }
+        //   surface:
+        //   {
+        //     model: Get("teapot")
+        //     // material: Get("Metal042A")
+        //   }
+        // }
         {
           name: "Teacup"
           transform:

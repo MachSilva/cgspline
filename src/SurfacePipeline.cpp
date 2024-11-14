@@ -283,7 +283,7 @@ const char * const GREGORY_PATCH_EVAL_FUNCTIONS = TOSTR(
     {
         const float ui = 1 - u;
         const float vi = 1 - v;
-        vec4 q = 1.0 / vec4(u+v, ui+v, u+vi, ui+vi);
+        vec4 q = 1.0 / max(vec4(u+v, ui+v, u+vi, ui+vi), 1.0e-14);
         g = vec4(v, v, vi, vi) * q;
         q = q * q;
         gdu = vec4(-v, v, -vi, vi) * q;
@@ -300,9 +300,8 @@ const char * const GREGORY_PATCH_EVAL_FUNCTIONS = TOSTR(
     const int U_IDX[20] = int[](0,1,0,1,1,3,3,2,2,2,3,2,3,2,2,0,0,1,1,1);
     const int V_IDX[20] = int[](0,0,1,1,1,0,1,0,1,1,3,3,2,2,2,3,2,3,2,2);
     const int OUTER[12] = int[](0,1,2,5,6,7,10,11,12,15,16,17);
-    const int INNER[8] = int[](3,4,8,9,13,14,18,19);
-    const int G_IDX[8] = int[](0,0,1,1,3,3,2,2);
-    const int G_SIGN[8] = int[](+1,-1,-1,+1,+1,-1,-1,+1);
+    const int INNER0[4] = int[](3,9,19,13);
+    const int INNER1[4] = int[](4,8,18,14);
 
     // Evaluate gregory surface point: S(u,v)
     // out s:
@@ -324,7 +323,7 @@ const char * const GREGORY_PATCH_EVAL_FUNCTIONS = TOSTR(
         {
             const int i = U_IDX[OUTER[k]];
             const int j = V_IDX[OUTER[k]];
-            const vec3 P = point(k).xyz;
+            const vec3 P = point(OUTER[k]).xyz;
             s[0] += (bu[i] * bv[j]) * P;
             s[1] += (bdu[i] * bv[j]) * P;
             s[2] += (bu[i] * bdv[j]) * P;
@@ -333,17 +332,28 @@ const char * const GREGORY_PATCH_EVAL_FUNCTIONS = TOSTR(
         vec4 gdu;
         vec4 gdv;
         evalGregory(u, v, g, gdu, gdv);
-        for (int k = 0; k < 8; k++)
+        // g_k(u,v)
+        for (int k = 0; k < 4; k++)
         {
-            const int i = U_IDX[INNER[k]];
-            const int j = V_IDX[INNER[k]];
-            const int h = G_IDX[k];
-            const int sign = G_SIGN[k];
+            const int i = U_IDX[INNER0[k]];
+            const int j = V_IDX[INNER0[k]];
             const float suv = bu[i] * bv[j];
-            const vec3 P = point(k).xyz;
-            s[0] += (sign * suv * g[h]) * P;
-            s[1] += ((bdu[i] * bv[j] * g[h] + suv * gdu[h]) * sign) * P;
-            s[2] += ((bu[i] * bdv[j] * g[h] + suv * gdv[h]) * sign) * P;
+            const vec3 P = point(INNER0[k]).xyz;
+            s[0] += (suv * g[k]) * P;
+            s[1] += (bdu[i] * bv[j] * g[k] + suv * gdu[k]) * P;
+            s[2] += (bu[i] * bdv[j] * g[k] + suv * gdv[k]) * P;
+        }
+        // 1 - g_k(u,v)
+        for (int k = 0; k < 4; k++)
+        {
+            const int i = U_IDX[INNER1[k]];
+            const int j = V_IDX[INNER1[k]];
+            const float gi = 1.0 - g[k];
+            const float suv = bu[i] * bv[j];
+            const vec3 P = point(INNER1[k]).xyz;
+            s[0] += (suv * gi) * P;
+            s[1] += (bdu[i] * bv[j] * gi - suv * gdu[k]) * P;
+            s[2] += (bu[i] * bdv[j] * gi - suv * gdv[k]) * P;
         }
     }
 );

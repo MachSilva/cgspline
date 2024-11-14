@@ -41,18 +41,38 @@ void PatchBVH::init()
 
     auto points = _surface->points().data();
     auto indices = _surface->indices().data();
+    auto matrices = _surface->patches().matrices.data();
 
     PrimitiveInfoArray info (count);
     _primitiveIds.resize(count);
 
+    vec4f temp[20];
+
     uint32_t i = 0;
     _surface->patches().forEachPatch([&](PatchTable::PatchRef p)
     {
+        const int n = patchTypeOriginalSize(p.type);
         _primitiveIds[i] = i;
-        if (p.type == PatchType_Bezier)
+        auto pIndex = indices + p.offset;
+        if (p.matrixOffset >= 0)
+        {
+            auto pMatrix = matrices + p.matrixOffset;
+            // multiply matrix
+            for (int row = 0; row < n; row++)
+            {
+                temp[row] = pMatrix[row] * points[pIndex[0]];
+                for (int col = 1; col < p.size; col++)
+                    temp[row] += pMatrix[row + col*n] * points[pIndex[col]];
+            }
+            info[i] = PrimitiveInfo(i, spline::boundingbox(temp, temp+n));
+        }
+        else
         {
             info[i] = PrimitiveInfo(i,
-                spline::boundingbox(points, indices + p.offset)
+                spline::boundingbox<float>(pIndex, pIndex+n, [&](GLuint idx)
+                {
+                    return points[idx];
+                })
             );
         }
         i++;
