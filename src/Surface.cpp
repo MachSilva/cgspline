@@ -83,15 +83,18 @@ void PatchTable::set(std::span<PatchData> elements)
 
         uint32_t matrixSize = pointCount * nodeCount;
         indexDataSize += nodeCount;
-        matrixDataSize += matrixSize;
-
-        if (bucket->hasMatrix && p.matrix.size() != matrixSize)
-            throw std::runtime_error("invalid element matrix size");
 
         // add element to group
         auto& element = bucket->elements.emplace_back();
         element.indices = std::move(p.indices);
-        element.matrix = std::move(p.matrix);
+        if (bucket->hasMatrix)
+        {
+            if (p.matrix.size() != matrixSize)
+                throw std::runtime_error("invalid element matrix size");
+
+            matrixDataSize += matrixSize;
+            element.matrix = std::move(p.matrix);
+        }
     }
 
     // group patches and write
@@ -106,6 +109,7 @@ void PatchTable::set(std::span<PatchData> elements)
         this->groups.push_back({
             .offset = offset,
             .matrixOffset = b.hasMatrix ? matrixOffset : -1,
+            .count = (uint16_t)b.elements.size(),
             .size = b.nodeCount,
             .type = (PatchType)b.type,
         });

@@ -83,6 +83,7 @@ struct PatchTable::PatchGroup
     PatchType type {};
 
     constexpr bool invalid() const noexcept { return size < 1; }
+    constexpr bool hasMatrix() const noexcept {return matrixOffset >= 0; }
 };
 
 struct PatchTable::PatchRef

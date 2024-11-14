@@ -129,21 +129,39 @@ public:
     SurfacePipeline(GLuint vertex, GLuint fragment);
     ~SurfacePipeline() override;
 
+    // get pipeline variant
     GLuint get(Variant i) const { return i == 0 ? _pipeline : _extraPipelines[i-1]; }
 
-    auto getPatch16TCS() const { return _Patch16TCS; }
-    auto getPatch20TCS() const { return _Patch20TCS; }
-    auto getBezierTES() const { return _BezierTES; }
-    auto getBSplineTES() const { return _BSplineTES; }
-    auto getGregoryTES() const { return _GregoryTES; }
+    struct TCSData
+    {
+        Ref<GLSL::ShaderProgram> program;
+        GLuint elementMatrixOffsetLoc {};  // uniform location
+        GLuint useElementMatrixLoc {};     // uniform location
+        GLuint elementMatrixBufferIdx {};  // shader storage block index
+    };
+
+    auto& getPatch16TCS() const { return _Patch16TCS; }
+    auto& getPatch20TCS() const { return _Patch20TCS; }
+    auto& getBezierTES() const { return _BezierTES; }
+    auto& getBSplineTES() const { return _BSplineTES; }
+    auto& getGregoryTES() const { return _GregoryTES; }
+
+    auto& getPatch16ContourTCS() const { return _Patch16ContourTCS; }
+    auto& getPatch20ContourTCS() const { return _Patch20ContourTCS; }
+    auto& getBezierContourTES() const { return _BezierContourTES; }
+    auto& getBSplineContourTES() const { return _BSplineContourTES; }
+    auto& getGregoryContourTES() const { return _GregoryContourTES; }
+
+    // GLuint elementMatrixBufferBindingPoint() const noexcept {}
+    // void setElementMatrixBufferBindingPoint() {}
 
 protected:
     Ref<GLSL::ShaderProgram> _passthroughVS,
-        _Patch16TCS, _Patch20TCS,
         _BezierTES, _BSplineTES, _GregoryTES,
-        _Patch16ContourTCS, _Patch20ContourTCS,
         _BezierContourTES, _BSplineContourTES, _GregoryContourTES;
 
+    TCSData _Patch16TCS, _Patch20TCS;
+    TCSData _Patch16ContourTCS, _Patch20ContourTCS;
     GLuint _extraPipelines[5];
 };
 

@@ -2,6 +2,7 @@
 
 #include <graphics/GLRenderer.h>
 #include <graph/Scene.h>
+#include "Log.h"
 #include "Spline.h"
 #include "SplineMat.h"
 
@@ -245,7 +246,7 @@ const char * const BSPLINE_PATCH_EVAL_FUNCTIONS = TOSTR(
         {
             for (int i = 0; i < 4; i++)
             {
-                const vec3 P = point(k).xyz;
+                const vec3 P = point(k++).xyz;
                 s[0] += (bu[i] * bv[j]) * P;
                 s[1] += (bdu[i] * bv[j]) * P;
                 s[2] += (bu[i] * bdv[j]) * P;
@@ -385,11 +386,12 @@ const char* const TCS_GL_OUT_LEVEL_FUNCTION = TOSTR(
 );
 
 const char* const ELEMENT_MATRIX_BUFFER_DECL = TOSTR(
-    layout(std140) readonly buffer ElementMatrixBuffer
+    layout(std430) readonly restrict buffer ElementMatrixBuffer
     {
         float elementMatrixBuffer[];
     };
-    uniform bool useElementMatrix = false;
+    // uniform bool useElementMatrix = false;
+    uniform int elementMatrixOffset = -1;
 );
 
 } // namespace GLSL
@@ -429,19 +431,20 @@ static const char* _tcs = TOSTR(
 
     void main()
     {
-        if (useElementMatrix == false)
+        if (elementMatrixOffset < 0)
         {
             gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
         }
         else
         {
-            const uint offset =
-                gl_PrimitiveID * gl_PatchVerticesIn * gl_out.length() // matrix start
-                + gl_InvocationID * gl_out.length(); // column start
+            uint offset = elementMatrixOffset
+                + gl_PrimitiveID * gl_PatchVerticesIn * gl_out.length() // matrix start
+                + gl_InvocationID; // line start
             vec4 P = vec4(0);
             for (uint i = 0; i < gl_PatchVerticesIn; i++)
             {
-                P += elementMatrixBuffer[offset + i] * gl_in[i].gl_Position;
+                P += elementMatrixBuffer[offset] * gl_in[i].gl_Position;
+                offset += gl_out.length();
             }
             gl_out[gl_InvocationID].gl_Position = P;
         }
@@ -472,19 +475,20 @@ static const char* _contourTCS = TOSTR(
 
     void main()
     {
-        if (useElementMatrix == false)
+        if (elementMatrixOffset < 0)
         {
             gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
         }
         else
         {
-            const uint offset =
-                gl_PrimitiveID * gl_PatchVerticesIn * gl_out.length() // matrix start
-                + gl_InvocationID * gl_out.length(); // column start
+            uint offset = elementMatrixOffset
+                + gl_PrimitiveID * gl_PatchVerticesIn * gl_out.length()
+                + gl_InvocationID;
             vec4 P = vec4(0);
             for (uint i = 0; i < gl_PatchVerticesIn; i++)
             {
-                P += elementMatrixBuffer[offset + i] * gl_in[i].gl_Position;
+                P += elementMatrixBuffer[offset] * gl_in[i].gl_Position;
+                offset += gl_out.length();
             }
             gl_out[gl_InvocationID].gl_Position = P;
         }
@@ -544,61 +548,6 @@ static const char* _tes = TOSTR(
     }
 );
 
-// Depends on:
-// - MatrixBlock: mvpMatrix
-// - float level()
-// Requires layout qualifier `vertices` to be set
-// static const char* _contourTCS = TOSTR(
-//     in gl_PerVertex
-//     {
-//         vec4 gl_Position;
-//     } gl_in[];
-
-//     out gl_PerVertex
-//     {
-//         vec4 gl_Position;
-//     } gl_out[];
-
-//     float level();
-
-//     // 12 13 14 15
-//     //  8  9 10 11
-//     //  4  5  6  7
-//     //  0  1  2  3
-//     // =>
-//     // 0  1  2  3, 12 13 14 15,  4  8,  7 11
-//     const int map[12] = int[](0, 1, 2, 3, 12, 13, 14, 15, 4, 8, 7, 11);
-//     void main()
-//     {
-//         const uint fetchID = map[gl_InvocationID];
-//         if (useElementMatrix == false)
-//         {
-//             gl_out[gl_InvocationID].gl_Position = gl_in[fetchID].gl_Position;
-//         }
-//         else
-//         {
-//             const uint offset =
-//                 gl_PrimitiveID * gl_PatchVerticesIn * gl_out.length()
-//                 + fetchID * gl_out.length();
-//             vec4 P = vec4(0);
-//             for (uint i = 0; i < gl_PatchVerticesIn; i++)
-//             {
-//                 P += elementMatrixBuffer[offset + i] * gl_in[i].gl_Position;
-//             }
-//             gl_out[gl_InvocationID].gl_Position = P;
-//         }
-
-//         barrier();
-//         if (gl_InvocationID == 0)
-//         {
-//             float value = level();
-
-//             gl_TessLevelOuter[0] = 4; // Edges
-//             gl_TessLevelOuter[1] = level();
-//         }
-//     }
-// );
-
 // Depends on MatrixBlock:
 // - mat4 mvpMatrix
 // - mat4 mvMatrix
@@ -626,22 +575,25 @@ static const char* _contourTES = TOSTR(
 
     void eval(float u, float v, out vec3 s[3]);
 
-    const ivec2 mapA[] = ivec2[](
-        ivec2(1, 0),
-        ivec2(1, 0),
-        ivec2(0, 1),
-        ivec2(0, 1)
-    );
-    const ivec2 mapB[] = ivec2[](
-        ivec2(0, 0),
-        ivec2(0, 1),
-        ivec2(0, 0),
-        ivec2(1, 0)
-    );
+    vec2 mapCoordinates(int id, float u)
+    {
+        switch (id)
+        {
+        default:
+        case 0:
+            return vec2(u, 0);
+        case 1:
+            return vec2(u, 1);
+        case 2:
+            return vec2(0, u);
+        case 3:
+            return vec2(1, u);
+        }
+    }
     void main()
     {
         const int curveId = int(gl_TessCoord.y * 4);
-        const vec2 coord = gl_TessCoord.x * mapA[curveId] + mapB[curveId];
+        const vec2 coord = mapCoordinates(curveId, gl_TessCoord.x);
         vec4 P;
         {
             vec3 S[3];
@@ -687,7 +639,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
                 ("failed to create shader program\n" + p->infoLog());
     };
 
-    _Patch16TCS = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
+    _Patch16TCS.program = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
         _glslVersion,
         _layout16,
         GLSL::MATRIX_BLOCK_DECLARATION,
@@ -695,8 +647,8 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
         _tcs,
         GLSL::TCS_GL_OUT_LEVEL_FUNCTION,
     });
-    check(_Patch16TCS);
-    _Patch20TCS = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
+    check(_Patch16TCS.program);
+    _Patch20TCS.program = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
         _glslVersion,
         _layout20,
         GLSL::MATRIX_BLOCK_DECLARATION,
@@ -704,7 +656,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
         _tcs,
         GLSL::TCS_GL_OUT_LEVEL_FUNCTION,
     });
-    check(_Patch20TCS);
+    check(_Patch20TCS.program);
 
     _BezierTES = new GLSL::ShaderProgram(GL_TESS_EVALUATION_SHADER, {
         _glslVersion,
@@ -732,7 +684,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
     });
     check(_GregoryTES);
 
-    _Patch16ContourTCS = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
+    _Patch16ContourTCS.program = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
         _glslVersion,
         _layout16,
         GLSL::MATRIX_BLOCK_DECLARATION,
@@ -740,8 +692,8 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
         _contourTCS,
         GLSL::TCS_GL_OUT_LEVEL_FUNCTION,
     });
-    check(_Patch16ContourTCS);
-    _Patch20ContourTCS = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
+    check(_Patch16ContourTCS.program);
+    _Patch20ContourTCS.program = new GLSL::ShaderProgram(GL_TESS_CONTROL_SHADER, {
         _glslVersion,
         _layout20,
         GLSL::MATRIX_BLOCK_DECLARATION,
@@ -749,7 +701,7 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
         _contourTCS,
         GLSL::TCS_GL_OUT_LEVEL_FUNCTION,
     });
-    check(_Patch20ContourTCS);
+    check(_Patch20ContourTCS.program);
     _BezierContourTES = new GLSL::ShaderProgram(GL_TESS_EVALUATION_SHADER, {
         _glslVersion,
         GLSL::MATRIX_BLOCK_DECLARATION,
@@ -776,6 +728,33 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
     });
     check(_GregoryContourTES);
 
+    // constexpr auto name0 = "useElementMatrix";
+    // _Patch16TCS.useElementMatrixLoc =
+    //     glGetUniformLocation(*_Patch16TCS.program, name0);
+    // _Patch20TCS.useElementMatrixLoc =
+    //     glGetUniformLocation(*_Patch20TCS.program, name0);
+
+    constexpr auto name1 = "ElementMatrixBuffer";
+    _Patch16TCS.elementMatrixBufferIdx = glGetProgramResourceIndex
+        (*_Patch16TCS.program, GL_SHADER_STORAGE_BLOCK, name1);
+    _Patch20TCS.elementMatrixBufferIdx = glGetProgramResourceIndex
+        (*_Patch20TCS.program, GL_SHADER_STORAGE_BLOCK, name1);
+    _Patch16ContourTCS.elementMatrixBufferIdx = glGetProgramResourceIndex
+        (*_Patch16ContourTCS.program, GL_SHADER_STORAGE_BLOCK, name1);
+    _Patch20ContourTCS.elementMatrixBufferIdx = glGetProgramResourceIndex
+        (*_Patch20ContourTCS.program, GL_SHADER_STORAGE_BLOCK, name1);
+
+    constexpr auto name3 = "elementMatrixOffset";
+    _Patch16TCS.elementMatrixOffsetLoc =
+        glGetUniformLocation(*_Patch16TCS.program, name3);
+    _Patch20TCS.elementMatrixOffsetLoc =
+        glGetUniformLocation(*_Patch20TCS.program, name3);
+    _Patch16ContourTCS.elementMatrixOffsetLoc =
+        glGetUniformLocation(*_Patch16ContourTCS.program, name3);
+    _Patch20ContourTCS.elementMatrixOffsetLoc =
+        glGetUniformLocation(*_Patch20ContourTCS.program, name3);
+
+    // create pipelines
     if (!vertex) vertex = (*_passthroughVS);
 
     auto setStages = [&](GLuint pipeline, GLuint tcs, GLuint tes)
@@ -787,19 +766,19 @@ SurfacePipeline::SurfacePipeline(GLuint vertex, GLuint fragment)
         glActiveShaderProgram(pipeline, fragment);
     };
 
-    setStages(_pipeline, *_Patch16TCS, *_BezierTES);
+    setStages(_pipeline, *_Patch16TCS.program, *_BezierTES);
 
-    glCreateProgramPipelines(5, _extraPipelines);
-    setStages(_extraPipelines[0], *_Patch16TCS, *_BSplineTES);
-    setStages(_extraPipelines[1], *_Patch20TCS, *_GregoryTES);
-    setStages(_extraPipelines[2], *_Patch16ContourTCS, *_BezierContourTES);
-    setStages(_extraPipelines[3], *_Patch16ContourTCS, *_BSplineContourTES);
-    setStages(_extraPipelines[4], *_Patch20ContourTCS, *_GregoryContourTES);
+    glCreateProgramPipelines(std::size(_extraPipelines), _extraPipelines);
+    setStages(_extraPipelines[0], *_Patch16TCS.program, *_BSplineTES);
+    setStages(_extraPipelines[1], *_Patch20TCS.program, *_GregoryTES);
+    setStages(_extraPipelines[2], *_Patch16ContourTCS.program, *_BezierContourTES);
+    setStages(_extraPipelines[3], *_Patch16ContourTCS.program, *_BSplineContourTES);
+    setStages(_extraPipelines[4], *_Patch20ContourTCS.program, *_GregoryContourTES);
 }
 
 SurfacePipeline::~SurfacePipeline()
 {
-    glDeleteProgramPipelines(5, _extraPipelines);
+    glDeleteProgramPipelines(std::size(_extraPipelines), _extraPipelines);
 }
 
 bool SurfacePrimitive::localIntersect(const Ray3f& ray, Intersection& hit) const
@@ -873,8 +852,8 @@ void SurfaceMapper::updateMatrixBlock(GLRenderer& renderer) const
 
 bool SurfaceMapper::render(GLRenderer& renderer) const
 {
-    auto pipeline = renderer.pipeline(GLRenderer::Surface);
-    if (!pipeline) return false;
+    auto p = dynamic_cast<SurfacePipeline*>(renderer.pipeline(GLRenderer::Surface));
+    if (!p) return false;
 
     updateMatrixBlock(renderer);
 
@@ -910,19 +889,43 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
 
     auto s = _surface->surface();
 
-    pipeline->use();
     // TODO Review if this function call is `SurfaceMapper`'s responsability.
-    pipeline->beforeDrawing(renderer);
+    p->beforeDrawing(renderer);
 
     s->bind();
+    auto m = s->matrices();
 
-    for (auto& g : s->groups())
+    constexpr auto kBindingPoint = 0;
+    auto& p16 = p->getPatch16TCS();
+    auto& p20 = p->getPatch20TCS();
+    glShaderStorageBlockBinding(*p16.program, p16.elementMatrixBufferIdx, kBindingPoint);
+    glShaderStorageBlockBinding(*p20.program, p20.elementMatrixBufferIdx, kBindingPoint);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, kBindingPoint, m ? m->buffer() : 0);
+
+    glUseProgram(0);
+    for (const auto& g : s->groups())
     {
-        if (g.type != PatchType_Bezier)
-            continue;
-        glPatchParameteri(GL_PATCH_VERTICES, 16);
+        switch (g.type)
+        {
+        case PatchType_Gregory:
+            glBindProgramPipeline(p->get(SurfacePipeline::eGregoryElement));
+            glProgramUniform1i(*p20.program, p20.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        case PatchType_BSpline:
+            glBindProgramPipeline(p->get(SurfacePipeline::eBSplineElement));
+            glProgramUniform1i(*p16.program, p16.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        case PatchType_Bezier:
+            glBindProgramPipeline(p->get(SurfacePipeline::eBezierElement));
+            glProgramUniform1i(*p16.program, p16.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        default:
+            log::warn("unknown patch type {}", int(g.type));
+            return false;
+        }
+        glPatchParameteri(GL_PATCH_VERTICES, g.size);
         glDrawElements(GL_PATCHES, g.size * g.count, GL_UNSIGNED_INT,
-            reinterpret_cast<const void*>(g.offset));
+            (uint32_t*)0 + g.offset);
     }
 
     return true;
@@ -935,20 +938,40 @@ bool SurfaceMapper::renderContour(GLRenderer& renderer) const
 
     updateMatrixBlock(renderer);
 
-    auto pipeline = p->get(SurfacePipeline::eBezierContour);
-    glUseProgram(0);
-    glBindProgramPipeline(pipeline);
-
     auto s = _surface->surface();    
     s->bind();
 
+    auto m = s->matrices();
+    constexpr auto kBindingPoint = 0;
+    auto& p16 = p->getPatch16ContourTCS();
+    auto& p20 = p->getPatch20ContourTCS();
+    glShaderStorageBlockBinding(*p16.program, p16.elementMatrixBufferIdx, kBindingPoint);
+    glShaderStorageBlockBinding(*p20.program, p20.elementMatrixBufferIdx, kBindingPoint);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, kBindingPoint, m ? m->buffer() : 0);
+
+    glUseProgram(0);
     for (auto& g : s->groups())
     {
-        if (g.type != PatchType_Bezier)
-            continue;
-        glPatchParameteri(GL_PATCH_VERTICES, 16);
-        glDrawElements(GL_PATCHES, g.size * g.count, GL_UNSIGNED_INT,
-            reinterpret_cast<const void*>(g.offset));
+        switch (g.type)
+        {
+        case PatchType_Gregory:
+            glBindProgramPipeline(p->get(SurfacePipeline::eGregoryContour));
+            glProgramUniform1i(*p20.program, p20.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        case PatchType_BSpline:
+            glBindProgramPipeline(p->get(SurfacePipeline::eBSplineContour));
+            glProgramUniform1i(*p16.program, p16.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        case PatchType_Bezier:
+            glBindProgramPipeline(p->get(SurfacePipeline::eBezierContour));
+            glProgramUniform1i(*p16.program, p16.elementMatrixOffsetLoc, g.matrixOffset);
+            break;
+        default:
+            log::warn("unknown patch type {}", int(g.type));
+            return false;
+        }
+        glPatchParameteri(GL_PATCH_VERTICES, g.size);
+        glDrawElements(GL_PATCHES, g.size * g.count, GL_UNSIGNED_INT, (uint32_t*)0 + g.offset);
     }
 
     return true;
