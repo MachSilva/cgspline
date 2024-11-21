@@ -64,6 +64,12 @@ if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
         --generate-code arch=compute_75,code=sm_75
         -Xptxas=-v
     >)
+elseif(${CMAKE_BUILD_TYPE} MATCHES "RelWithDebInfo")
+    target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+        -G -dopt=on
+        --generate-code arch=compute_75,code=sm_75
+        -Xptxas=-v
+    >)
 else()
     target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
         -lineinfo -rdc=true -maxrregcount=128

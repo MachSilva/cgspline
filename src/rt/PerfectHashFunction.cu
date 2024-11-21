@@ -11,14 +11,19 @@
 namespace cg::rt
 {
 
-static constexpr unsigned kBucketMaxSize = 8U;
+constexpr uint32_t pigeonholeCount(uint32_t pigeonCount, uint32_t holeCapacity)
+{
+    return (pigeonCount / holeCapacity) + (pigeonCount % holeCapacity ? 1 : 0);
+}
+
+static constexpr unsigned kBucketCapacity = 4U;
 
 /**
- * @param bucketArray is a 2D matrix with @a kBucketMaxSize elements per line
+ * @param bucketArray is a 2D matrix with @a kBucketCapacity elements per line
  *        and @a bucketCount elements per column. Each line is a contiguous
  *        region in memory. Each line of this matrix is referred as a @e bucket.
  */
-// template<unsigned kBucketMaxSize = 8U>
+// template<unsigned kBucketCapacity = 8U>
 __global__ __launch_bounds__(32)
 void init_and_bucketsort(
     uint32_t* __restrict__ bucketArray,
@@ -37,10 +42,10 @@ void init_and_bucketsort(
     uint32_t k = atomicInc(bucketSizeArray + j, INT32_MAX);
 
     // This is not allowed (an almost impossible occurrence)
-    if (k >= kBucketMaxSize)
+    if (k >= kBucketCapacity)
         __trap();
 
-    bucketArray[j * kBucketMaxSize + k] = keys[i];
+    bucketArray[j * kBucketCapacity + k] = keys[i];
 
     // ID array init
     if (i < bucketCount)
@@ -73,7 +78,7 @@ void feasibility_test(
     
     __syncthreads();
 
-    const uint32_t* bucket = bucketArray + (tId * kBucketMaxSize);
+    const uint32_t* bucket = bucketArray + (tId * kBucketCapacity);
     const uint32_t n = bucketSizeArray[tId];
     for (int i = 1; i < n; i++)
     {
@@ -126,7 +131,7 @@ void sort_buckets_descending(
         return;
     
     auto size = bucketSizeArray[i];
-    assert(size <= kBucketMaxSize);
+    assert(size <= kBucketCapacity);
     // Write in reverse. (use the inclusive scan)
     auto base = bucketCount - prefixedHistogram[size];
 
@@ -136,7 +141,7 @@ void sort_buckets_descending(
 
 /**
  * @attention This kernel must be launched with one thread per an element in a
- *            bucket ( @a kBucketMaxSize, @a bucketIdCount )
+ *            bucket ( @a kBucketCapacity, @a bucketIdCount )
  */
 __global__
 void insert_keys(
@@ -163,16 +168,24 @@ void insert_keys(
         return;
 
     const auto bucketId = bucketIdArray[bucketGroup];
-    const auto key = bucketArray[bucketId * kBucketMaxSize + threadIdx.x];
+    const auto key = bucketArray[bucketId * kBucketCapacity + threadIdx.x];
 
-    // This code expects kBucketMaxSize = 8 and blockDim.x = 8, always!
-    // And it also expects warpSize = 32
-    static_assert(kBucketMaxSize == 8);
-    assert(blockDim.x == 8);
+    assert(blockDim.x == kBucketCapacity);
     assert(warpSize == 32);
     // Find my warp group. Let's split this warp in four groups of eight threads
-    const uint32_t myWarpGroup = bucketGroup % 4;
-    const uint32_t mask = 0xFF << (myWarpGroup * 8);
+    // For kBucketCapacity = 8
+    // {
+    // static_assert(kBucketCapacity == 8);
+    // const uint32_t myWarpGroup = bucketGroup % 4;
+    // const uint32_t mask = 0xFF << (myWarpGroup * 8);
+    // }
+
+    // For kBucketCapacity = 4
+    // {
+    static_assert(kBucketCapacity == 4);
+    const uint32_t myWarpGroup = bucketGroup % 8;
+    const uint32_t mask = 0x0F << (myWarpGroup * 4);
+    // }
 
     const auto keyHash = hashA * key + hashB;
 
@@ -218,7 +231,7 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     // SPL_TIME_THIS();
 
     const auto n = keys.size();
-    int s = int(n >> 1) - 1;
+    int s = int(n - 1) >> 1;
 
     assert(n < 0xFFFFFFFF &&
         "PerfectHashFunction: table size too big for an unsigned 32-bit integer");
@@ -272,8 +285,7 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     // log::info("PerfectHashFunction: {} displacement buckets; {} keys",
     //     displSize, keys.size());
 
-    constexpr uint32_t bucketCapacity = 8;
-    Buffer<uint32_t,async_allocator> buckets (bucketCapacity*displSize, stream);
+    Buffer<uint32_t,async_allocator> buckets (kBucketCapacity*displSize, stream);
     Buffer<uint32_t,async_allocator> bucketSizes (displSize, stream);
     Buffer<uint32_t,async_allocator> bucketIdArray (displSize, stream);
 
@@ -283,7 +295,8 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
     constexpr auto kThreadsPerBlock = 32;
-    const auto blocks = (n / kThreadsPerBlock) + (n % kThreadsPerBlock ? 1 : 0);
+    // const auto blocks = (n / kThreadsPerBlock) + (n % kThreadsPerBlock ? 1 : 0);
+    const auto blocks = pigeonholeCount(n, kThreadsPerBlock);
     init_and_bucketsort<<<blocks, kThreadsPerBlock, 0, stream>>>(
         (uint32_t*) buckets.data(),
         bucketSizes.data(),
@@ -313,14 +326,15 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
         }
     };
     
-    Buffer<uint32_t,managed_allocator> histogram (kBucketMaxSize + 1);
+    Buffer<uint32_t,managed_allocator> histogram (kBucketCapacity + 1);
     CUDA_CHECK(cudaMemsetAsync(histogram.data(), 0,
         histogram.size_bytes(), stream));
 
     CUDA_CHECK(cudaMemsetAsync(tmpStorage.data(), 0,
-        (kBucketMaxSize + 1) * sizeof (uint32_t), stream));
+        (kBucketCapacity + 1) * sizeof (uint32_t), stream));
 
-    dependency_histogram<<<blocks,kThreadsPerBlock,0,stream>>>(
+    const auto displGrid = pigeonholeCount(displSize, kThreadsPerBlock);
+    dependency_histogram<<<displGrid,kThreadsPerBlock,0,stream>>>(
         histogram.data(), bucketSizes.data(), displSize
     );
 
@@ -337,6 +351,8 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
     CUDA_CHECK(cudaMemPrefetchAsync((const void*) histogram.data(),
         histogram.size_bytes(), device, stream));
 
+    // XXX Parallel inclusive sum is unnecessary with such small vector;
+    // TODO: remove
     // Sort buckets
     // 1. compute prefix sum
     CUDA_CHECK(cub::DeviceScan::InclusiveSum(nullptr, tmpStorageSize,
@@ -351,9 +367,9 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
     // 2. sort
     CUDA_CHECK(cudaMemsetAsync(tmpStorage.data(), 0,
-        (kBucketMaxSize + 1) * sizeof (uint32_t), stream));
+        (kBucketCapacity + 1) * sizeof (uint32_t), stream));
 
-    sort_buckets_descending<<<blocks,kThreadsPerBlock,0,stream>>>(
+    sort_buckets_descending<<<displGrid,kThreadsPerBlock,0,stream>>>(
         bucketIdArray.data(),
         (uint32_t*) tmpStorage.data(),
         histogram.data(),
@@ -427,7 +443,8 @@ int PerfectHashFunction::build(span<const uint32_t> keys, cudaStream_t stream)
 
             if (selectedCount > 0)
             {
-                insert_keys<<<blocks, dim3(8, kThreadsPerBlock), 0, stream>>>(
+                auto grid = pigeonholeCount(selectedCount, kThreadsPerBlock);
+                insert_keys<<<grid, dim3(kBucketCapacity, kThreadsPerBlock), 0, stream>>>(
                     (int*) result.data(),
                     _A,
                     _B,
