@@ -157,44 +157,43 @@ void MainWindow::mainMenu()
 static
 const char* componentTypeString(GLint type)
 {
-    const char* s = "<unknown>";
     switch (type)
     {
-    case GL_FLOAT:                  s = "FLOAT";
-    case GL_INT:                    s = "INT";
-    case GL_UNSIGNED_INT:           s = "UNSIGNED INT";
-    case GL_SIGNED_NORMALIZED:      s = "SIGNED NORMALIZED";
-    case GL_UNSIGNED_NORMALIZED:    s = "UNSIGNED NORMALIZED";
+    case GL_FLOAT:                  return "FLOAT";
+    case GL_INT:                    return "INT";
+    case GL_UNSIGNED_INT:           return "UNSIGNED INT";
+    case GL_SIGNED_NORMALIZED:      return "SIGNED NORMALIZED";
+    case GL_UNSIGNED_NORMALIZED:    return "UNSIGNED NORMALIZED";
+    default:                        return "<unknown>";
     }
-    return s;
 }
 
 static
 const char* framebufferStatusString(GLenum status)
 {
-    const char* s = "Incomplete";
     switch (status)
     {
-        case GL_FRAMEBUFFER_COMPLETE:
-            s = "Complete"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-            s = "Incomplete attachment"; break;
-        case GL_FRAMEBUFFER_UNDEFINED:
-            s = "Undefined"; break;
-        case GL_FRAMEBUFFER_UNSUPPORTED:
-            s = "Unsupported"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-            s = "Incomplete Draw buffer"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-            s = "Incomplete Read buffer"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
-            s = "Incomplete Multisample"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
-            s = "Incomplete layer targets"; break;
-        case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-            s = "Incomplete (missing attachment)"; break;
+    case GL_FRAMEBUFFER_COMPLETE:
+        return "Complete";
+    case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        return "Incomplete attachment";
+    case GL_FRAMEBUFFER_UNDEFINED:
+        return "Undefined";
+    case GL_FRAMEBUFFER_UNSUPPORTED:
+        return "Unsupported";
+    case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        return "Incomplete Draw buffer";
+    case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        return "Incomplete Read buffer";
+    case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        return "Incomplete Multisample";
+    case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        return "Incomplete layer targets";
+    case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        return "Incomplete (missing attachment)";
+    default:
+        return "Incomplete";
     };
-    return s;
 }
 
 void MainWindow::assetWindow()
@@ -318,6 +317,9 @@ void MainWindow::controlWindow()
 
     ImGui::Text("Samples: %d", _data.windowSamples);
     ImGui::Text("Sample Buffers: %d", _data.windowSampleBuffers);
+
+    ImGui::Text("Window framebuffer: %dx%d",
+        framebufferWidth, framebufferHeight);
 
     ImGui::Separator();
 
@@ -490,6 +492,16 @@ void MainWindow::workbenchWindow()
 
     if (ImGui::Button("Back to Editor"))
         _image = nullptr;
+    
+    ImGui::SameLine();
+
+    bool hasFile = !_sceneRefs.filepath.empty();
+    if (!hasFile) ImGui::BeginDisabled();
+    if (ImGui::Button("Reload scene"))
+    {
+        reloadScene();
+    }
+    if (!hasFile) ImGui::EndDisabled();
 
     auto& selectedItem = _image;
     for (auto& [k, item] : _workbench2D)

@@ -23,6 +23,7 @@ public:
 protected:
     Value createMaterial(const List&);
     Value createPBRMaterial(const List&);
+    Value createMesh(const List&);
     Value createTexture(const List&);
     Value createSurface(const List&);
     Value getAsset(const List&);
@@ -40,8 +41,8 @@ protected:
     bool _sceneComplete;
     int _objectId;
     int _materialId;
+    int _meshId;
     int _surfaceId;
-    // int _meshId;
 
     auto insertAsset(const std::string& s, SharedObject* obj)
     {

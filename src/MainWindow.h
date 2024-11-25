@@ -100,6 +100,7 @@ protected:
     void createDebugObject(const char * name = "Debug Object");
 
     void readScene(std::filesystem::path scenefile);
+    void reloadScene();
     void setScene(graph::Scene& scene);
     void convertScene();
 
@@ -155,6 +156,7 @@ protected:
 
     struct SceneRefs
     {
+        std::filesystem::path filepath;
         Intersection lastPickHit {};
         graph::SceneObject* debugObject {};
 

@@ -18,6 +18,7 @@ SceneReader::SceneReader()
     _sceneComplete = false;
     _objectId = 0;
     _materialId = 0;
+    _meshId = 0;
     _surfaceId = 0;
 
     _assets = new Dict();
@@ -27,6 +28,7 @@ SceneReader::SceneReader()
     s["Get"]         = std::bind_front(&SceneReader::getAsset, this);
     s["Material"]    = std::bind_front(&SceneReader::createMaterial, this);
     s["PBRMaterial"] = std::bind_front(&SceneReader::createPBRMaterial, this);
+    s["Mesh"]        = std::bind_front(&SceneReader::createMesh, this);
     s["Surface"]     = std::bind_front(&SceneReader::createSurface, this);
     s["Texture"]     = std::bind_front(&SceneReader::createTexture, this);
     s["Scene"]       = std::bind_front(&SceneReader::readScene, this);
@@ -36,6 +38,8 @@ SceneReader::SceneReader()
     
     for (auto& kv : Assets::meshes())
         _assets->insert(kv);
+    
+    _assets->insert({"Box", GLGraphics3::box()});
 }
 
 void SceneReader::doParse()
@@ -127,14 +131,14 @@ Value SceneReader::createPBRMaterial(const List& args)
     if (auto p = props->get_ptr("metalness"))
     {
         auto v = p->getFloat();
-        if (v < 0.0 || v > 1.0)
+        if (v < 0 || v > 1)
             throw std::out_of_range("PBRMaterial: 'metalness' should be between 0 and 1");
         m->metalness = v;
     }
     if (auto p = props->get_ptr("roughness"))
     {
         auto v = p->getFloat();
-        if (v < 0.0 || v > 1.0)
+        if (v < 0 || v > 1)
             throw std::out_of_range("PBRMaterial: 'roughness' should be between 0 and 1");
         m->roughness = v;
     }
@@ -145,6 +149,17 @@ Value SceneReader::createPBRMaterial(const List& args)
     if (auto p = props->get_ptr("metal_rough_texture"))
     {
         m->texMetalRough = p->castTo<gl::Texture>();
+    }
+    if (auto p = props->get_ptr("refractive_index"))
+    {
+        auto v = p->getFloat();
+        if (v <= 0)
+            throw std::out_of_range("PBRMaterial: 'refractive_index' should be greater than zero");
+        m->refractiveIndex = v;
+    }
+    if (auto p = props->get_ptr("transparency"))
+    {
+        m->transparency = std::get<vec3f>(*p);
     }
 
     return m;
@@ -161,6 +176,88 @@ Value SceneReader::createTexture(const List& args)
         throw std::runtime_error(_f("file '{}' does not exist", path));
 
     return (*_assets)[name] = gl::Texture::from(file.string().c_str());
+}
+
+Value SceneReader::createMesh(const List& args)
+{
+    auto props = args.at(0).castTo<Dict>();
+
+    Dict::iterator it;
+    if (auto p = props->get_ptr("name"))
+    {
+        it = insertAsset(std::get<std::string>(*p), nullptr);
+    }
+    else
+    {
+        it = insertAsset(_f("Mesh_{}", ++_meshId), nullptr);
+    }
+
+    if (auto p = props->get_ptr("file"))
+    {
+        throw std::runtime_error("not yet implemented");
+    }
+
+    int vertexCount = 0;
+    std::unique_ptr<vec3f[]> vertices;
+    if (auto p = props->get_ptr("vertices"))
+    {
+        auto list = p->castTo<List>();
+        vertexCount = list->size() / 3;
+        vertices = std::make_unique_for_overwrite<vec3f[]>(vertexCount);
+
+        for (auto i = 0u, j = 0u; i < vertexCount; i++, j+=3)
+        {
+            vertices[i].x = (*list)[j+0].getFloat();
+            vertices[i].y = (*list)[j+1].getFloat();
+            vertices[i].z = (*list)[j+2].getFloat();
+        }
+    }
+
+    std::unique_ptr<vec3f[]> normals;
+    if (auto p = props->get_ptr("normals"))
+    {
+        auto list = p->castTo<List>();
+        if (vertexCount != list->size() / 3)
+            throw std::runtime_error
+                ("`normals` size must match `vertices` size");
+
+        normals = std::make_unique_for_overwrite<vec3f[]>(vertexCount);
+
+        for (auto i = 0u, j = 0u; i < vertexCount; i++, j+=3)
+        {
+            normals[i].x = (*list)[j+0].getFloat();
+            normals[i].y = (*list)[j+1].getFloat();
+            normals[i].z = (*list)[j+2].getFloat();
+        }
+    }
+
+    int triangleCount = 0;
+    std::unique_ptr<TriangleMesh::Triangle[]> triangles;
+    if (auto p = props->get_ptr("triangles"))
+    {
+        auto list = p->castTo<List>();
+        triangleCount = list->size() / 3;
+        triangles = std::make_unique_for_overwrite<TriangleMesh::Triangle[]>
+            (triangleCount);
+
+        for (auto i = 0u, j = 0u; i < triangleCount; i++, j+=3)
+        {
+            triangles[i].v[0] = std::get<int>((*list)[j+0]);
+            triangles[i].v[1] = std::get<int>((*list)[j+1]);
+            triangles[i].v[2] = std::get<int>((*list)[j+2]);
+        }
+    }
+
+    auto mesh = new TriangleMesh({
+        .vertexCount = vertexCount,
+        .triangleCount = triangleCount,
+        .vertices = vertices.release(),
+        .vertexNormals = normals.release(),
+        .triangles = triangles.release(),
+    });
+    if (!mesh->hasVertexNormals())
+        mesh->computeNormals();
+    return it->second = mesh;
 }
 
 Value SceneReader::createSurface(const List& args)

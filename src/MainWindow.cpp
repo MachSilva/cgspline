@@ -43,7 +43,7 @@ void debugCallback(GLenum source,
     };
 
     if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) return;
-    if (severity == GL_DEBUG_SEVERITY_LOW) return;
+    // if (severity == GL_DEBUG_SEVERITY_LOW) return;
     //if (severity == GL_DEBUG_SEVERITY_MEDIUM) return;
     //if (severity == GL_DEBUG_SEVERITY_HIGH) return;
 
@@ -155,7 +155,7 @@ void MainWindow::initializeScene()
     // auto obj = createCameraObject(aspect, "Main Camera");
     // obj->transform()->setLocalPosition({0,0,10});
 
-    _sceneEnvironment = gl::Texture::from("assets/textures/je_gray_park_4k.hdr");
+    // _sceneEnvironment = gl::Texture::from("assets/textures/je_gray_park_4k.hdr");
 
     Reference light = new Light();
     light->color = Color(0.4f, 0.4f, 0.4f);
@@ -638,6 +638,8 @@ bool MainWindow::onKeyPress(int key, int p2)
         _state.cursorMode = CursorMode::PrimitiveInspect; break;
     case GLFW_KEY_F3:
         _state.cursorMode = CursorMode::NormalInspect; break;
+    case GLFW_KEY_F5:
+        reloadScene(); break;
     }
 
     return SceneWindow::onKeyPress(key, p2);
@@ -756,6 +758,17 @@ graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
 //     }
 // }
 
+void MainWindow::reloadScene()
+{
+    if (_sceneRefs.filepath.empty())
+    {
+        log::error("Scene source file unknown. No action performed.");
+        return;
+    }
+
+    readScene(_sceneRefs.filepath);
+}
+
 void MainWindow::readScene(std::filesystem::path scenefile)
 {
     SceneReader reader {};
@@ -768,19 +781,21 @@ void MainWindow::readScene(std::filesystem::path scenefile)
         return;
     }
 
+    auto filename = scenefile.filename().string();
     try
     {
-        reader.parse(scenefile.filename().string(), in, scenefile.parent_path());
+        reader.parse(filename, in, scenefile.parent_path());
         if (reader.scene() == nullptr)
             throw std::runtime_error("Scene is null");
         setScene(*reader.scene());
+        _sceneRefs.filepath = std::move(scenefile);
 
         _sceneEnvironment = reader.environment;
     }
     catch (const std::exception& e)
     {
-        std::cerr << std::format("Failed to load scene '{}'. Reason:\n{}\n",
-            scenefile.filename().string().c_str(), e.what());
+        log::error("Failed to load scene '{}'. Reason:\n{}\n",
+            filename.c_str(), e.what());
     }
 }
 
