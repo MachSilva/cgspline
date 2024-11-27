@@ -46,7 +46,8 @@ _SPL_CONSTEXPR mat4 CUBIC_DERIVATIVE_BASE
 _SPL_CONSTEXPR mat4 split_matrix(float t)
 {
 #ifdef __CUDA_ARCH__
-    __builtin_assume (t >= 0.0f && t <= 1.0f);
+    __builtin_assume (t >= 0.0f);
+    __builtin_assume (t <= 1.0f);
 #endif
     float s = 1 - t;
     float s2 = s * s;
@@ -194,7 +195,7 @@ _SPL_CONSTEXPR void slice(vec2 *curve, float u, float v)
 
     vec4 x (P(0).x, P(1).x, P(2).x, P(3).x);
     vec4 y (P(0).y, P(1).y, P(2).y, P(3).y);
-    // x = V * U * x; // x^T * M = M^T * x
+    // x = V * U * x; // x^T * M = ( M^T * x )^T
     mat4 M = slice_matrix(u, v).transposed();
     x = M * x;
     y = M * y;

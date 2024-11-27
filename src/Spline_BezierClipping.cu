@@ -723,7 +723,8 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 
         float delta = upper - lower;
         __builtin_assume (delta <= 1.0f);
-        __builtin_assume (lower >= 0.0f && upper <= 1.0f);
+        __builtin_assume (lower >= 0.0f);
+        __builtin_assume (upper <= 1.0f);
 
         if (delta < 0)
         { // no intersection
