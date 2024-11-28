@@ -1,0 +1,164 @@
+let Gold        = (0.8  0.498039    0.196078)
+let Copper      = (0.72 0.45 0.20)
+let Bronze      = (0.55 0.47 0.14)
+let Silver      = (0.90 0.91 0.98)
+let Black       = (0 0 0)
+let White       = (1 1 1)
+let DarkGray    = (0.025 0.025 0.025)
+let SkyBlue     = (0.2422812 0.61720675 0.8307701) // sRGB(135 206 235)
+
+Material
+{
+  name: "PlainWhite"
+  metalness: 0
+  roughness: 0.8
+  diffuse: (0.9 0.9 0.9)
+  specular: (0.1 0.1 0.1)
+}
+
+Material
+{
+  name: "Floor0"
+  metalness: 0
+  roughness: 0.8
+  diffuse: (0.3 0.3 0.3)
+  specular: (0.1 0.1 0.1)
+}
+
+Material
+{
+  name:       "SilverSp"
+  metalness:  1
+  roughness:  0
+  diffuse:    Black
+  specular:   Silver
+}
+
+Material
+{
+  name: "Glass"
+  metalness: 0
+  roughness: 0.2
+  diffuse: (0.0 0.5 0.0)
+  specular: (0.4 0.5 0.4)
+  transparency: (0.9 0.4 0.9)
+  refractive_index: 1.55
+}
+
+Surface { name: "teacup"    file: "../bezier/teacup" }
+Surface { name: "teapot"    file: "../bezier/teapot" }
+Surface { name: "teaspoon"  file: "../bezier/teaspoon" }
+
+Mesh
+{
+  name: "TheMesh"
+  vertices:
+  [
+    -1 1 -1
+    -1 1  1
+     1 1  1
+     1 1 -1
+  ]
+  triangles:
+  [
+    0 1 2
+  ]
+}
+
+Scene
+{
+  environment:
+  {
+    background: SkyBlue
+  }
+  objects:
+  [
+    {
+      name: "Floor"
+      transform:
+      {
+        position: (0 -0.1 0)
+        scale: (10 0.4 10)
+      }
+      mesh:
+      {
+        name: "Box"
+      }
+      material: "Floor0"
+    }
+    {
+      name: "Glass Wall"
+      transform:
+      {
+        position: (0 1 1.3)
+        rotation: (-90 0 0)
+        scale: (2 0.1 1)
+      }
+      mesh: { name: "Box" }
+      material: Get("Glass")
+    }
+    {
+      name: "Lights"
+      objects:
+      [
+        {
+          name: "The Light"
+          transform:
+          {
+            position: (-10 5 +5)
+          }
+          light:
+          {
+            type: "point"
+            color: White
+            falloff: 0
+          }
+        }
+      ]
+    }
+
+    {
+      name: "Teaset"
+      objects:
+      [
+      {
+        name: "Teapot"
+        transform:
+        {
+          rotation: (-90 0 0)
+          scale: (0.5 0.5 0.5)
+        }
+        surface:
+        {
+          model: Get("teapot")
+        }
+        material: Get("PlainWhite")
+      }
+      {
+        name: "Teacup"
+        transform:
+        {
+          position: (2.4 0 0)
+        }
+        surface:
+        {
+          model: Get("teacup")
+          material: Get("SilverSp")
+        }
+      }
+      {
+        name: "Teaspoon"
+        transform:
+        {
+          position: (3.5 3 0)
+        }
+        surface:
+        {
+          model: Get("teaspoon")
+          material: Get("SilverSp")
+        }
+      }
+      ]
+    }
+  ]
+}

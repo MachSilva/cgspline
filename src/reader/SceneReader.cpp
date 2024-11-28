@@ -27,7 +27,6 @@ SceneReader::SceneReader()
     s["Assets"]      = _assets;
     s["Get"]         = std::bind_front(&SceneReader::getAsset, this);
     s["Material"]    = std::bind_front(&SceneReader::createMaterial, this);
-    s["PBRMaterial"] = std::bind_front(&SceneReader::createPBRMaterial, this);
     s["Mesh"]        = std::bind_front(&SceneReader::createMesh, this);
     s["Surface"]     = std::bind_front(&SceneReader::createSurface, this);
     s["Texture"]     = std::bind_front(&SceneReader::createTexture, this);
@@ -69,24 +68,9 @@ Value SceneReader::createMaterial(const List& args)
 
     insertAsset(m->name(), m);
 
-    if (auto p = props->get_ptr("ambient"))
-    {
-        m->ambient = p->getColor();
-    }
     if (auto p = props->get_ptr("diffuse"))
     {
         m->diffuse = p->getColor();
-    }
-    if (auto p = props->get_ptr("shine"))
-    {
-        auto f = p->getFloat();
-        if (f <= 0)
-            throw std::out_of_range("Material: invalid value for 'shine'");
-        m->shine = f;
-    }
-    if (auto p = props->get_ptr("spot"))
-    {
-        m->spot = p->getColor();
     }
     if (auto p = props->get_ptr("specular"))
     {
@@ -96,70 +80,34 @@ Value SceneReader::createMaterial(const List& args)
     {
         m->transparency = p->getColor();
     }
-    if (auto p = props->get_ptr("ior"))
+    if (auto p = props->get_ptr("refractive_index"))
     {
         auto f = p->getFloat();
         if (f <= 0)
-            throw std::out_of_range("Material: invalid value for 'ior'");
+            throw std::out_of_range("Material: 'refractive_index' (index of refraction) should be greater than zero");
         m->ior = f;
-    }
-
-    return m;
-}
-
-Value SceneReader::createPBRMaterial(const List& args)
-{
-    auto props = args.at(0).castTo<Dict>();
-    auto m = Ref(new PBRMaterial);
-
-    if (auto p = props->get_ptr("name"))
-    {
-        auto& s = std::get<std::string>(*p);
-        m->setName("%s", s.c_str());
-    }
-    else
-    {
-        m->setName("Material_%d", ++_materialId);
-    }
-
-    insertAsset(m->name(), m);
-
-    if (auto p = props->get_ptr("color"))
-    {
-        m->baseColor = p->getColor();
     }
     if (auto p = props->get_ptr("metalness"))
     {
         auto v = p->getFloat();
         if (v < 0 || v > 1)
-            throw std::out_of_range("PBRMaterial: 'metalness' should be between 0 and 1");
+            throw std::out_of_range("Material: 'metalness' should be between 0 and 1");
         m->metalness = v;
     }
     if (auto p = props->get_ptr("roughness"))
     {
         auto v = p->getFloat();
         if (v < 0 || v > 1)
-            throw std::out_of_range("PBRMaterial: 'roughness' should be between 0 and 1");
+            throw std::out_of_range("Material: 'roughness' should be between 0 and 1");
         m->roughness = v;
     }
     if (auto p = props->get_ptr("texture"))
     {
-        m->texBaseColor = p->castTo<gl::Texture>();
+        m->texBaseColor = p->castTo<gl::Texture>()->handle();
     }
     if (auto p = props->get_ptr("metal_rough_texture"))
     {
-        m->texMetalRough = p->castTo<gl::Texture>();
-    }
-    if (auto p = props->get_ptr("refractive_index"))
-    {
-        auto v = p->getFloat();
-        if (v <= 0)
-            throw std::out_of_range("PBRMaterial: 'refractive_index' should be greater than zero");
-        m->refractiveIndex = v;
-    }
-    if (auto p = props->get_ptr("transparency"))
-    {
-        m->transparency = std::get<vec3f>(*p);
+        m->texMetalRough = p->castTo<gl::Texture>()->handle();
     }
 
     return m;
@@ -319,8 +267,6 @@ Ref<SurfaceProxy> SceneReader::addSurface(const Dict* props)
     {
         if (auto m = p->getSharedObject<Material>())
             primitive->setMaterial(m);
-        else if (auto m = p->getSharedObject<PBRMaterial>())
-            primitive->pbrMaterial = m;
         else
             throw std::runtime_error("invalid material type for surface");
     }

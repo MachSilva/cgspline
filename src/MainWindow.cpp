@@ -512,23 +512,25 @@ void MainWindow::renderScene()
     {
     case RenderMethod::eCUDA:
     {
-        rt::ScopeClock _c {[](std::chrono::microseconds duration)
-        {
-            log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
-        }};
-
         auto heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, warpSize, rt::ManagedResource::instance());
         CUDA_CHECK(cudaMemsetAsync(heatMap->data(), 0, heatMap->size_bytes()));
 
-        // Launch render kernel
-        _rayTracer = new rt::RayTracer({
-            .device = 0,
-            .heatMap = heatMap.get(),
-        });
-        _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+        {
+            rt::ScopeClock _c {[](std::chrono::microseconds duration)
+            {
+                log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
+            }};
 
-        CUDA_CHECK(cudaDeviceSynchronize());
-        _workbench2D["CUDA ray traced image"] = _image;
+            // Launch render kernel
+            _rayTracer = new rt::RayTracer({
+                .device = 0,
+                .heatMap = heatMap.get(),
+            });
+            _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+            CUDA_CHECK(cudaDeviceSynchronize());
+            _workbench2D["CUDA ray traced image"] = _image;
+        }
 
         // Get heat map
         Ref<gl::Texture> tex = new gl::Texture(gl::Format::sRGB, v.w, v.h);

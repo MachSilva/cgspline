@@ -79,7 +79,8 @@ struct Light
 struct Material
 {
     vec3 diffuse;
-    // Spectral reflectance distribution for use with Schilick's approximation
+    // Spectral reflectance distribution for use with Schlick's approximation
+    // (derived from refractive indices for each component)
     vec3 specular;
     vec3 transparency;
     float metalness; // [0,1]
