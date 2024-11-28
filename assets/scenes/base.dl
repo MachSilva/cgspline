@@ -94,8 +94,11 @@ Scene
         rotation: (-90 0 0)
         scale: (2 0.1 1)
       }
-      mesh: { name: "Box" }
-      material: Get("Glass")
+      mesh:
+      {
+        name: "Box"
+        material: Get("Glass")
+      }
     }
     {
       name: "Lights"
@@ -131,8 +134,8 @@ Scene
         surface:
         {
           model: Get("teapot")
+          material: Get("PlainWhite")
         }
-        material: Get("PlainWhite")
       }
       {
         name: "Teacup"

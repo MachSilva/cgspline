@@ -68,8 +68,6 @@ public:
     vec3f normal(const Intersection&) const override;
     Bounds3f bounds() const override;
 
-    Ref<PBRMaterial> pbrMaterial {nullptr};
-
 private:
     Ref<GLSurface> _surface;
     Ref<PatchBVH> _bvh;

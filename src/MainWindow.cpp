@@ -141,7 +141,14 @@ void MainWindow::beginInitialize()
         for (auto entry : std::filesystem::directory_iterator(sceneDir))
         {
             if (entry.is_regular_file())
-                _sceneFileList.emplace_back(entry.path());
+            {
+                auto p = entry.path();
+                auto e = p.extension().string();
+                for (auto& c : e)
+                    c = tolower(c);
+                if (e == ".dl" || e == ".txt")
+                    _sceneFileList.emplace_back(p);
+            }
         }
 
     // _sceneMaterials = Assets::materials();

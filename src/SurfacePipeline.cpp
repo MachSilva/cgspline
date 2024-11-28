@@ -869,24 +869,24 @@ bool SurfaceMapper::render(GLRenderer& renderer) const
 
     // Update texture info to ConfigBlock
     int v[3] { 0, 0, 0 };
-    if (auto pbr = _surface->pbrMaterial.get())
+    if (auto m = _surface->material())
     {
         auto& s = renderer.fragmentShader()->samplers();
-        if (pbr->texBaseColor != nullptr)
+        if (m->texBaseColor)
         {
             v[0] = 1;
             v[1] = 1;
             glActiveTexture(GL_TEXTURE0 + s.sDiffuse.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->texBaseColor);
+            glBindTexture(GL_TEXTURE_2D, m->texBaseColor);
             // specular
             glActiveTexture(GL_TEXTURE0 + s.sSpecular.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->texBaseColor);
+            glBindTexture(GL_TEXTURE_2D, m->texBaseColor);
         }
-        if (pbr->texMetalRough != nullptr)
+        if (m->texMetalRough)
         {
             v[2] = 1;
             glActiveTexture(GL_TEXTURE0 + s.sMetalRough.textureUnit);
-            glBindTexture(GL_TEXTURE_2D, *pbr->texMetalRough);
+            glBindTexture(GL_TEXTURE_2D, m->texMetalRough);
         }
     }
     renderer.renderMaterial(*_surface->material());

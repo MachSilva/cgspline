@@ -66,32 +66,17 @@ if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     >)
 elseif(${CMAKE_BUILD_TYPE} MATCHES "RelWithDebInfo")
     target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-        -G -dopt=on
+        -G -dopt=on -maxrregcount=168
         --generate-code arch=compute_75,code=sm_75
         -Xptxas=-v
     >)
 else()
     target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-        -lineinfo -rdc=true -maxrregcount=128
+        -lineinfo -rdc=true -maxrregcount=168
         --generate-code arch=compute_75,code=lto_75
         -Xptxas=-v -Xnvlink=-dlto
     >)
 endif()
-
-# get_target_property(cgdemo_src cgdemo SOURCE_DIR)
-
-# target_sources(cgspline PRIVATE
-#     ${cgdemo_src}/reader/AbstractParser.cpp
-#     ${cgdemo_src}/reader/Buffer.cpp
-#     ${cgdemo_src}/reader/ErrorHandler.cpp
-#     ${cgdemo_src}/reader/Expression.cpp
-#     ${cgdemo_src}/reader/FileBuffer.cpp
-#     ${cgdemo_src}/reader/ReaderBase.cpp
-#     ${cgdemo_src}/reader/SceneReader.cpp
-#     ${cgdemo_src}/reader/Scope.cpp
-# )
-
-# target_include_directories(cgspline PRIVATE ${cgdemo_src})
 
 if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
     target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)
