@@ -241,17 +241,17 @@ Value _div(const List& args)
     // return {};
 }
 
-static Value _sRGB(const List& args)
+static Value From_sRGB(const List& args)
 {
     const auto n = args.size();
     if (n != 3 || n != 4)
-        throw std::runtime_error("sRGB function: expected 3 or 4 integer arguments");
+        throw std::runtime_error("From_sRGB function: expected 3 or 4 integer arguments");
 
     auto component = [](const Value& v) -> int
     {
         int c = std::get<int>(v);
         if (c < 0 || c > 255)
-            throw std::out_of_range("sRGB component must be between 0 and 255");
+            throw std::out_of_range("From_sRGB component must be between 0 and 255");
         return c;
     };
 
@@ -270,7 +270,7 @@ DescriptionLanguage::DescriptionLanguage() : _scope{new Dict}
     _scope->insert({"-", (Function) _sub});
     _scope->insert({"*", (Function) _mul});
     _scope->insert({"/", (Function) _div});
-    _scope->insert({"sRGB", (Function) _sRGB});
+    _scope->insert({"From_sRGB", (Function) From_sRGB});
 }
 
 const DescriptionLanguage::Keyword*

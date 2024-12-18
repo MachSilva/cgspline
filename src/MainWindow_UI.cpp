@@ -446,6 +446,88 @@ void MainWindow::controlWindow()
     ImGui::End();
 }
 
+void MainWindow::inspectLight(MainWindow& window, graph::LightProxy& proxy)
+{
+    auto light = proxy.light();
+    bool on = light->isTurnedOn();
+    ImGui::Checkbox("Turned On", &on);
+    light->turnOn(on);
+
+    constexpr const char* types[] {"Directional", "Point", "Spot"};
+    auto type = (int) light->type();
+    if (ImGui::BeginCombo("Type", types[type]))
+    {
+        for (int i = 0; i < std::size(types); i++)
+        {
+            bool selected = i == type;
+            if (ImGui::Selectable(types[i], selected))
+                type = i;
+        }
+        ImGui::EndCombo();
+    }
+    light->setType((Light::Type) type);
+
+    vec3f color {light->color};
+    float scale = color.max();
+    if (scale > 1)
+    {
+        color *= 1 / scale;
+    }
+    else
+    {
+        scale = 1;
+    }
+    // NOTE: ImGuiColorEditFlags_HDR is not fully implemented yet.
+    ImGui::ColorEdit3("Color", &color.x);
+    ImGui::DragFloat("Scale / Strength", &scale, 0.05f, 1.0f, 1000,
+        "%.2f", ImGuiSliderFlags_Logarithmic);
+
+    light->color.x = scale * color.x;
+    light->color.y = scale * color.y;
+    light->color.z = scale * color.z;
+    
+    ImGui::LabelText("Value", "(%2.2f,%2.2f,%2.2f)",
+        light->color.x, light->color.y, light->color.z);
+
+    if (light->type() == Light::Type::Directional)
+        return;
+
+    if (light->type() == Light::Type::Point)
+    {
+        float range = light->range();
+        ImGui::DragFloat("Range", &range, 0.1f, 0, 1000);
+
+        bool inf = range == 0;
+        ImGui::SameLine();
+        ImGui::Checkbox("Infinite", &inf);
+        if (inf)
+            range = 0;
+        light->setRange(range);
+        light->flags.enable(Light::Infinite, inf);
+    }
+    else // Light::Type::Spot
+    {
+        float angle = light->spotAngle();
+        ImGui::DragFloat("Spot Angle", &angle, 0.1f,
+            light->minSpotAngle, light->maxSpotAngle);
+        light->setSpotAngle(angle);
+    }
+
+    constexpr const char* s[] {"Constant", "Linear", "Quadratic"};
+    auto falloff = (int) light->falloff;
+    if (ImGui::BeginCombo("Falloff", s[falloff]))
+    {
+        for (int i = 0; i < std::size(s); i++)
+        {
+            bool selected = i == falloff;
+            if (ImGui::Selectable(s[i], selected))
+                falloff = i;
+        }
+        ImGui::EndCombo();
+    }
+    light->falloff = (Light::Falloff) falloff;
+}
+
 void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
 {
     ImGui::inputText("Surface", s.sceneObject()->name());

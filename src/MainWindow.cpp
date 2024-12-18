@@ -165,7 +165,8 @@ void MainWindow::initializeScene()
     // _sceneEnvironment = gl::Texture::from("assets/textures/je_gray_park_4k.hdr");
 
     Reference light = new Light();
-    light->color = Color(0.4f, 0.4f, 0.4f);
+    light->color = Color::white;
+    light->falloff = Light::Falloff::Quadratic;
     obj = createObject("The Light", graph::LightProxy::New(*light));
     obj->transform()->setLocalEulerAngles({50,130,0});
     obj->transform()->setPosition({0, 4, 0});
@@ -203,6 +204,7 @@ void MainWindow::initializeScene()
     p0->beforeDrawing = setFragmentUniforms;
     editor()->setPipeline(GLRenderer::Surface, p0);
 
+    registerInspectFunction(inspectLight);
     registerInspectFunction(inspectSurface);
 
     editor()->camera()->setPosition({1, 3.3, 3.4});
@@ -383,6 +385,9 @@ void MainWindow::convertScene()
             .direction = light->direction(),
             .angle = angle
         });
+        if (light->falloff != Light::Falloff::Quadratic)
+            log::warn("Light '{}' has an unsupported falloff. "
+            "Falling back to quadratic light falloff.", light->name());
     }
 
     // Give some "pointer stability" to these arrays

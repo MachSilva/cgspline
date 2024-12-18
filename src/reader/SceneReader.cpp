@@ -325,6 +325,7 @@ static Ref<graph::LightProxy> createLight(const Dict* props)
 {
     auto proxy = Ref(graph::LightProxy::New());
     auto light = proxy->light();
+    light->falloff = Light::Falloff::Quadratic; // quadratic falloff by default
 
     if (auto p = props->get_ptr("type"))
     {

@@ -113,6 +113,7 @@ protected:
     void openSceneMenu(std::string_view label);
     void viewMenu();
     void helpMenu();
+    static void inspectLight(MainWindow&, graph::LightProxy&);
     static void inspectSurface(MainWindow&, SurfaceProxy&);
 
     void prevRenderScene();
