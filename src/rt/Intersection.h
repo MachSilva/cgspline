@@ -21,7 +21,7 @@ struct Ray
     // vec3 left;
     float tMin;
     float tMax;
-    float mediumRefractionIndex = 1.0f;
+    float ior = 1.0f; //< medium index of refraction
 };
 
 struct Intersection

@@ -24,12 +24,47 @@ bool lightVector(float& d, vec3& L, const vec3& P, const Light& light);
 __host__ __device__
 vec3 lightColor(float d, const Light& light);
 
+template<typename T, std::floating_point real>
+__host__ __device__
+constexpr T mix(const T& a, const T& b, real t)
+{
+    return (real(1) - t) * a + t * b;
+}
+
+__host__ __device__
+constexpr vec3 reflect(vec3 I, vec3 N, float dotIN)
+{
+    return I - 2 * dotIN * N;
+}
+
+// TODO
+// __host__ __device__
+// constexpr vec3 refract(vec3 I, vec3 N, float eta)
+// {
+//     return {};
+// }
+
+__host__ __device__
+constexpr auto squared(const auto& value)
+{
+    return value*value;
+}
+
+// Schlick's approximation for Fresnel reflectance for each wavelength
+template<typename vec = float>
+__host__ __device__
+constexpr vec schlick(vec f0, float dotLH)
+{
+    float b = 1 - dotLH;
+    float b2 = b*b;
+    return f0 + (vec(1) - f0) * (b2*b2*b); // powf(1 - dotLH, 5)
+}
+
 __host__ __device__
 vec3 BRDF(
-    const vec3& I,
-    const vec3& L,
-    const vec3& V,
-    const vec3& N,
+    const vec3& L, //< light vector
+    const vec3& V, //< view vector
+    const vec3& N, //< normal vector
     float dotNV,
     float dotNL,
     const Material& m);
@@ -51,16 +86,17 @@ constexpr float G(float dotNL, float dotNV, float r)
 
 // Microfacet normal distribution function
 __host__ __device__
-static inline float D(float dotNH, float r)
+constexpr float D(float dotNH, float r)
 {
-    dotNH = fmax(dotNH, 0.0f);
-    float a2 = powf(fmax(r, 1e-3f), 4); // a = r^2; a^2 = r^4
+    r = fmax(r, 1e-3f);
+    float a = r*r;
+    float a2 = a*a; // a = r^2; a^2 = r^4
     float d = dotNH * dotNH * (a2 - 1) + 1; // dot(H,N)^2 * (a^2 - 1) + 1
     return a2 / (std::numbers::pi_v<float> * d*d);
 }
 
 __host__ __device__
-static inline float BRDF_microfacet(
+constexpr float BRDF_microfacet(
     float dotNV,
     float dotNL,
     float dotNH,
@@ -70,37 +106,38 @@ static inline float BRDF_microfacet(
         / (4 * dotNL * dotNV);
 }
 
-// Schlick's approximation for Fresnel reflectance for each wavelength
 __host__ __device__
-static inline vec3 schlick(const vec3& R0, float dotLH)
+constexpr vec3 BRDF_diffuse(const Material& m)
 {
-    float b = 1 - dotLH;
-    float b2 = b*b;
-    return R0 + (vec3(1) - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
+    // Lambertian diffuse
+    return m.diffuse * std::numbers::inv_pi_v<float>;
 }
 
 __host__ __device__
-static inline float schlick(float R0, float dotLH)
+constexpr vec3 BRDF_specular(
+    const vec3& L,
+    const vec3& V,
+    const vec3& N,
+    float dotNV,
+    float dotNL,
+    float roughness,
+    const vec3& f0)
 {
-    float b = 1 - dotLH;
-    float b2 = b*b;
-    return R0 + (1 - R0) * (b2*b2*b); // powf(1 - dotLH, 5)
+    vec3 H = (L + V).versor();
+    return schlick(f0, vec3::dot(L, H))
+        * BRDF_microfacet(dotNV, dotNL, vec3::dot(H, N), roughness);
 }
 
-// Original Fresnel reflectance for each wavelength
-//   eta: relative refractive index
-// TODO
-// __host__ __device__
-// static inline vec3 fresnel(const vec3& R0, float dotLH, float eta)
-// {
-//     return R0 + (vec3(1) - R0) * powf(1 - dotLH, 5);
-// }
-
-template<typename T, std::floating_point real>
 __host__ __device__
-constexpr T mix(const T& a, const T& b, real t)
+constexpr vec3 BRDF_specular(
+    float dotHL,
+    float dotHN,
+    float dotNV,
+    float dotNL,
+    float roughness,
+    const vec3& f0)
 {
-    return (real(1) - t) * a + t * b;
+    return schlick(f0, dotHL) * BRDF_microfacet(dotNV, dotNL, dotHN, roughness);
 }
 
 } // namespace cg::rt

@@ -19,7 +19,7 @@ public:
     {
         float       eps = 1e-4f;
         bool        flipYAxis = false;
-        int         recursionDepth = 6;
+        int         recursionDepth = 8;
         int         threads = std::thread::hardware_concurrency();
         uint16_t    tileSize = 32;
     };

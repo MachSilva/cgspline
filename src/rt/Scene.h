@@ -50,9 +50,9 @@ struct Light
     vec3 color;
     float strength;
     vec3 position;
-    float range; // range (== 0 INFINITE)
+    float range = 0; // range (== 0 INFINITE)
     vec3 direction;
-    float angle; // spot light angle (if < 0.01: directional; if > 1.57: point)
+    float angle = M_PI_2; // spot light angle (if < 0.01: directional; if > 1.57: point)
 
     enum Type
     {
@@ -79,12 +79,18 @@ struct Light
 struct Material
 {
     vec3 diffuse;
-    // Spectral reflectance distribution for use with Schlick's approximation
+    // Reflectance for each wavelength at an incident angle of zero
+    // relative to the surface normal, thus it is also called f0.
+    // f0 reflectance for use with Schlick's approximation
     // (derived from refractive indices for each component)
     vec3 specular;
     vec3 transparency;
     float metalness; // [0,1]
     float roughness; // [0,1]
+    // Refractive index for computing refraction angle.
+    // In real life, the refractive index is defined per wavelength and defines
+    // the color appearance of the object, making the field "specular"
+    // unnecessary.
     float refractiveIndex;
 };
 

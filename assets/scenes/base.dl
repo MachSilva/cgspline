@@ -113,7 +113,7 @@ Scene
           light:
           {
             type: "point"
-            color: White
+            color: *(3.1 White)
           }
         }
       ]

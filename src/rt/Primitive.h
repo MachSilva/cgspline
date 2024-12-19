@@ -7,7 +7,7 @@
 namespace cg::rt
 {
 
-enum struct PrimitiveType : uint32_t
+enum struct PrimitiveType : uint8_t
 {
     eNone = 0,
     eSphere,

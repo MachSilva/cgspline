@@ -333,7 +333,7 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
             continue;
 
         I = lightColor(d, lights[i]);
-        color += BRDF(I, L, V, N, dotNV, dotNL, m);
+        color += I * BRDF(L, V, N, dotNV, dotNL, m);
     }
 
     payload.color += color * std::numbers::pi_v<float> * payload.attenuation;

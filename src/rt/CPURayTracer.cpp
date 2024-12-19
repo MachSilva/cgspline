@@ -25,7 +25,10 @@ void CPURayTracer::progress(int done, int total) const
 void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene)
 {
     if (_status.running.test_and_set())
-        throw std::runtime_error("this ray tracer object is already busy");
+    {
+        log::warn("this ray tracer object is already busy");
+        return;
+    }
 
     _frame = frame;
     _scene = scene;
@@ -248,8 +251,6 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     const auto& M_1 = _scene->objects.get<Key::eWorld2LocalMatrix>(object);
     vec3 color {0};
 
-    // m.specular.xyz = max(m.specular.xyz, vec3(0.04));
-
     // From the point to the camera; BRDF uses this vector orientation.
     vec3 V = - ray.direction;
     // vec3 N = p->normal(hit);
@@ -286,8 +287,16 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
         if (intersect(r1))
             continue;
 
+        vec3 H = (L + V).versor();
+        float dotHN = H.dot(N);
+        float dotHL = H.dot(L);
+
         I = lightColor(d, lights[i]);
-        color += BRDF(I, L, V, N, dotNV, dotNL, m);
+        color += I * mix(
+            BRDF_diffuse(m),
+            BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular),
+            m.metalness
+        );
     }
 
     color *= std::numbers::pi_v<float> * attenuation;
@@ -297,8 +306,8 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
 
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
-    float r = m.roughness;
-    vec3 reflectance = (1 - r*r) * schlick(m.specular, dotNV);
+    float k = squared(m.roughness + 1) * 0.125;
+    vec3 reflectance = (1 - k) * schlick(m.specular, dotNV);
     vec3 a = attenuation * reflectance;
     if (a.max() > minRadiance)
     {
@@ -315,8 +324,7 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     }
 
     // Refraction
-    // vec3 transmittance = vec3(1) - reflectance;
-    // // Metals end up absorbing transmitted light
+    // Metals end up absorbing transmitted light
     // a = attenuation * transmittance * m.transparency * (1 - m.metalness);
     // if (a.max() > minRadiance)
     // {
@@ -325,7 +333,7 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     //         : m.refractiveIndex;
     //     // I = -V
 
-    //     // color += 
+    //     color += trace(r, a, depth - 1);
     // }
 
     return color;
