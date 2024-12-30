@@ -140,4 +140,20 @@ constexpr vec3 BRDF_specular(
     return schlick(f0, dotHL) * BRDF_microfacet(dotNV, dotNL, dotHN, roughness);
 }
 
+// Van Der Corput sequence
+__host__ __device__
+constexpr float vdc(uint32_t i) noexcept
+{
+#ifdef __CUDA_ARCH__
+    i = __brev(i);
+#else
+    i = (i << 16u) | (i >> 16u);
+    i = ((i & 0x00FF00FFu) << 8u) | ((i & 0xFF00FF00u) >> 8u);
+    i = ((i & 0x0F0F0F0Fu) << 4u) | ((i & 0xF0F0F0F0u) >> 4u);
+    i = ((i & 0x33333333u) << 2u) | ((i & 0xCCCCCCCCu) >> 2u);
+    i = ((i & 0x55555555u) << 1u) | ((i & 0xAAAAAAAAu) >> 1u);
+#endif
+    return 0x1p-32f * (float)i; // = 2^-32 * i = ldexpf((float)i, -32)
+}
+
 } // namespace cg::rt

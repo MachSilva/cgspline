@@ -4,6 +4,7 @@
 #include <cassert>
 #include <deque>
 #include <future>
+#include <random>
 #include <thread>
 #include <core/SharedObject.h>
 #include <utils/Stopwatch.h>
@@ -21,27 +22,42 @@ public:
         bool        flipYAxis = false;
         int         recursionDepth = 8;
         int         threads = std::thread::hardware_concurrency();
-        uint16_t    tileSize = 32;
+        int         tileSize = 32;
+        int         nSamples = 16;
     };
+
+    using clock = std::chrono::steady_clock;
 
     struct Status
     {
-        std::atomic<uint32_t> rays = 0;
-        std::atomic<uint32_t> hits = 0;
-        std::atomic_flag running;
-        std::atomic<uint32_t> workDone = 0;
+        std::atomic_uint32_t rays = 0;
+        std::atomic_uint32_t hits = 0;
+        std::atomic_uint32_t running = 0;
+        std::atomic_uint32_t workDone = 0;
         volatile uint32_t totalWork = 0;
+        clock::time_point started {}, finished {};
     };
 
     CPURayTracer() = default;
     CPURayTracer(const Options& op) { setOptions(op); }
 
     void render(Frame* frame, const Camera* camera, const Scene* scene);
+    void stop();
 
     const auto& options() const { return _options; }
     void setOptions(const Options& op);
 
     const auto status() const { return &_status; }
+
+    int running() const
+    {
+        using std::chrono_literals::operator""ms;
+        int n = 0;
+        for (auto& f : _workers)
+            if (f.wait_for(0ms) != std::future_status::ready)
+                n++;
+        return n;
+    }
 
 private:
     using Key = Scene::Key;
@@ -69,7 +85,7 @@ private:
 
     void progress(int done, int total) const;
 
-    vec3 pixelRayDirection(int x, int y) const
+    vec3 pixelRayDirection(float x, float y) const
     {
         vec4 P
         {
@@ -85,7 +101,7 @@ private:
     struct Tile { uint16_t x, y; };
 
     mutable Status _status;
-    std::vector<std::thread> _workers;
+    std::vector<std::future<void>> _workers;
     std::deque<Tile> _work;
     std::mutex _workMutex;
 
@@ -103,14 +119,12 @@ private:
     mat3 _cameraNormalToWorld;
     vec3 _cameraPosition;
     Camera::ProjectionType _cameraProjection;
-
-    Stopwatch clock;
 };
 
 inline void CPURayTracer::setOptions(const Options& op)
 {
     _options = op;
-    _options.threads = std::clamp(_options.threads, 1, 0x1000);
+    _options.threads = std::clamp<uint16_t>(_options.threads, 1, 0x1000);
     _options.tileSize = std::max<uint16_t>(_options.tileSize, 8);
 }
 

@@ -7,7 +7,43 @@
 namespace cg::rt
 {
 
-// using std::numeric_limits;
+struct
+{
+    std::uniform_real_distribution<float> unit {0, 1}; // unit distribution
+    std::ranlux24_base rng {(uint32_t)rand()};
+} thread_local g_PerThread;
+
+static vec3 randomSphereVec3()
+{
+    auto& t = g_PerThread;
+    constexpr float eps = 1e-7f;
+    vec3 p;
+    do
+    {
+        p = {eps + t.unit(t.rng), eps + t.unit(t.rng), eps + t.unit(t.rng)};
+    }
+    while (p.squaredNorm() > 1.0f);
+    return p;
+}
+
+/**
+ * @brief Random microfacet normal in polar coordinates.
+ * 
+ * @param alpha
+ * @return vec2 polar coordinates in \f$ [0,\pi/2] \cross [0,2\pi] \f$
+ */
+static vec2 randomMicrofacet(float alpha)
+{
+    auto& t = g_PerThread;
+    float x = t.unit(t.rng);
+    float y = t.unit(t.rng);
+    // Microfacet normal distribution
+    return
+    {
+        atan2f(sqrtf(1 - x), alpha * sqrtf(x)),
+        2 * std::numbers::pi_v<float> * y
+    };
+}
 
 void CPURayTracer::progress(int done, int total) const
 {
@@ -15,7 +51,7 @@ void CPURayTracer::progress(int done, int total) const
     float p = (100.0f * done) / total;
     int a = m * done;
     int b = m * total;
-    fprintf(stderr, "\rRay traced %d of %d pixels (%.2f%%)", a, b, p);
+    fprintf(stderr, "\rRay traced %d of %d pixels (%.2f%%)\t", a, b, p);
     if (done == total)
     {
         fprintf(stderr, "\nDone\n");
@@ -24,7 +60,8 @@ void CPURayTracer::progress(int done, int total) const
 
 void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene)
 {
-    if (_status.running.test_and_set())
+    // if (_status.running.test_and_set())
+    if (this->running())
     {
         log::warn("this ray tracer object is already busy");
         return;
@@ -35,8 +72,7 @@ void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene
     uint32_t w = frame->width();
     uint32_t h = frame->height();
 
-    clock.reset();
-    clock.start();
+    _status.started = clock::now();
 
     // ceil(w / _options.tileSize)
     _countX = (w / _options.tileSize) + (w % _options.tileSize ? 1 : 0);
@@ -73,23 +109,16 @@ void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene
     _workers.reserve(_options.threads);
     for (int i = 0; i < _options.threads; i++)
     {
-        _workers.emplace_back(&CPURayTracer::work, this);
+        // _workers.emplace_back(&CPURayTracer::work, this);
+        _workers.emplace_back(
+            std::async(std::launch::async, &CPURayTracer::work, this)
+        );
     }
 
-    for (auto& t : _workers)
-        t.detach();
-
-    // while (!_work.empty())
+    // for (auto& t : _workers)
     // {
-    //     auto [x, y] = _work.back();
-    //     _work.pop_back();
-    //     auto x1 = std::min<uint16_t>(w, x + _options.tileSize);
-    //     auto y1 = std::min<uint16_t>(h, y + _options.tileSize);
-    //     renderTile(x, x1, y, y1);
-    //     progress(++workDone, totalWork);
+    //     t.detach();
     // }
-
-    // fprintf(stderr, "Ray tracing completed in %g ms\n", clock.time());
 }
 
 void CPURayTracer::work()
@@ -113,33 +142,54 @@ void CPURayTracer::work()
         // Last one?
         if (_status.workDone.load() == _status.totalWork)
         {
-            log::info("Ray tracing completed in {} ms", clock.time());
+            _status.finished = clock::now();
+            std::chrono::duration<double,std::milli>
+                duration = _status.finished - _status.started;
+            log::info("Ray tracing completed in {} ms", duration.count());
             // Clear
             _frame = nullptr;
             _scene = nullptr;
-            _status.running.clear();
-            _status.running.notify_all();
+            // _status.running.clear();
+            // _status.running.notify_all();
         }
     }
+}
+
+void CPURayTracer::stop()
+{
+    {
+        std::lock_guard lck (_workMutex);
+        _work.clear();
+    }
+    // _status.running.wait(true);
 }
 
 void CPURayTracer::renderTile(
     uint16_t X0, uint16_t X1,
     uint16_t Y0, uint16_t Y1) const
 {
+    const auto n = _options.nSamples;
+    const auto n_inv = 1.0f / n;
     for (int j = Y0; j < Y1; j++)
     {
         for (int i = X0; i < X1; i++)
         {
-            auto d = pixelRayDirection(i, j);
-            Ray pixelRay
+            vec3 c {0};
+            for (int s = 0; s < n; s++)
             {
-                .origin = _cameraPosition,
-                .direction = d,
-                .tMin = 0.001f,
-                .tMax = numeric_limits<float>::infinity()
-            };
-            vec3 c = trace(pixelRay, vec3(1), _options.recursionDepth);
+                float s0 = s * n_inv;
+                float s1 = vdc(i);
+                auto d = pixelRayDirection(i + 2*_half_dx*s0, j + 2*_half_dy*s1);
+                Ray pixelRay
+                {
+                    .origin = _cameraPosition,
+                    .direction = d,
+                    .tMin = 0.001f,
+                    .tMax = numeric_limits<float>::infinity()
+                };
+                c += trace(pixelRay, vec3(1), _options.recursionDepth);
+            }
+            c *= n_inv;
             c.x = std::clamp(c.x, 0.0f, 1.0f);
             c.y = std::clamp(c.y, 0.0f, 1.0f);
             c.z = std::clamp(c.z, 0.0f, 1.0f);
@@ -304,23 +354,76 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     if (depth <= 0)
         return color;
 
+    constexpr bool GGX = false;
+
+    // Select random microfacet normal
+    vec3 M;
+    if constexpr (GGX)
+    {
+        vec3 t_s = N.cross(V).versor(); // tangent perpendicular
+        vec3 t_p = N.cross(t_s).versor(); // tangent parallel
+        vec2 c = randomMicrofacet(squared(m.roughness));
+        M = sinf(c.x)*cosf(c.y)*t_s + sinf(c.x)*sinf(c.y)*t_p + cosf(c.x)*N;
+        M.normalize();
+    }
+    else
+    {
+        M = (N + m.roughness * randomSphereVec3()).versor();
+    }
+    float dotMV = M.dot(V);
+
     // Reflection
     constexpr float minRadiance = 0x1p-8f;
-    float k = squared(m.roughness + 1) * 0.125;
-    vec3 reflectance = (1 - k) * schlick(m.specular, dotNV);
-    vec3 a = attenuation * reflectance;
-    if (a.max() > minRadiance)
+    vec3 reflectance = schlick(m.specular, dotMV);
     {
-        // I = -V
-        vec3 R = (-V) + 2 * dotNV * N;
-        Ray r
+        vec3 R = reflect(-V, M, -dotMV);
+        float dotMN = M.dot(N);
+        float dotNR = N.dot(R);
+
+        if (dotNR < 1e-14f)
+            return color;
+
+        float g = G(dotNR, dotNV, m.roughness) * dotMV / (dotNV * dotMN);
+        // if (g > 1.0f)
+        // {
+        //     log::error("g > 1; g = {}; M·V = {}, M·N = {}",
+        //         g, dotMV, dotNV, dotMN);
+        //     log::error("G(N·R = {}, N·V = {}, roughness = {}) = {}",
+        //         dotNR, dotNV, m.roughness, G(dotNR, dotNV, m.roughness));
+        //     std::abort();
+        // }
+        vec3 brdf = mix(
+            BRDF_diffuse(m),
+            vec3(reflectance * g),
+            m.metalness
+        );
+        vec3 a = attenuation * brdf;
+        if (a.max() > minRadiance)
         {
-            .origin = P + _options.eps * R,
-            .direction = R,
-            .tMax = numeric_limits<float>::infinity()
-        };
-        // color += m.opacity * trace(r, attenuation, depth - 1);
-        color += trace(r, a, depth - 1);
+            Ray r
+            {
+                .origin = P + _options.eps * M,
+                .direction = R,
+                .tMax = numeric_limits<float>::infinity()
+            };
+            color += trace(r, a, depth - 1);
+            // vec3 R = reflect(-V, M, -dotMV);
+            // Ray r
+            // {
+            //     .origin = P + _options.eps * M,
+            //     .direction = R,
+            //     .tMax = numeric_limits<float>::infinity()
+            // };
+            // // float dotMN = M.dot(N);
+            // // float g = G(N.dot(R), dotNV, m.roughness) * dotMV
+            // //     / (dotNV * dotMN);
+            // vec3 I = trace(r, attenuation, depth - 1);
+            // color += I * mix(
+            //     BRDF_diffuse(m),
+            //     vec3(reflectance * dotMV),
+            //     m.metalness
+            // );
+        }
     }
 
     // Refraction
