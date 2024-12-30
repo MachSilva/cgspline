@@ -5,19 +5,23 @@
 #include <memory_resource>
 
 #ifndef NDEBUG
-#define CUDA_CHECK(e) \
-    ::cg::rt::cudaErrorCheck(cudaGetLastError(),__FILE__,__LINE__), \
-    ::cg::rt::cudaErrorCheck((e),__FILE__,__LINE__)
+#define _cudaErrorCheckSource __FILE__
 #else
-#define CUDA_CHECK(e) \
-    ::cg::rt::cudaErrorCheck(cudaGetLastError(),__func__,__LINE__), \
-    ::cg::rt::cudaErrorCheck((e),__func__,__LINE__)
+#define _cudaErrorCheckSource __func__
 #endif
+
+#define CUDA_CHECK(e) \
+    ::cg::rt::cudaErrorCheck(cudaGetLastError(),_cudaErrorCheckSource,__LINE__), \
+    ::cg::rt::cudaErrorCheck((e),_cudaErrorCheckSource,__LINE__)
+#define CUDA_CHECK_NOEXCEPT(e) \
+    ::cg::rt::cudaErrorCheckNoExcept(cudaGetLastError(),_cudaErrorCheckSource,__LINE__), \
+    ::cg::rt::cudaErrorCheckNoExcept((e),_cudaErrorCheckSource,__LINE__)
 
 namespace cg::rt
 {
 
 void cudaErrorCheck(cudaError_t e, const char* source, int line);
+void cudaErrorCheckNoExcept(cudaError_t e, const char* source, int line) noexcept;
 
 class ManagedResource : public std::pmr::memory_resource
 {

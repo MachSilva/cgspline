@@ -7,6 +7,7 @@
 #include <math_constants.h>
 #include <cuda_gl_interop.h>
 #include "PBR.h"
+#include "../Log.h"
 
 namespace cg::rt
 {
@@ -64,16 +65,29 @@ RayTracer::RayTracer()
 {
     CUDA_CHECK(cudaMalloc(&_ctx, sizeof (Context)));
     CUDA_CHECK(cudaFuncSetCacheConfig(&rt::render, cudaFuncCachePreferL1));
+    CUDA_CHECK(cudaEventCreate(&started));
+    CUDA_CHECK(cudaEventCreate(&finished));
 }
 
 RayTracer::~RayTracer()
 {
-    cudaFree(_ctx);
+    CUDA_CHECK_NOEXCEPT(cudaEventDestroy(finished));
+    CUDA_CHECK_NOEXCEPT(cudaEventDestroy(started));
+    CUDA_CHECK_NOEXCEPT(cudaFree(_ctx));
 }
 
 void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     cudaStream_t stream)
 {
+    auto q = cudaEventQuery(this->finished);
+    if (q == cudaErrorNotReady)
+    {
+        log::warn("CUDA ray tracer not ready: wait the previous work to finish"
+            " or create a new instance");
+        return;
+    }
+    CUDA_CHECK(q);
+    CUDA_CHECK(cudaEventRecord(this->started, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(frame->data(), frame->size_bytes(),
         _options.device, stream));
 
@@ -128,6 +142,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     };
 
     rt::render<<<blocksPerGrid, threadsPerBlock, 0, stream>>>(_ctx);
+    CUDA_CHECK(cudaEventRecord(this->finished, stream));
 }
 
 __global__ //__launch_bounds__(64)

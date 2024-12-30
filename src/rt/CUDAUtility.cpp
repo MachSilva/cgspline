@@ -21,6 +21,21 @@ void cudaErrorCheck(cudaError_t e, const char* source, int line)
     }
 }
 
+void cudaErrorCheckNoExcept(cudaError_t e, const char* source, int line) noexcept
+{
+    if (e != cudaSuccess)
+    {
+        log::error(
+            "CUDA error during noexcept restriction: '{}' ({}) at {}:{}: {}",
+            cudaGetErrorName(e),
+            (int) e,
+            source,
+            line,
+            cudaGetErrorString(e)
+        );
+    }
+}
+
 ManagedResource* ManagedResource::instance()
 {
     static ManagedResource instance {};

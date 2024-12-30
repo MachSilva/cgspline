@@ -7,7 +7,16 @@ namespace cg
 
 void MainWindow::gui()
 {
-    auto dockId = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(),
+    if (auto fn = _state.backgroundTaskStatusWindow)
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(200ms);
+        (this->*fn)();
+        return;
+    }
+
+    auto dockId = ImGui::DockSpaceOverViewport(0U,
+        ImGui::GetMainViewport(),
         ImGuiDockNodeFlags_PassthruCentralNode
         | ImGuiDockNodeFlags_NoDockingInCentralNode);
     auto node = ImGui::DockBuilderGetCentralNode(dockId);
@@ -37,6 +46,137 @@ void MainWindow::gui()
     controlWindow();
     workbenchWindow();
     ImGui::ShowMetricsWindow();
+}
+
+void MainWindow::cpuRayTracerStatusWindow()
+{
+    using namespace std::chrono;
+
+    auto center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f,0.5f));
+    ImGui::Begin(c_CPURayTracerStatusTitle, nullptr, c_StatusWindowFlags);
+
+    auto options = &_cpuRayTracer->options();
+    auto s = options->nSamples;
+    auto m = options->tileSize;
+    m *= m;
+    auto status = _cpuRayTracer->status();
+    auto done = status->workDone.load();
+    auto total = status->totalWork;
+    int a = m * done;
+    int b = m * total;
+    ImGui::ProgressBar(float(done) / total, ImVec2(0,0));
+    ImGui::SameLine();
+
+    auto elapsed = duration_cast<milliseconds>
+        (steady_clock::now() - status->started).count();
+    ImGui::Text("%02lld:%02lld.%03lld",
+        elapsed / 60000,
+        elapsed / 1000,
+        elapsed % 1000
+    );
+
+    ImGui::Text("Ray traced %d of %d pixels", a, b);
+    ImGui::Text("Traced %d of %d rays", s*a, s*b);
+
+    if (ImGui::Button("Cancel"))
+    {
+        _cpuRayTracer->stop();
+    }
+    // when finished close window and store image
+    if (_cpuRayTracer->running() == 0)
+    {
+        whenCPURayTracerEnds();
+        _state.backgroundTaskStatusWindow = nullptr;
+    }
+    ImGui::End();
+}
+
+void MainWindow::cudaRayTracerStatusWindow()
+{
+    using namespace std::chrono;
+
+    auto center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f,0.5f));
+    ImGui::Begin(c_CUDARayTracerStatusTitle, nullptr, c_StatusWindowFlags);
+
+    ImGui::ProgressBar(-0.1);
+    ImGui::SameLine();
+
+    auto elapsed = duration_cast<milliseconds>
+        (steady_clock::now() - _lastRenderStarted).count();
+    ImGui::Text("%02lld:%02lld.%03lld",
+        elapsed / 60000,
+        elapsed / 1000,
+        elapsed % 1000
+    );
+
+    ImGui::BeginDisabled();
+    ImGui::Button("Cancel");
+    ImGui::EndDisabled();
+    // when finished close popup and store image
+    if (cudaEventQuery(_rayTracer->finished) == cudaSuccess)
+    {
+        whenCUDARayTracerEnds();
+        _state.backgroundTaskStatusWindow = nullptr;
+    }
+    ImGui::End();
+}
+
+void MainWindow::whenCPURayTracerEnds()
+{
+    _workbench2D["CPU ray traced image"] = _image;
+
+    auto w = _image->width();
+    auto h = _image->height();
+
+    GLint rowLength;
+    glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, _frame->stride());
+    glTextureSubImage2D(*_image, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+        _frame->data());
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
+}
+
+void MainWindow::whenCUDARayTracerEnds()
+{
+    float elapsed;
+    CUDA_CHECK(cudaEventElapsedTime(&elapsed, _rayTracer->started, _rayTracer->finished));
+    _workbench2D["CUDA ray traced image"] = _image;
+
+    _lastRenderInfo.clear();
+    std::format_to(std::back_inserter(_lastRenderInfo),
+        "CUDA ray tracing in {:.2} ms", elapsed
+    );
+
+    auto w = _image->width();
+    auto h = _image->height();
+
+    GLint rowLength;
+    glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, _frame->stride());
+    glTextureSubImage2D(*_image, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+        _frame->data());
+
+    auto heatMap = _rayTracer->options().heatMap;
+    if (!heatMap)
+        return;
+
+    // Get heat map
+    Ref<gl::Texture> tex = new gl::Texture(gl::Format::sRGB, w, h);
+    _workbench2D["Bezier Clipping Heat Map"] = tex;
+
+    // Convert counters to colors
+    for (auto i = 0U; i < heatMap->size(); i++)
+    {
+        auto& e = heatMap->data()[i];
+        e = packColor(Color(heatPallete(e)));
+    }
+
+    glTextureSubImage2D(*tex, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+        heatMap->data());
+
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
 }
 
 struct BlitFBCallbackData
@@ -264,7 +404,7 @@ void MainWindow::assetWindow()
         {
             if (ImGui::Begin("Texture", &view))
             {
-                auto id = reinterpret_cast<ImTextureID>((uintptr_t) selected->handle());
+                auto id = (ImTextureID)selected->handle();
                 auto max = ImGui::GetContentRegionMax();
                 auto min = ImGui::GetWindowContentRegionMin();
                 ImGui::Image(id, {max.x - min.x, max.y - min.y});
@@ -280,6 +420,9 @@ void MainWindow::controlWindow()
 {
     ImGui::Begin("Control Window");
 
+    auto& vp = _state.renderViewport;
+    ImGui::Text("Render viewport: %dx%d", vp.w, vp.h);
+
     if (_image != nullptr)
         ImGui::Text("Image of (%d, %d).", _image->width(), _image->height());
     else
@@ -290,6 +433,7 @@ void MainWindow::controlWindow()
         _viewMode = ViewMode::Renderer;
         _renderMethod = eCPU;
         renderScene();
+        _state.backgroundTaskStatusWindow = &MainWindow::cpuRayTracerStatusWindow;
     }
     ImGui::SameLine();
     if (ImGui::Button("Render (CUDA)"))
@@ -297,12 +441,17 @@ void MainWindow::controlWindow()
         _viewMode = ViewMode::Renderer;
         _renderMethod = eCUDA;
         renderScene();
+        _state.backgroundTaskStatusWindow = &MainWindow::cudaRayTracerStatusWindow;
     }
 
-    static const int maxT = std::thread::hardware_concurrency();
-    ImGui::SliderInt("CPU threads", &_cpuRTOptions.threads, 1, maxT);
+    ImGui::SeparatorText("CPU Options");
 
-    ImGui::Separator();
+    static const int maxT = std::thread::hardware_concurrency();
+    ImGui::SliderInt("Threads", &_cpuRTOptions.threads, 1, maxT);
+    ImGui::DragInt("Number of Samples", &_cpuRTOptions.nSamples, 1.0f, 1, 2048);
+    ImGui::DragInt("Recursion Depth", &_cpuRTOptions.recursionDepth, 1.0f, 1, 64);
+
+    ImGui::SeparatorText("Additional Info");
 
     ImGui::Text("Color Encoding: %s",
         _data.windowColorEncoding == GL_SRGB ? "sRGB" : "Linear");
@@ -321,7 +470,7 @@ void MainWindow::controlWindow()
     ImGui::Text("Window framebuffer: %dx%d",
         framebufferWidth, framebufferHeight);
 
-    ImGui::Separator();
+    ImGui::SeparatorText("Extra Options");
 
     static float depthValue = 0.99999f;
     ImGui::DragFloat("Environment Depth", &depthValue, 0.0001);

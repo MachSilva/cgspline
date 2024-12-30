@@ -215,6 +215,9 @@ void MainWindow::initializeScene()
 
 void MainWindow::render()
 {
+    if (_state.backgroundTaskStatusWindow)
+        return;
+
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0U);
     auto e = editor();
     auto& v = _state.renderViewport;
@@ -516,9 +519,9 @@ void MainWindow::renderScene()
     constexpr int warpSize = 32;
     _frame = new rt::Frame(v.w, v.h, warpSize, rt::ManagedResource::instance());
 
-    GLint rowLength;
-    glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, _frame->stride());
+    // GLint rowLength;
+    // glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+    // glPixelStorei(GL_UNPACK_ROW_LENGTH, _frame->stride());
 
     switch (_renderMethod)
     {
@@ -528,23 +531,24 @@ void MainWindow::renderScene()
         CUDA_CHECK(cudaMemsetAsync(heatMap->data(), 0, heatMap->size_bytes()));
 
         {
-            rt::ScopeClock _c {[](std::chrono::microseconds duration)
-            {
-                log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
-            }};
+            // rt::ScopeClock _c {[](std::chrono::microseconds duration)
+            // {
+            //     log::info("CUDA ray tracing in {} ms", duration.count() / 1000.0f);
+            // }};
 
             // Launch render kernel
+            _lastRenderStarted = std::chrono::steady_clock::now();
             _rayTracer = new rt::RayTracer({
                 .device = 0,
                 .heatMap = heatMap.get(),
             });
             _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
 
-            CUDA_CHECK(cudaDeviceSynchronize());
-            _workbench2D["CUDA ray traced image"] = _image;
+            // CUDA_CHECK(cudaDeviceSynchronize());
+            // _workbench2D["CUDA ray traced image"] = _image;
         }
 
-        // Get heat map
+        /* // Get heat map
         Ref<gl::Texture> tex = new gl::Texture(gl::Format::sRGB, v.w, v.h);
         _workbench2D["Bezier Clipping Heat Map"] = tex;
 
@@ -556,14 +560,15 @@ void MainWindow::renderScene()
         }
 
         glTextureSubImage2D(*tex, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
-            heatMap->data());
+            heatMap->data()); */
     } break;
     case RenderMethod::eCPU:
     {
+        _lastRenderStarted = std::chrono::steady_clock::now();
         _cpuRayTracer = new rt::CPURayTracer(_cpuRTOptions);
         _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
 
-        int m = _cpuRayTracer->options().tileSize;
+        /* int m = _cpuRayTracer->options().tileSize;
         m *= m;
         auto status = _cpuRayTracer->status();
         auto total = status->totalWork;
@@ -574,19 +579,19 @@ void MainWindow::renderScene()
             float p = (100.0f * done) / total;
             int a = m * done;
             int b = m * total;
-            printf("\rRay traced %d of %d pixels (%.2f%%)", a, b, p);
+            fprintf(stderr, "\rRay traced %d of %d pixels (%.2f%%)\t", a, b, p);
             std::this_thread::sleep_for(67ms);
         }
-        _workbench2D["Ray traced image"] = _image;
+        _workbench2D["Ray traced image"] = _image; */
     } break;
     default:
         break;
     }
 
-    glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
-        _frame->data());
+    // glTextureSubImage2D(*_image, 0, 0, 0, v.w, v.h, GL_RGBA, GL_UNSIGNED_BYTE,
+    //     _frame->data());
 
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
+    // glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
 
 #if SPL_BC_STATS
     spline::stats::g_BezierClippingEnable = true;
@@ -742,35 +747,6 @@ graph::SceneObject* MainWindow::pickObject(graph::SceneObject *obj,
 
     return nearest;
 }
-
-// void MainWindow::readScene(std::filesystem::path scenefile)
-// {
-//     util::SceneReaderExt reader {};
-
-//     reader.setInput(scenefile.string());
-//     try
-//     {
-//         reader.execute();
-//         if (reader.scene() == nullptr)
-//             throw std::runtime_error("Scene is null");
-//         setScene(*reader.scene());
-
-//         // auto& materials = Assets::materials();
-//         // for (auto& [name, m] : reader.materials)
-//         //     materials[name] = m;
-
-//         _sceneEnvironment = reader.environment;
-//         _sceneMaterials = std::move(reader.materials);
-//         _scenePBRMaterials = std::move(reader.pbrMaterials);
-//         _sceneSurfaces = std::move(reader.surfaces);
-//         _sceneTextures = std::move(reader.textures);
-//     }
-//     catch (const std::exception& e)
-//     {
-//         std::cerr << std::format("Failed to load scene '{}'. Reason:\n{}\n",
-//             scenefile.filename().string().c_str(), e.what());
-//     }
-// }
 
 void MainWindow::reloadScene()
 {

@@ -33,6 +33,7 @@ public:
 
     const auto& options() const { return _options; }
 
+    cudaEvent_t started, finished;
 private:
     Options _options {};
     Context* _ctx {nullptr};
