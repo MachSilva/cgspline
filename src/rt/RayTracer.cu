@@ -6,6 +6,7 @@
 #include <utility>
 #include <math_constants.h>
 #include <cuda_gl_interop.h>
+#include <curand_kernel.h>
 #include "PBR.h"
 #include "../Log.h"
 
@@ -14,12 +15,18 @@ namespace cg::rt
 
 __managed__ Frame* g_BezierClippingHeatMap;
 
+using curand_state_type = curandStatePhilox4_32_10_t;
+constexpr int c_RandomGridSize = 256;
+constexpr bool c_LoadRandomState = true;
+
 struct RayPayload
 {
+    curand_state_type random;
     Ray ray;
     vec3 color;
     vec3 attenuation;
     int depth;
+    // float dxdy;
 };
 
 struct RayTracer::Context
@@ -33,6 +40,7 @@ struct RayTracer::Context
     vec2 topLeftCorner;
     float half_dx;
     float half_dy;
+    curand_state_type* pRandomStates;
 
     __device__ bool anyHit(RayPayload&) const;
     __device__ bool closestHit(const Intersection&, RayPayload&, uint32_t object) const;
@@ -42,7 +50,7 @@ struct RayTracer::Context
     __device__ bool trace(RayPayload&) const;
 
     __device__
-    vec3 pixelRayDirection(int x, int y) const
+    vec3 pixelRayDirection(float x, float y) const
     {
         vec4 P
         {
@@ -60,6 +68,7 @@ using Context = RayTracer::Context;
 using Key = Scene::Key;
 
 __global__ void render(Context*);
+__global__ void random_state_init(curand_state_type*);
 
 RayTracer::RayTracer()
 {
@@ -67,12 +76,24 @@ RayTracer::RayTracer()
     CUDA_CHECK(cudaFuncSetCacheConfig(&rt::render, cudaFuncCachePreferL1));
     CUDA_CHECK(cudaEventCreate(&started));
     CUDA_CHECK(cudaEventCreate(&finished));
+    CUDA_CHECK(cudaMalloc(&_pRandomStates,
+        squared(c_RandomGridSize) * sizeof (curand_state_type)));
+
+    constexpr dim3 blockDim (32, 32);
+    constexpr dim3 gridDim
+    {
+        c_RandomGridSize / blockDim.x,
+        c_RandomGridSize / blockDim.y
+    };
+    random_state_init<<<gridDim,blockDim>>>((curand_state_type*)_pRandomStates);
+    CUDA_CHECK(cudaStreamSynchronize(0));
 }
 
 RayTracer::~RayTracer()
 {
     CUDA_CHECK_NOEXCEPT(cudaEventDestroy(finished));
     CUDA_CHECK_NOEXCEPT(cudaEventDestroy(started));
+    CUDA_CHECK_NOEXCEPT(cudaFree(_pRandomStates));
     CUDA_CHECK_NOEXCEPT(cudaFree(_ctx));
 }
 
@@ -89,11 +110,11 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     CUDA_CHECK(q);
     CUDA_CHECK(cudaEventRecord(this->started, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(frame->data(), frame->size_bytes(),
-        _options.device, stream));
+        options.device, stream));
 
     auto& objs = scene->objects;
     std::apply(
-        [device=_options.device,n=objs.size(),stream]
+        [device=options.device,n=objs.size(),stream]
         (auto*... ptrs) -> void
         {
             ((CUDA_CHECK(cudaMemPrefetchAsync(ptrs,
@@ -105,11 +126,11 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     uint32_t w = frame->width();
     uint32_t h = frame->height();
 
-    g_BezierClippingHeatMap = _options.heatMap;
+    g_BezierClippingHeatMap = options.heatMap;
 
     {
         Context ctx;
-        ctx.options = _options;
+        ctx.options = options;
         ctx.frame = *frame;
         ctx.scene = *scene;
 
@@ -125,11 +146,14 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
         ctx.topLeftCorner.x = -ctx.half_dx * (w - 1);
         ctx.topLeftCorner.y = halfHeight - ctx.half_dy;
 
-        if (_options.flipYAxis)
+        if (options.flipYAxis)
         {
             ctx.topLeftCorner.y = -ctx.topLeftCorner.y;
             ctx.half_dy = -ctx.half_dy;
         }
+
+        ctx.pRandomStates = (curand_state_type*)_pRandomStates;
+
         CUDA_CHECK(cudaMemcpyAsync(_ctx, &ctx, sizeof (ctx),
             cudaMemcpyHostToDevice, stream));
     }
@@ -145,29 +169,71 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     CUDA_CHECK(cudaEventRecord(this->finished, stream));
 }
 
+__global__
+void random_state_init(curand_state_type* p)
+{
+    constexpr auto n = c_RandomGridSize;
+    auto i = blockIdx.x * blockDim.x + threadIdx.x;
+    auto j = blockIdx.y * blockDim.y + threadIdx.y;
+    if (i >= n || j >= n)
+        return;
+    auto k = i + j*n;
+    curand_init(42, k, 0, p+k);
+}
+
 __global__ //__launch_bounds__(64)
 void render(Context* ctx)
 {
-    auto i = blockIdx.x * blockDim.x + threadIdx.x;
-    auto j = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
     if (i >= ctx->frame->width() || j >= ctx->frame->height())
         return;
 
-    auto d = ctx->pixelRayDirection(i, j);
-    RayPayload payload
+    RayPayload payload;
+    payload.color = vec3(0);
+    // {
+    //     .ray = {
+    //         .origin = ctx->cameraPosition,
+    //         // .direction = d,
+    //         .max = numeric_limits<float>::infinity()
+    //     },
+    //     .color = vec3(0),
+    //     // .attenuation = vec3(1),
+    //     // .depth = ctx->options.recursionDepth
+    // };
+
+    if constexpr (c_LoadRandomState)
+    { // Load random state
+        int a = i % c_RandomGridSize;
+        int b = j % c_RandomGridSize;
+        payload.random = ctx->pRandomStates[a + b*c_RandomGridSize];
+    }
+    else
     {
-        .ray = {
-            .origin = ctx->cameraPosition,
-            .direction = d,
-            .tMin = 0.001f,
-            .tMax = numeric_limits<float>::infinity()
-        },
-        .color = vec3(0),
-        .attenuation = vec3(1),
-        .depth = ctx->options.recursionDepth
-    };
-    while (ctx->trace(payload));
-    vec3 c = payload.color;
+        curand_init(42, i + (j << 10), 0, &payload.random);
+    }
+
+    int n = ctx->options.samples;
+    float n_inv = 1.0f / n;
+    for (int s = 0; s < n; s++)
+    {
+        float s0 = s * n_inv;
+        float s1 = vdc(s);
+        payload = {
+            .random = payload.random,
+            .ray = {
+                .origin = ctx->cameraPosition,
+                .direction = ctx->pixelRayDirection(i + s0, j + s1),
+                .max = numeric_limits<float>::infinity()
+            },
+            .color = payload.color,
+            .attenuation = vec3(1),
+            .depth = ctx->options.recursionDepth,
+        };
+
+        while (ctx->trace(payload));
+    }
+    vec3 c = payload.color * n_inv;
     c.x = __saturatef(c.x);
     c.y = __saturatef(c.y);
     c.z = __saturatef(c.z);
@@ -180,7 +246,7 @@ bool Context::trace(RayPayload& payload) const
     Intersection hit
     {
         .object = nullptr,
-        .t = payload.ray.tMax,
+        .t = payload.ray.max,
     };
     int nearestObject = intersect(hit, payload.ray);
 
@@ -209,11 +275,10 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
             .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
-        localRay.tMin = ray.tMin * d;
-        localRay.tMax = ray.tMax * d;
+        localRay.max = ray.max * d;
         d = 1 / d;
         localRay.direction *= d;
-        localHit.t = localRay.tMax;
+        localHit.t = localRay.max;
 
         bool b = false;
         switch (objs.get<Key::ePrimitiveType>(i))
@@ -261,8 +326,7 @@ bool Context::intersect(const Ray& ray0) const
             .direction = mat3(M_1).transform(ray.direction),
         };
         auto d = localRay.direction.length();
-        localRay.tMin = ray.tMin * d;
-        localRay.tMax = ray.tMax * d;
+        localRay.max = ray.max * d;
         d = 1 / d;
         localRay.direction *= d;
 
@@ -343,12 +407,22 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
             continue;
 
         // Shadow
-        Ray r1 { .origin = P + this->options.eps * L, .direction = L, .tMax = d };
+        Ray r1 { .origin = P + this->options.eps * L, .direction = L, .max = d };
         if (intersect(r1))
             continue;
 
+        // I = lightColor(d, lights[i]);
+        // color += I * BRDF(L, V, N, dotNV, dotNL, m);
+        vec3 H = (L + V).versor();
+        float dotHN = H.dot(N);
+        float dotHL = H.dot(L);
+
         I = lightColor(d, lights[i]);
-        color += I * BRDF(L, V, N, dotNV, dotNL, m);
+        color += I * mix(
+            BRDF_diffuse(m),
+            BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular),
+            m.metalness
+        );
     }
 
     payload.color += color * std::numbers::pi_v<float> * payload.attenuation;
@@ -356,26 +430,54 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     if (payload.depth <= 0)
         return false;
 
+    // Select random microfacet normal
+    vec3 M;
+    {
+        vec2 c = microfacet(
+            squared(m.roughness),
+            curand_uniform(&payload.random),
+            curand_uniform(&payload.random)
+        );
+        vec3 t_s = N.cross(V).versor(); // tangent perpendicular
+        vec3 t_p = N.cross(t_s).versor(); // tangent parallel
+        M = sinf(c.x)*cosf(c.y)*t_s + sinf(c.x)*sinf(c.y)*t_p + cosf(c.x)*N;
+
+        // quat q (vec3(0,0,1).cross(N), 1 + N.z);
+        // q.normalize();
+        // M.x = sinf(c.x)*cosf(c.y);
+        // M.y = sinf(c.x)*sinf(c.y);
+        // M.z = cosf(c.x);
+        // M = q.rotate(M);
+        M.normalize();
+    }
+    float dotMV = M.dot(V);
+
     // Reflection
-    constexpr float minRadiance = 0x1p-8f;
-    float r = m.roughness;
-    vec3 reflectance = (1 - r*r) * schlick(m.specular, dotNV);
-    vec3 a = payload.attenuation * reflectance;
-    if (a.max() <= minRadiance)
+    vec3 reflectance = schlick(m.specular, dotMV);
+    vec3 R = reflect(-V, M, -dotMV);
+    float dotMN = M.dot(N);
+    float dotNR = N.dot(R);
+    if (dotNR < 1e-14f)
         return false;
 
-    // I = -V
-    vec3 R = (-V) + 2 * dotNV * N;
+    float g = G(dotNR, dotNV, m.roughness) * dotMV / (dotNV * dotMN);
+    vec3 brdf = mix(
+        BRDF_diffuse(m),
+        vec3(reflectance * g),
+        m.metalness
+    );
+    vec3 a = payload.attenuation * brdf;
+    if (a.max() <= c_MinRadiance)
+        return false;
+
     payload.ray =
     {
-        .origin = P + this->options.eps * R,
+        .origin = P + options.eps * R,
         .direction = R,
-        .tMax = numeric_limits<float>::infinity()
+        .max = numeric_limits<float>::infinity()
     };
     payload.attenuation = a;
     payload.depth = payload.depth - 1;
-    // color += m.opacity * trace(r, attenuation, depth - 1);
-    // color += trace(r, a, depth - 1);
     return true;
 }
 

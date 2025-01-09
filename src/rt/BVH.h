@@ -303,10 +303,10 @@ bool BVH::hashIntersect(const Ray& ray,
             float L0, L1;
             float R0, R1;
             bool iL = _node_intersect(L0, L1, node->leftBox, ray.origin, D_1)
-                && L0 < ray.tMax;
+                && L0 < ray.max;
             bool iR = node->right != BVH::EMPTY
                 && _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
-                && R0 < ray.tMax;
+                && R0 < ray.max;
 
             if (iL || iR)
             {

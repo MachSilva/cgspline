@@ -113,8 +113,8 @@ HOST DEVICE bool intersect(const Mesh& m, Intersection& hit0, const Ray& ray0)
     auto fn = [&m](Intersection& hit, const Ray& ray, uint32_t index)
     {
         cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = fmin(ray.tMax, hit.t);
+        anotherRay.tMin = 1e-7f;
+        anotherRay.tMax = fmin(ray.max, hit.t);
         const uint32_t* v = m.indices + 3*index;
         const auto& p0 = m.vertices[v[0]];
         const auto& p1 = m.vertices[v[1]];
@@ -139,8 +139,8 @@ HOST DEVICE bool intersect(const Mesh& m, const Ray& ray0)
     auto fn = [&m](const Ray& ray, uint32_t index)
     {
         cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = ray.tMax;
+        anotherRay.tMin = 1e-7f;
+        anotherRay.tMax = ray.max;
         const uint32_t* v = m.indices + 3*index;
         const auto& p0 = m.vertices[v[0]];
         const auto& p1 = m.vertices[v[1]];
@@ -227,8 +227,8 @@ HOST DEVICE bool intersect(const BezierSurface& s, Intersection& hit0, const Ray
         anotherHit.distance = hit.t;
         anotherHit.p = hit.coordinates;
         cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = ray.tMax;
+        anotherRay.tMin = 1;
+        anotherRay.tMax = ray.max;
         const uint32_t* patch = s.indices + 16*index;
         if (spline::doBezierClipping(anotherHit, anotherRay, s.vertices, patch))
         {
@@ -247,10 +247,10 @@ HOST DEVICE bool intersect(const BezierSurface& s, const Ray& ray0)
 {
     auto fn = [&s](const Ray& ray, uint32_t index)
     {
-        cg::Intersection anotherHit { .distance = ray.tMax };
+        cg::Intersection anotherHit { .distance = ray.max };
         cg::Ray3f anotherRay { ray.origin, ray.direction };
-        anotherRay.tMin = ray.tMin;
-        anotherRay.tMax = ray.tMax;
+        anotherRay.tMin = 1;
+        anotherRay.tMax = ray.max;
         const uint32_t* patch = s.indices + 16*index;
         return spline::doBezierClipping(
             anotherHit, anotherRay, s.vertices, patch);

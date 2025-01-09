@@ -146,6 +146,7 @@ protected:
 
     std::chrono::steady_clock::time_point _lastRenderStarted;
     std::string _lastRenderInfo;
+    rt::ManagedPtr<rt::Frame> _heatMap;
     Ref<gl::Texture> _image;
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;

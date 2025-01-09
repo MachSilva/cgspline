@@ -55,6 +55,8 @@ void debugCallback(GLenum source,
 
 void MainWindow::beginInitialize()
 {
+    maximizeWindow();
+
     const auto vendor   = glGetString(GL_VENDOR);
     const auto renderer = glGetString(GL_RENDERER);
     GLint version[2];
@@ -153,6 +155,9 @@ void MainWindow::beginInitialize()
 
     // _sceneMaterials = Assets::materials();
     // _sceneMeshes = Assets::meshes();
+
+    _cpuRayTracer = new rt::CPURayTracer();
+    _rayTracer = new rt::RayTracer();
 }
 
 void MainWindow::initializeScene()
@@ -527,9 +532,10 @@ void MainWindow::renderScene()
     {
     case RenderMethod::eCUDA:
     {
-        auto heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, warpSize, rt::ManagedResource::instance());
-        CUDA_CHECK(cudaMemsetAsync(heatMap->data(), 0, heatMap->size_bytes()));
+        _heatMap = rt::makeManaged<rt::Frame>(v.w, v.h, warpSize, rt::ManagedResource::instance());
+        CUDA_CHECK(cudaMemsetAsync(_heatMap->data(), 0, _heatMap->size_bytes()));
 
+        if (_rayTracer->running() == false)
         {
             // rt::ScopeClock _c {[](std::chrono::microseconds duration)
             // {
@@ -537,11 +543,12 @@ void MainWindow::renderScene()
             // }};
 
             // Launch render kernel
+            auto op = &_rayTracer->options;
+            op->samples = _cpuRTOptions.nSamples;
+            op->recursionDepth = _cpuRTOptions.recursionDepth;
+            op->device = 0;
+            op->heatMap = _heatMap.get();
             _lastRenderStarted = std::chrono::steady_clock::now();
-            _rayTracer = new rt::RayTracer({
-                .device = 0,
-                .heatMap = heatMap.get(),
-            });
             _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
 
             // CUDA_CHECK(cudaDeviceSynchronize());
@@ -564,8 +571,11 @@ void MainWindow::renderScene()
     } break;
     case RenderMethod::eCPU:
     {
+        if (_cpuRayTracer->running())
+            break;
+
         _lastRenderStarted = std::chrono::steady_clock::now();
-        _cpuRayTracer = new rt::CPURayTracer(_cpuRTOptions);
+        _cpuRayTracer->options = _cpuRTOptions;
         _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
 
         /* int m = _cpuRayTracer->options().tileSize;

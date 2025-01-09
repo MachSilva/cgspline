@@ -19,10 +19,11 @@ struct Ray
     vec3 direction;
     // vec3 up;
     // vec3 left;
-    float tMin;
-    float tMax;
-    float ior = 1.0f; //< medium index of refraction
+    float max; // max range
+    // float ior = 1.0f; //< medium index of refraction
 };
+
+// constexpr auto ____s = sizeof (Ray);
 
 struct Intersection
 {

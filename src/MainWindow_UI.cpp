@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <imgui_internal.h>
+#include "Log.h"
 
 namespace cg
 {
@@ -56,7 +57,7 @@ void MainWindow::cpuRayTracerStatusWindow()
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f,0.5f));
     ImGui::Begin(c_CPURayTracerStatusTitle, nullptr, c_StatusWindowFlags);
 
-    auto options = &_cpuRayTracer->options();
+    auto options = &_cpuRayTracer->options;
     auto s = options->nSamples;
     auto m = options->tileSize;
     m *= m;
@@ -100,7 +101,7 @@ void MainWindow::cudaRayTracerStatusWindow()
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f,0.5f));
     ImGui::Begin(c_CUDARayTracerStatusTitle, nullptr, c_StatusWindowFlags);
 
-    ImGui::ProgressBar(-0.1);
+    ImGui::ProgressBar(-0.1, ImVec2(0,0));
     ImGui::SameLine();
 
     auto elapsed = duration_cast<milliseconds>
@@ -146,8 +147,10 @@ void MainWindow::whenCUDARayTracerEnds()
 
     _lastRenderInfo.clear();
     std::format_to(std::back_inserter(_lastRenderInfo),
-        "CUDA ray tracing in {:.2} ms", elapsed
+        "CUDA ray tracing in {:.2f} ms", elapsed
     );
+
+    log::info("{}", _lastRenderInfo);
 
     auto w = _image->width();
     auto h = _image->height();
@@ -158,7 +161,7 @@ void MainWindow::whenCUDARayTracerEnds()
     glTextureSubImage2D(*_image, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
         _frame->data());
 
-    auto heatMap = _rayTracer->options().heatMap;
+    auto heatMap = _rayTracer->options.heatMap;
     if (!heatMap)
         return;
 

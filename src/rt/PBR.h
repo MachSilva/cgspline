@@ -156,4 +156,23 @@ constexpr float vdc(uint32_t i) noexcept
     return 0x1p-32f * (float)i; // = 2^-32 * i = ldexpf((float)i, -32)
 }
 
+/**
+ * @brief Microfacet normal in polar coordinates from a random unit square.
+ * 
+ * @param alpha squared roughness parameter
+ * @param x     random unit coordinate [0,1]
+ * @param y     random unit coordinate [0,1]
+ * @return vec2 polar coordinates in \f$ [0,\pi/2] \cross [0,2\pi] \f$
+ */
+__host__ __device__
+static inline vec2 microfacet(float alpha, float x, float y) noexcept
+{
+    // Microfacet normal distribution
+    return
+    {
+        atan2f(alpha * sqrtf(x), sqrtf(1 - x)),
+        2 * std::numbers::pi_v<float> * y
+    };
+}
+
 } // namespace cg::rt

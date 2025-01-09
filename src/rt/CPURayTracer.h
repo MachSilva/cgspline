@@ -16,6 +16,9 @@ namespace cg::rt
 class CPURayTracer : public SharedObject
 {
 public:
+    static constexpr bool c_UseGGX = true;
+    static constexpr float c_MinRadiance = 0x1p-8f;
+
     struct Options
     {
         float       eps = 1e-4f;
@@ -39,13 +42,10 @@ public:
     };
 
     CPURayTracer() = default;
-    CPURayTracer(const Options& op) { setOptions(op); }
+    CPURayTracer(Options&& op) : options{std::move(op)} {}
 
     void render(Frame* frame, const Camera* camera, const Scene* scene);
     void stop();
-
-    const auto& options() const { return _options; }
-    void setOptions(const Options& op);
 
     const auto status() const { return &_status; }
 
@@ -58,6 +58,10 @@ public:
                 n++;
         return n;
     }
+
+    // Ray tracer options.
+    // Always check if running() == false before writing to it.
+    Options options {};
 
 private:
     using Key = Scene::Key;
@@ -105,7 +109,6 @@ private:
     std::deque<Tile> _work;
     std::mutex _workMutex;
 
-    Options _options {};
     Frame* _frame = nullptr;
     const Scene* _scene = nullptr;
     uint16_t _countX;
@@ -120,12 +123,5 @@ private:
     vec3 _cameraPosition;
     Camera::ProjectionType _cameraProjection;
 };
-
-inline void CPURayTracer::setOptions(const Options& op)
-{
-    _options = op;
-    _options.threads = std::clamp<uint16_t>(_options.threads, 1, 0x1000);
-    _options.tileSize = std::max<uint16_t>(_options.tileSize, 8);
-}
 
 } // namespace cg::rt

@@ -9,7 +9,6 @@ namespace cg::rt
 
 enum struct PrimitiveType : uint8_t
 {
-    eNone = 0,
     eSphere,
     eMesh,
     eBezierSurface
