@@ -9,8 +9,6 @@
 #include "PerfectHashFunction.h"
 #include "RTNamespace.h"
 
-#define SPL_BVH_INDEX_SENTINEL
-
 namespace cg::rt
 {
 
@@ -19,7 +17,7 @@ struct BVH
     static constexpr auto EMPTY = uint32_t(-1);
     static constexpr uint32_t ROOT_KEY = 1;
 
-    struct __align__(8) Node
+    struct __align__(16) Node
     {
         Bounds3f leftBox;
         Bounds3f rightBox;
@@ -27,17 +25,11 @@ struct BVH
         union
         {
             uint32_t right; // Node offset at the array (NOT the key)
-            struct
-            {
-                uint32_t first;
-#ifndef SPL_BVH_INDEX_SENTINEL
-                uint32_t count;
-#endif
-            };
+            uint32_t first;
         };
         // Uncle must exist for all non-leaf non-root nodes
         // Node offset at the array (NOT the key)
-        uint32_t uncle;
+        // uint32_t uncle;
 
         __host__ __device__
         bool isLeaf() const noexcept { return left == EMPTY; }
@@ -228,45 +220,15 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
         }
         else // is a leaf
         {
-#ifdef SPL_BVH_INDEX_SENTINEL
             auto i = node->first;
             while (_indices[i] != EMPTY)
             {
                 bool b = intersectfn(hit, ray, _indices[i++]);
                 result |= b;
             }
-#else
-            auto base = node->first;
-            for (int i = 0; i < node->count; i++)
-            {
-                bool b = intersectfn(hit, ray, _indices[base + i]);
-                result |= b;
-            }
-#endif
         }
 
         // going up
-        if (postponed & 1)
-        {
-            postponed ^= 1;
-            key = binarytree::sibling(key);
-            auto d_hash = _hash(key);
-            assert(d_hash < _table.size());
-            auto d_offset = _table[d_hash];
-            assert(d_offset < _nodes.size());
-            node = _nodes.data() + _table[_hash(key)];
-            continue;
-        }
-        else if (postponed & 2)
-        {
-            postponed >>= 1;
-            postponed ^= 1;
-            key = binarytree::uncle(key);
-            assert(node->uncle < _nodes.size());
-            node = _nodes.data() + node->uncle;
-            continue;
-        }
-
         if (!postponed)
             break;
 
@@ -347,40 +309,15 @@ bool BVH::hashIntersect(const Ray& ray,
         }
         else // is a leaf
         {
-#ifdef SPL_BVH_INDEX_SENTINEL
             auto i = node->first;
             while (_indices[i] != EMPTY)
             {
                 if (intersectfn(ray, _indices[i++]))
                     return true;
             }
-#else
-            auto base = node->first;
-            for (int i = 0; i < node->count; i++)
-            {
-                if (intersectfn(ray, _indices[base + i]))
-                    return true;
-            }
-#endif
         }
 
         // going up
-        if (postponed & 1)
-        {
-            postponed ^= 1;
-            key = binarytree::sibling(key);
-            node = _nodes.data() + _table[_hash(key)];
-            continue;
-        }
-        else if (postponed & 2)
-        {
-            postponed >>= 1;
-            postponed ^= 1;
-            key = binarytree::uncle(key);
-            node = _nodes.data() + node->uncle;
-            continue;
-        }
-
         if (!postponed)
             break;
 
