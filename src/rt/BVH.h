@@ -177,8 +177,7 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
             float R0, R1;
             bool iL = _node_intersect(L0, L1, node->leftBox, ray.origin, D_1)
                 && L0 < hit.t;
-            bool iR = node->right != BVH::EMPTY
-                && _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
+            bool iR = _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
                 && R0 < hit.t;
 
             if (iL || iR)
@@ -193,7 +192,7 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
                 if (iR)
                 {
                     postponed |= 1; // postpone a node
-                    if (L0 < L1)
+                    if (L0 < R0)
                     {
                         key = binarytree::left(key);
                         node = _nodes.data() + node->left;
@@ -266,8 +265,7 @@ bool BVH::hashIntersect(const Ray& ray,
             float R0, R1;
             bool iL = _node_intersect(L0, L1, node->leftBox, ray.origin, D_1)
                 && L0 < ray.max;
-            bool iR = node->right != BVH::EMPTY
-                && _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
+            bool iR = _node_intersect(R0, R1, node->rightBox, ray.origin, D_1)
                 && R0 < ray.max;
 
             if (iL || iR)
@@ -282,7 +280,7 @@ bool BVH::hashIntersect(const Ray& ray,
                 if (iR)
                 {
                     postponed |= 1; // postpone a node
-                    if (L0 < L1)
+                    if (L0 < R0)
                     {
                         key = binarytree::left(key);
                         node = _nodes.data() + node->left;
