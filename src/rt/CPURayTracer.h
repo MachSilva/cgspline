@@ -10,6 +10,8 @@
 #include <utils/Stopwatch.h>
 #include "RayTracer.h"
 
+// #define USE_MONTECARLO_SAMPLING
+
 namespace cg::rt
 {
 
@@ -34,8 +36,7 @@ public:
     struct Status
     {
         std::atomic_uint32_t rays = 0;
-        std::atomic_uint32_t hits = 0;
-        std::atomic_uint32_t running = 0;
+        std::atomic_uint32_t shadowRays = 0;
         std::atomic_uint32_t workDone = 0;
         volatile uint32_t totalWork = 0;
         clock::time_point started {}, finished {};
@@ -57,6 +58,11 @@ public:
             if (f.wait_for(0ms) != std::future_status::ready)
                 n++;
         return n;
+    }
+
+    std::span<const std::future<void>> workers() const
+    {
+        return _workers;
     }
 
     // Ray tracer options.

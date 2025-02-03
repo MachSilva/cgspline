@@ -13,6 +13,8 @@
 #include "reader/SceneReader.h"
 #include "rt/ScopeClock.h"
 
+// #include <cuda.h>
+
 namespace cg
 {
 
@@ -486,6 +488,110 @@ void MainWindow::convertScene()
     _rtScene->topLevelBVH.buildHashTable();
 }
 
+rt::Camera MainWindow::convertCamera(const Camera* camera)
+{
+    return
+    {
+        .transform =
+        {
+            .rotation = camera->rotation(),
+            .position = camera->position(),
+        },
+        .aspectRatio = camera->aspectRatio(),
+        .fieldOfView = math::toRadians(camera->viewAngle()),
+        .height = camera->height(),
+        .projection = camera->projectionType() == Camera::Parallel
+            ? rt::Camera::Parallel : rt::Camera::Perspective
+    };
+}
+
+void MainWindow::renderTestCPU()
+{
+    auto camera = graph::CameraProxy::current();
+    if (!camera)
+        camera = editor()->camera();
+
+    convertScene();
+    _rtCamera = convertCamera(camera);
+
+    auto& v = _state.renderViewport;
+
+    constexpr int warpSize = 32;
+    _frame = new rt::Frame(v.w, v.h, warpSize, rt::ManagedResource::instance());
+
+    auto n = _testOptions.count;
+    auto out = std::ostream_iterator<char>(std::cout);
+    std::format_to(out, "CPU ray tracing ({},{}) - {} tests - {} threads\n",
+        v.w, v.h, n, _cpuRTOptions.threads);
+
+    for (int i = 0; i < n; i++)
+    {
+        if (_cpuRayTracer->running())
+            abort();
+
+        std::this_thread::sleep_for
+            (std::chrono::milliseconds(_testOptions.cooldown));
+
+        _cpuRayTracer->options = _cpuRTOptions;
+        _cpuRayTracer->render(_frame, &_rtCamera, _rtScene.get());
+        auto s = _cpuRayTracer->status();
+
+        auto workers = _cpuRayTracer->workers();
+        for (auto& f : workers)
+            if (f.valid()) f.wait();
+
+        std::chrono::duration<double,std::milli>
+            duration = s->finished - s->started;
+        auto total = s->rays + s->shadowRays;
+        std::format_to(out, ":: {}, {} rays, {} shadow rays, total={}\n",
+            duration, s->rays.load(), s->shadowRays.load(), total);
+    }
+}
+
+void MainWindow::renderTestCUDA()
+{
+    auto camera = graph::CameraProxy::current();
+    if (!camera)
+        camera = editor()->camera();
+
+    convertScene();
+    _rtCamera = convertCamera(camera);
+
+    auto& v = _state.renderViewport;
+
+    constexpr int warpSize = 32;
+    _frame = new rt::Frame(v.w, v.h, warpSize, rt::ManagedResource::instance());
+
+    auto n = _testOptions.count;
+    auto out = std::ostream_iterator<char>(std::cout);
+    std::format_to(out, "CUDA ray tracing ({},{}) - {} tests\n", v.w, v.h, n);
+
+    for (int i = 0; i < n; i++)
+    {
+        if (_rayTracer->running())
+            abort();
+
+        // CUDA_CHECK(cudaCtxResetPersistingL2Cache());
+        std::this_thread::sleep_for
+            (std::chrono::milliseconds(_testOptions.cooldown));
+
+        auto op = &_rayTracer->options;
+        op->samples = _cpuRTOptions.nSamples;
+        op->recursionDepth = _cpuRTOptions.recursionDepth;
+        op->device = 0;
+        op->heatMap = _heatMap.get();
+        _rayTracer->render(_frame, &_rtCamera, _rtScene.get());
+
+        CUDA_CHECK(cudaStreamSynchronize(0));
+    
+        float elapsed;
+        CUDA_CHECK(cudaEventElapsedTime(&elapsed, _rayTracer->started,
+            _rayTracer->finished));
+
+        std::format_to(out, ":: {}ms\n", elapsed);
+    }
+}
+
 void MainWindow::renderScene()
 {
     // if (_viewMode != ViewMode::Renderer)
@@ -501,21 +607,8 @@ void MainWindow::renderScene()
 #endif
 
     convertScene();
-
     // Set Camera
-    _rtCamera =
-    {
-        .transform =
-        {
-            .rotation = camera->rotation(),
-            .position = camera->position(),
-        },
-        .aspectRatio = camera->aspectRatio(),
-        .fieldOfView = math::toRadians(camera->viewAngle()),
-        .height = camera->height(),
-        .projection = camera->projectionType() == Camera::Parallel
-            ? rt::Camera::Parallel : rt::Camera::Perspective
-    };
+    _rtCamera = convertCamera(camera);
 
     // Create task
     auto& v = _state.renderViewport;

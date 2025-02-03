@@ -98,6 +98,8 @@ void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene
         _half_dy = -_half_dy;
     }
 
+    _status.rays = 0;
+    _status.shadowRays = 0;
     _status.totalWork = _work.size();
     _status.workDone = 0;
 
@@ -105,16 +107,10 @@ void CPURayTracer::render(Frame* frame, const Camera* camera, const Scene* scene
     _workers.reserve(options.threads);
     for (int i = 0; i < options.threads; i++)
     {
-        // _workers.emplace_back(&CPURayTracer::work, this);
         _workers.emplace_back(
             std::async(std::launch::async, &CPURayTracer::work, this)
         );
     }
-
-    // for (auto& t : _workers)
-    // {
-    //     t.detach();
-    // }
 }
 
 void CPURayTracer::work()
@@ -139,14 +135,10 @@ void CPURayTracer::work()
         if (_status.workDone.load() == _status.totalWork)
         {
             _status.finished = clock::now();
-            std::chrono::duration<double,std::milli>
-                duration = _status.finished - _status.started;
-            log::info("Ray tracing completed in {} ms", duration.count());
             // Clear
             _frame = nullptr;
             _scene = nullptr;
-            // _status.running.clear();
-            // _status.running.notify_all();
+            return;
         }
     }
 }
@@ -156,6 +148,7 @@ void CPURayTracer::stop()
     {
         std::lock_guard lck (_workMutex);
         _work.clear();
+        _status.finished = clock::now();
     }
     // _status.running.wait(true);
 }
@@ -171,6 +164,7 @@ void CPURayTracer::renderTile(
         for (int i = X0; i < X1; i++)
         {
             vec3 c {0};
+#ifdef USE_MONTECARLO_SAMPLING
             for (int s = 0; s < n; s++)
             {
                 float s0 = s * n_inv;
@@ -185,6 +179,15 @@ void CPURayTracer::renderTile(
                 c += trace(pixelRay, vec3(1), options.recursionDepth);
             }
             c *= n_inv;
+#else
+            Ray pixelRay
+            {
+                .origin = _cameraPosition,
+                .direction = pixelRayDirection(i, j),
+                .max = numeric_limits<float>::infinity()
+            };
+            c += trace(pixelRay, vec3(1), options.recursionDepth);
+#endif
             c.x = std::clamp(c.x, 0.0f, 1.0f);
             c.y = std::clamp(c.y, 0.0f, 1.0f);
             c.z = std::clamp(c.z, 0.0f, 1.0f);
@@ -201,12 +204,9 @@ vec3 CPURayTracer::trace(const Ray& ray, vec3 attenuation, int depth) const
         .t = ray.max,
     };
     int nearestObject = intersect(hit, ray);
-    _status.rays.fetch_add(1, std::memory_order_relaxed);
 
     if (nearestObject < 0)
         return attenuation * miss();
-
-    _status.hits.fetch_add(1, std::memory_order_relaxed);
 
     // Is opaque?
     // auto& m = _scene->objects.get<Key::eMaterial>(nearestObject);
@@ -252,6 +252,7 @@ int CPURayTracer::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
+    _status.rays.fetch_add(1, std::memory_order_relaxed);
     _scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
@@ -273,6 +274,7 @@ bool CPURayTracer::intersect(const Ray& ray0) const
         localRay.direction *= d;
         return p->intersect(localRay);
     };
+    _status.shadowRays.fetch_add(1, std::memory_order_relaxed);
     return _scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
@@ -299,12 +301,12 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     // vec3 N = p->normal(hit);
     vec3 N = (mat3(M_1).transposed() * p->normal(hit)).versor();
 
-    bool backfaced = false;
+    // bool backfaced = false;
     float dotNV = vec3::dot(N, V);
 
     if (dotNV < 0)
     {
-        backfaced = true;
+        // backfaced = true;
         N = -N;
         dotNV = -dotNV;
     }
@@ -347,6 +349,7 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     if (depth <= 0)
         return color;
 
+#ifdef USE_MONTECARLO_SAMPLING
     // Select random microfacet normal
     vec3 M;
     if constexpr (c_UseGGX)
@@ -399,6 +402,29 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
             color += trace(r, a, depth - 1);
         }
     }
+#else
+    // Reflection
+    vec3 reflectance = schlick(m.specular, dotNV);
+    vec3 R = reflect(-V, N, -dotNV);
+
+    float g = G(dotNV, dotNV, m.roughness) * dotNV;
+    vec3 brdf = mix(
+        BRDF_diffuse(m),
+        vec3(reflectance * g),
+        m.metalness
+    ) * (1 - squared(m.roughness));
+    vec3 a = attenuation * brdf;
+    if (a.max() > c_MinRadiance)
+    {
+        Ray r
+        {
+            .origin = P + options.eps * R,
+            .direction = R,
+            .max = numeric_limits<float>::infinity()
+        };
+        color += trace(r, a, depth - 1);
+    }
+#endif
 
     // Refraction
     // Metals end up absorbing transmitted light

@@ -6,13 +6,30 @@
 #include "Scene.h"
 #include "../Ref.h"
 
+// #define USE_MONTECARLO_SAMPLING
+
 namespace cg::rt
 {
+
+enum struct Counter
+{
+    Threads = 0,
+    Rays = 1,
+    ShadowRays,
+};
 
 class RayTracer : public SharedObject
 {
 public:
     static constexpr float c_MinRadiance = 0x1p-8f;
+
+    struct Stats
+    {
+        uint32_t rays = 0;
+        uint32_t hits = 0;
+        uint32_t shadowRays = 0;
+        uint32_t shadowHits = 0;
+    };
 
     struct Options
     {
@@ -48,5 +65,7 @@ private:
     Context* _ctx {nullptr};
     void* _pRandomStates {nullptr};
 };
+
+extern __managed__ RayTracer::Stats g_RTStats;
 
 } // namespace cg::rt

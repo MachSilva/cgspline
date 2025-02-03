@@ -13,6 +13,8 @@
 namespace cg::rt
 {
 
+__managed__ RayTracer::Stats g_RTStats;
+
 __managed__ Frame* g_BezierClippingHeatMap;
 
 using curand_state_type = curandStatePhilox4_32_10_t;
@@ -21,7 +23,9 @@ constexpr bool c_LoadRandomState = true;
 
 struct RayPayload
 {
+#ifdef USE_MONTECARLO_SAMPLING
     curand_state_type random;
+#endif
     Ray ray;
     vec3 color;
     vec3 attenuation;
@@ -127,6 +131,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     uint32_t h = frame->height();
 
     g_BezierClippingHeatMap = options.heatMap;
+    g_RTStats = {};
 
     {
         Context ctx;
@@ -189,19 +194,12 @@ void render(Context* ctx)
     if (i >= ctx->frame->width() || j >= ctx->frame->height())
         return;
 
+    // __prof_trigger((int)Counter::Threads);
+
     RayPayload payload;
     payload.color = vec3(0);
-    // {
-    //     .ray = {
-    //         .origin = ctx->cameraPosition,
-    //         // .direction = d,
-    //         .max = numeric_limits<float>::infinity()
-    //     },
-    //     .color = vec3(0),
-    //     // .attenuation = vec3(1),
-    //     // .depth = ctx->options.recursionDepth
-    // };
 
+#ifdef USE_MONTECARLO_SAMPLING
     if constexpr (c_LoadRandomState)
     { // Load random state
         int a = i % c_RandomGridSize;
@@ -212,7 +210,9 @@ void render(Context* ctx)
     {
         curand_init(42, i + (j << 10), 0, &payload.random);
     }
+#endif
 
+#ifdef USE_MONTECARLO_SAMPLING
     int n = ctx->options.samples;
     float n_inv = 1.0f / n;
     for (int s = 0; s < n; s++)
@@ -233,7 +233,23 @@ void render(Context* ctx)
 
         while (ctx->trace(payload));
     }
-    vec3 c = payload.color * n_inv;
+    payload.color *= n_inv;
+#else
+    {
+        payload = {
+            .ray = {
+                .origin = ctx->cameraPosition,
+                .direction = ctx->pixelRayDirection(i, j),
+                .max = numeric_limits<float>::infinity()
+            },
+            .color = payload.color,
+            .attenuation = vec3(1),
+            .depth = ctx->options.recursionDepth,
+        };
+        while (ctx->trace(payload));
+    }
+#endif
+    vec3 c = payload.color;
     c.x = __saturatef(c.x);
     c.y = __saturatef(c.y);
     c.z = __saturatef(c.z);
@@ -308,6 +324,7 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
+    // __prof_trigger((int)Counter::Rays);
     this->scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
@@ -340,6 +357,7 @@ bool Context::intersect(const Ray& ray0) const
             __builtin_unreachable();
         }
     };
+    // __prof_trigger((int)Counter::ShadowRays);
     return this->scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 
@@ -430,6 +448,7 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     if (payload.depth <= 0)
         return false;
 
+#ifdef USE_MONTECARLO_SAMPLING
     // Select random microfacet normal
     vec3 M;
     {
@@ -479,6 +498,31 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     payload.attenuation = a;
     payload.depth = payload.depth - 1;
     return true;
+#else
+    // Reflection
+    vec3 reflectance = schlick(m.specular, dotNV);
+    vec3 R = reflect(-V, N, -dotNV);
+
+    float g = G(dotNV, dotNV, m.roughness) * dotNV;
+    vec3 brdf = mix(
+        BRDF_diffuse(m),
+        vec3(reflectance * g),
+        m.metalness
+    ) * (1 - squared(m.roughness));
+    vec3 a = payload.attenuation * brdf;
+    if (a.max() <= c_MinRadiance)
+        return false;
+
+    payload.ray =
+    {
+        .origin = P + options.eps * R,
+        .direction = R,
+        .max = numeric_limits<float>::infinity()
+    };
+    payload.attenuation = a;
+    payload.depth = payload.depth - 1;
+    return true;
+#endif
 }
 
 } // namespace cg::rt

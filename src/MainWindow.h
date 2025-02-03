@@ -60,7 +60,7 @@ public:
     {
         // bool backgroundTask = false;
         void (MainWindow::*backgroundTaskStatusWindow)() = nullptr;
-        bool renderOnCentralNode = true;
+        bool renderOnCentralNode = false;
         CursorMode cursorMode = CursorMode::Select;
         ShadingMode shadingMode = ShadingMode::CookTorrance;
         Ref<gl::Framebuffer> renderFramebuffer;
@@ -106,6 +106,7 @@ protected:
     void reloadScene();
     void setScene(graph::Scene& scene);
     void convertScene();
+    static rt::Camera convertCamera(const Camera*);
 
     static constexpr auto c_CPURayTracerStatusTitle = "CPU Ray Tracing";
     static constexpr auto c_CUDARayTracerStatusTitle = "CUDA Ray Tracing";
@@ -118,6 +119,9 @@ protected:
 
     void whenCPURayTracerEnds();
     void whenCUDARayTracerEnds();
+
+    void renderTestCPU();
+    void renderTestCUDA();
 
     // void backgroundTaskWindow();
     // void rayTracerStatusModal();
@@ -143,6 +147,12 @@ protected:
     {
         eCPU, eCUDA
     } _renderMethod = RenderMethod::eCPU;
+
+    struct
+    {
+        int count = 9;
+        int cooldown = 140; // cooldown time between tests (milliseconds) for cache clearing
+    } _testOptions;
 
     std::chrono::steady_clock::time_point _lastRenderStarted;
     std::string _lastRenderInfo;

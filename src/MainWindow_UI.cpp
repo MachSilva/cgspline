@@ -71,11 +71,10 @@ void MainWindow::cpuRayTracerStatusWindow()
 
     auto elapsed = duration_cast<milliseconds>
         (steady_clock::now() - status->started).count();
-    ImGui::Text("%02lld:%02lld.%03lld",
-        elapsed / 60000,
-        elapsed / 1000,
-        elapsed % 1000
-    );
+    auto e_m = elapsed / 60000;
+    auto e_s = (elapsed % 60000) / 1000;
+    auto e_ms = elapsed % 1000;
+    ImGui::Text("%02lld:%02lld.%03lld", e_m, e_s, e_ms);
 
     ImGui::Text("Ray traced %d of %d pixels", a, b);
     ImGui::Text("Traced %d of %d rays", s*a, s*b);
@@ -106,19 +105,26 @@ void MainWindow::cudaRayTracerStatusWindow()
 
     auto elapsed = duration_cast<milliseconds>
         (steady_clock::now() - _lastRenderStarted).count();
-    ImGui::Text("%02lld:%02lld.%03lld",
-        elapsed / 60000,
-        elapsed / 1000,
-        elapsed % 1000
-    );
+    auto e_m = elapsed / 60000;
+    auto e_s = (elapsed % 60000) / 1000;
+    auto e_ms = elapsed % 1000;
+    ImGui::Text("%02lld:%02lld.%03lld", e_m, e_s, e_ms);
 
     ImGui::BeginDisabled();
     ImGui::Button("Cancel");
     ImGui::EndDisabled();
     // when finished close popup and store image
-    if (cudaEventQuery(_rayTracer->finished) == cudaSuccess)
+    if (auto e = cudaEventQuery(_rayTracer->finished); e == cudaSuccess)
     {
         whenCUDARayTracerEnds();
+        _state.backgroundTaskStatusWindow = nullptr;
+    }
+    else if (e != cudaErrorNotReady)
+    {
+        log::error("CUDA rendering failed ({}): {}",
+            cudaGetErrorName(e),
+            cudaGetErrorString(e)
+        );
         _state.backgroundTaskStatusWindow = nullptr;
     }
     ImGui::End();
@@ -127,6 +133,11 @@ void MainWindow::cudaRayTracerStatusWindow()
 void MainWindow::whenCPURayTracerEnds()
 {
     _workbench2D["CPU ray traced image"] = _image;
+
+    auto s = _cpuRayTracer->status();
+    std::chrono::duration<double,std::milli>
+        duration = s->finished - s->started;
+    log::info("Ray tracing completed in {} ms", duration.count());
 
     auto w = _image->width();
     auto h = _image->height();
@@ -453,6 +464,38 @@ void MainWindow::controlWindow()
     ImGui::SliderInt("Threads", &_cpuRTOptions.threads, 1, maxT);
     ImGui::DragInt("Number of Samples", &_cpuRTOptions.nSamples, 1.0f, 1, 2048);
     ImGui::DragInt("Recursion Depth", &_cpuRTOptions.recursionDepth, 1.0f, 1, 64);
+
+    ImGui::SeparatorText("Benchmark/Test (blocking)");
+
+    ImGui::DragInt("Number of tests", &_testOptions.count, 1.0f, 1, 32);
+    ImGui::DragInt("Wait time between tests (ms)",
+        &_testOptions.cooldown, 1.0f, 0, 1000);
+
+    using namespace std::chrono_literals;
+    using std::chrono::steady_clock;
+    static steady_clock::time_point lastBlock = steady_clock::now();
+
+    auto t = std::chrono::duration_cast<std::chrono::milliseconds>
+        (steady_clock::now() - lastBlock);
+
+    // Blocking tasks
+    if (ImGui::Button("Render Test CPU"))
+    {
+        if (t > 500ms)
+        {
+            renderTestCPU();
+            lastBlock = steady_clock::now();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Render Test CUDA"))
+    {
+        if (t > 500ms)
+        {
+            renderTestCUDA();
+            lastBlock = steady_clock::now();
+        }
+    }
 
     ImGui::SeparatorText("Additional Info");
 
