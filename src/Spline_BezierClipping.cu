@@ -86,19 +86,25 @@ bool doBezierClipping(Intersection& hit,
 
     // find two planes whose intersection is a line that contains the ray
     const auto& d = ray.direction;
-    const vec3 axis0 = d.cross(d + vec3{0, 0, 10.f}).versor();
+
+    const vec3 axis0 = d.cross(d + vec3(0,0,8)).versor();
     const vec3 axis1 = d.cross(axis0).versor();
+
+    // quat q (vec3(0,0,1).cross(d), 1 + d.z);
+    // q.normalize();
+    // const vec3 axis0 = q.rotate(vec3(1,0,0)).versor();
+    // const vec3 axis1 = q.rotate(vec3(0,1,0)).versor();
 
     for (int i = 0; i < 16; i++)
     {
-#if !defined(__CUDA_ARCH__)
+// #if !defined(__CUDA_ARCH__)
         const vec4 P = buffer[patch[i]];
-#else
-        const vec4 P
-        {
-            __ldg((const float4*) buffer + __ldg(patch+i))
-        };
-#endif
+// #else
+//         const vec4 P
+//         {
+//             __ldg((const float4*) buffer + __ldg(patch+i))
+//         };
+// #endif
         const vec3 Q {P.x, P.y, P.z};
         patch2D[i] =
         {
@@ -568,11 +574,12 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 #ifdef SPL_BC_HEATMAP
     int maxDepth = 1; // we already start with one element
 #endif
-    bool spilled = false;
+    // bool spilled = false;
     bool found = false;
     int cutsideStack = 0;
-    State localStack[4];
-    ArrayAdaptor<State> S (localStack, 4); // a stack
+    // State localStack[32];
+    // ArrayAdaptor<State> S (localStack, 32); // a stack
+    ArrayAdaptor<State> S ((State*)alloca(32 * sizeof (State)), 32); // a stack
 
     S.push_back({ .min = {0,0}, .max = {1,1} });
 
@@ -663,49 +670,51 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         }
         // find convex hull and its intersection
         // graham scan
-        vec2 hull[9];
-        int len = 0;
-        // first and second points
-        hull[len++] = {over3[0], ybot[0]};
-        hull[len++] = {over3[1], ybot[1]};
-        // bottom points
-        for (int i = 2; i < 4; i++)
         {
-            vec2 P3 {over3[i], ybot[i]};
-            auto& P2 = hull[len-1];
-            auto& P1 = hull[len-2];
-            if (isCCW(P2 - P1, P3 - P1) >= 0)
-                hull[len++] = P3;
-            else
-                hull[len-1] = P3;
-        }
-        // first top point (right to left)
-        hull[len++] = {over3[3], ytop[3]};
-        // top points
-        for (int i = 2; i >= 0; i--)
-        {
-            vec2 P3 = {over3[i], ytop[i]};
-            auto& P2 = hull[len-1];
-            auto& P1 = hull[len-2];
-            if (isCCW(P2 - P1, P3 - P1) >= 0)
-                hull[len++] = P3;
-            else
-                hull[len-1] = P3;
-        }
-        // duplicate the first point to close the cycle
-        hull[len++] = hull[0];
-        // find intersection and the clip range
-        for (int i = 1; i < len; i++)
-        {
-            vec2 A = hull[i-1];
-            vec2 B = hull[i];
-            vec2 s;
-            if (xAxisIntersection(s, A, B))
+            vec2 hull[9];
+            int len = 0;
+            // first and second points
+            hull[len++] = {over3[0], ybot[0]};
+            hull[len++] = {over3[1], ybot[1]};
+            // bottom points
+            for (int i = 2; i < 4; i++)
             {
-                if (s.x > s.y)
-                    std::swap(s.x, s.y);
-                lower = fmin(lower, s.x);
-                upper = fmax(upper, s.y);
+                vec2 P3 {over3[i], ybot[i]};
+                auto& P2 = hull[len-1];
+                auto& P1 = hull[len-2];
+                if (isCCW(P2 - P1, P3 - P1) >= 0)
+                    hull[len++] = P3;
+                else
+                    hull[len-1] = P3;
+            }
+            // first top point (right to left)
+            hull[len++] = {over3[3], ytop[3]};
+            // top points
+            for (int i = 2; i >= 0; i--)
+            {
+                vec2 P3 = {over3[i], ytop[i]};
+                auto& P2 = hull[len-1];
+                auto& P1 = hull[len-2];
+                if (isCCW(P2 - P1, P3 - P1) >= 0)
+                    hull[len++] = P3;
+                else
+                    hull[len-1] = P3;
+            }
+            // duplicate the first point to close the cycle
+            hull[len++] = hull[0];
+            // find intersection and the clip range
+            for (int i = 1; i < len; i++)
+            {
+                vec2 A = hull[i-1];
+                vec2 B = hull[i];
+                vec2 s;
+                if (xAxisIntersection(s, A, B))
+                {
+                    if (s.x > s.y)
+                        std::swap(s.x, s.y);
+                    lower = fmin(lower, s.x);
+                    upper = fmax(upper, s.y);
+                }
             }
         }
 
@@ -765,16 +774,16 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 // subpatchV(buffer2, 0.0, 0.5);
                 subpatchV(buffer, 0.5f, 1.0f);
             }
-            if (__builtin_expect (S.size() >= S.capacity() && !spilled, 0))
-            {
-                constexpr int n = 32;
-                auto s = S.size();
-                auto p = alloca(n * sizeof (State));
-                spilled = true;
-                S = ArrayAdaptor<State>((State*) p, n);
-                for (int i = 0; i < s; i++)
-                    S.push_back(localStack[i]);
-            }
+            // if (__builtin_expect (S.size() >= S.capacity() && !spilled, 0))
+            // {
+            //     constexpr int n = 32;
+            //     auto s = S.size();
+            //     auto p = alloca(n * sizeof (State));
+            //     spilled = true;
+            //     S = ArrayAdaptor<State>((State*) p, n);
+            //     for (int i = 0; i < s; i++)
+            //         S.push_back(localStack[i]);
+            // }
             S.push_back(s1);
 
 #ifdef SPL_BC_HEATMAP
