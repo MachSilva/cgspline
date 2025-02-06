@@ -641,31 +641,14 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         // compute where does the convex hull intersect the x-axis
         float ytop[4]; // y top
         float ybot[4]; // y bottom
-        // one branch instead of 16
-        if (cutside == Side::eU)
+        for (int i = 0; i < 4; i++)
         {
-            for (int i = 0; i < 4; i++)
+            ybot[i] = ytop[i] = cutside == Side::eU ? d.point(i,0) : d.point(0,i);
+            for (int k = 1; k < 4; k++)
             {
-                ybot[i] = ytop[i] = d.point(i,0);
-                for (int k = 1; k < 4; k++)
-                {
-                    float y = d.point(i,k);
-                    ytop[i] = fmax(ytop[i], y);
-                    ybot[i] = fmin(ybot[i], y);
-                }
-            }
-        }
-        else // Side::eV
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                ybot[i] = ytop[i] = d.point(0,i);
-                for (int k = 1; k < 4; k++)
-                {
-                    float y = d.point(k,i);
-                    ytop[i] = fmax(ytop[i], y);
-                    ybot[i] = fmin(ybot[i], y);
-                }
+                float y = cutside == Side::eU ? d.point(i,k) : d.point(k,i);
+                ytop[i] = fmax(ytop[i], y);
+                ybot[i] = fmin(ybot[i], y);
             }
         }
         // find convex hull and its intersection
