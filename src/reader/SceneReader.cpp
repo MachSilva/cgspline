@@ -432,6 +432,15 @@ Value SceneReader::readScene(const List& args)
             environment = q->castTo<gl::Texture>();
     }
 
+    if (auto p = props->get_ptr("view"))
+    {
+        auto d = p->castTo<Dict>();
+        if (auto q = d->get_ptr("position"))
+            view.position = std::get<vec3f>(*q);
+        if (auto q = d->get_ptr("rotation"))
+            view.rotation = quatf::eulerAngles(std::get<vec3f>(*q));
+    }
+
     if (auto p = props->get_ptr("objects"))
     {
         auto list = p->castTo<List>();

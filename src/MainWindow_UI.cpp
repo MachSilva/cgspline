@@ -673,8 +673,8 @@ void MainWindow::inspectLight(MainWindow& window, graph::LightProxy& proxy)
         scale = 1;
     }
     // NOTE: ImGuiColorEditFlags_HDR is not fully implemented yet.
-    ImGui::ColorEdit3("Color", &color.x);
-    ImGui::DragFloat("Scale / Strength", &scale, 0.05f, 1.0f, 1000,
+    ImGui::ColorEdit3("Color", &color.x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+    ImGui::DragFloat("Scale / Strength", &scale, 0.05f, 1.0f, 1000.0f,
         "%.2f", ImGuiSliderFlags_Logarithmic);
 
     light->color.x = scale * color.x;
@@ -726,6 +726,20 @@ void MainWindow::inspectLight(MainWindow& window, graph::LightProxy& proxy)
 void MainWindow::inspectSurface(MainWindow& window, SurfaceProxy& s)
 {
     ImGui::inputText("Surface", s.sceneObject()->name());
+    auto e = s.mapper()->surface()->surface();
+    int a[3] {0};
+    int b[3] {0};
+    for (auto& g : e->groups())
+    {
+        if (g.type > 2) continue;
+        ++a[(int)g.type];
+        b[(int)g.type] += (int)g.count;
+    }
+    const char* const t[] { "Bézier", "B-Spline", "Gregory" };
+    for (int i = 0; i < 3; i++)
+    {
+        ImGui::LabelText(t[i], "%d groups, %d patches", a[i], b[i]);
+    }
     ImGui::Separator();
     window.inspectMaterial(*s.mapper()->surface());
 }

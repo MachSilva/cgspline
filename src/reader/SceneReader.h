@@ -19,6 +19,11 @@ public:
     auto scene() const { return _scene; }
 
     Ref<gl::Texture> environment;
+    struct
+    {
+        vec3f position;
+        quatf rotation;
+    } view;
 
 protected:
     Value createMaterial(const List&);

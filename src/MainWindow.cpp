@@ -882,6 +882,10 @@ void MainWindow::readScene(std::filesystem::path scenefile)
             throw std::runtime_error("Scene is null");
         setScene(*reader.scene());
         _sceneRefs.filepath = std::move(scenefile);
+        editor()->camera()->setTransform(
+            reader.view.position,
+            reader.view.rotation
+        );
 
         _sceneEnvironment = reader.environment;
     }
@@ -896,7 +900,7 @@ void MainWindow::setScene(graph::Scene& scene)
 {
     Base::setScene(scene);
     _sceneRefs.reset();
-    createDebugObject();
+    // createDebugObject();
 }
 
 graph::SceneObject*
