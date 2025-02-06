@@ -1,0 +1,77 @@
+let f0 = (0.04 0.04 0.04)
+let Gold = (0.8 0.498039 0.196078)
+let Copper = (0.72 0.45 0.20)
+let Bronze = (0.55 0.47 0.14)
+let Silver = (0.90 0.91 0.98)
+let DarkGray = (0.025 0.025 0.025)
+let SkyBlue = (0.2422812 0.61720675 0.8307701) // From_sRGB(135 206 235)
+let Views =
+{
+  GroundClose: { position:(3.5 2.8 14) rotation:(-15 16 -0.00096) }
+  Up: { position:(3 2.9 3.5) rotation:(-34 20 -0.0012) }
+  HighUp: { position:(10 13 13) rotation:(-40 36 -0.0012) }
+}
+Material { name:"Silver" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Silver }
+Material { name:"Gold" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Gold }
+Material { name:"Bronze" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Bronze }
+Material { name:"Red" metalness:0.1 roughness: 0.8 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
+Material { name:"Blueish" metalness:0.3 roughness: 0.55 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
+Material { name:"CeramicWhite" metalness:0.4 roughness:0.11 diffuse:(0.82 0.82 0.82) specular:(0.82 0.82 0.82) }
+Surface { name:"teacup" file:"../bezier/teacup" }
+Surface { name:"teapot" file:"../bezier/teapot" }
+Surface { name:"teaspoon" file:"../bezier/teaspoon" }
+Surface { name:"longwave" file:"../bezier/longwave" }
+Scene
+{
+  environment:{ background:(0.18 0.18 0.2) ambient:DarkGray }
+  view:Views.HighUp
+  objects:
+  [
+    { name:"Floor" mesh:{name:"Box" material:Get("CeramicWhite")} transform:{position:(0 -0.1 0) scale:(20 0.1 20)} }
+    {
+      name:"Lights"
+      objects:
+      [
+        {name:"Sun" light:{color:*(1.2e5 (1 0.95 0.8))} transform:{position:(68.404 346.4102 187.9385)}}
+{name:"Light 1" light:{} transform:{position:(0 10 0)}}
+      ]
+    }
+{name:"teapot" transform:{rotation:(-90 0 0)} surface:{model:Get("teapot") material:Get("Gold")}}{ name:"Set 1" transform:{ rotation:(0 0.0 0) } objects:[
+{ name:"teacup 1-1" transform:{ position:(3.0 0.0 0.0) rotation:(0.0 0.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+{ name:"teacup 1-2" transform:{ position:(0.9271 0.0 2.8532) rotation:(0.0 72.0 0.0) } surface:{ model:Get("teacup") material:Get("Silver") } }
+{ name:"teacup 1-3" transform:{ position:(-2.4271 0.0 1.7634) rotation:(0.0 144.0 0.0) } surface:{ model:Get("teacup") material:Get("Red") } }
+{ name:"teacup 1-4" transform:{ position:(-2.4271 0.0 -1.7634) rotation:(0.0 216.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 1-5" transform:{ position:(0.9271 0.0 -2.8532) rotation:(0.0 288.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+]}
+{ name:"Set 2" transform:{ rotation:(0 0.0 0) } objects:[
+{ name:"teacup 2-1" transform:{ position:(5.5 0.0 0.0) rotation:(0.0 0.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+{ name:"teacup 2-2" transform:{ position:(3.8891 0.0 3.8891) rotation:(0.0 45.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+{ name:"teacup 2-3" transform:{ position:(0.0 0.0 5.5) rotation:(0.0 90.0 0.0) } surface:{ model:Get("teacup") material:Get("Silver") } }
+{ name:"teacup 2-4" transform:{ position:(-3.8891 0.0 3.8891) rotation:(0.0 135.0 0.0) } surface:{ model:Get("teacup") material:Get("Red") } }
+{ name:"teacup 2-5" transform:{ position:(-5.5 0.0 0.0) rotation:(0.0 180.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 2-6" transform:{ position:(-3.8891 0.0 -3.8891) rotation:(0.0 225.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+{ name:"teacup 2-7" transform:{ position:(-0.0 0.0 -5.5) rotation:(0.0 270.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+{ name:"teacup 2-8" transform:{ position:(3.8891 0.0 -3.8891) rotation:(0.0 315.0 0.0) } surface:{ model:Get("teacup") material:Get("Silver") } }
+]}
+{ name:"Set 3" transform:{ rotation:(0 17.0 0) } objects:[
+{ name:"teacup 3-1" transform:{ position:(8.0 0.0 0.0) rotation:(0.0 0.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 3-2" transform:{ position:(5.6569 0.0 5.6569) rotation:(0.0 45.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+{ name:"teacup 3-3" transform:{ position:(0.0 0.0 8.0) rotation:(0.0 90.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+{ name:"teacup 3-4" transform:{ position:(-5.6569 0.0 5.6569) rotation:(0.0 135.0 0.0) } surface:{ model:Get("teacup") material:Get("Silver") } }
+{ name:"teacup 3-5" transform:{ position:(-8.0 0.0 0.0) rotation:(0.0 180.0 0.0) } surface:{ model:Get("teacup") material:Get("Red") } }
+{ name:"teacup 3-6" transform:{ position:(-5.6569 0.0 -5.6569) rotation:(0.0 225.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 3-7" transform:{ position:(-0.0 0.0 -8.0) rotation:(0.0 270.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+{ name:"teacup 3-8" transform:{ position:(5.6569 0.0 -5.6569) rotation:(0.0 315.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+]}
+{ name:"Set 4" transform:{ rotation:(0 -4.5 0) } objects:[
+{ name:"teacup 4-1" transform:{ position:(9.0 0.0 0.0) rotation:(0.0 0.0 0.0) } surface:{ model:Get("teacup") material:Get("Red") } }
+{ name:"teacup 4-2" transform:{ position:(6.364 0.0 6.364) rotation:(0.0 45.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 4-3" transform:{ position:(0.0 0.0 9.0) rotation:(0.0 90.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+{ name:"teacup 4-4" transform:{ position:(-6.364 0.0 6.364) rotation:(0.0 135.0 0.0) } surface:{ model:Get("teacup") material:Get("Blueish") } }
+{ name:"teacup 4-5" transform:{ position:(-9.0 0.0 0.0) rotation:(0.0 180.0 0.0) } surface:{ model:Get("teacup") material:Get("Silver") } }
+{ name:"teacup 4-6" transform:{ position:(-6.364 0.0 -6.364) rotation:(0.0 225.0 0.0) } surface:{ model:Get("teacup") material:Get("Red") } }
+{ name:"teacup 4-7" transform:{ position:(-0.0 0.0 -9.0) rotation:(0.0 270.0 0.0) } surface:{ model:Get("teacup") material:Get("Gold") } }
+{ name:"teacup 4-8" transform:{ position:(6.364 0.0 -6.364) rotation:(0.0 315.0 0.0) } surface:{ model:Get("teacup") material:Get("Bronze") } }
+]}
+  ]
+}

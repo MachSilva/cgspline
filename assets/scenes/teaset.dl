@@ -14,14 +14,11 @@ Texture("Metal042A_BaseColor" "../textures/Metal042A_4K-JPG_Color.jpg")
 Material
 {
   name:     "SilverSp"
-  ambient:  *(0.5 Silver)
   diffuse:  Black
-  spot:     Silver
-  shine:    100
   specular: *(0.5 Silver)
 }
 
-PBRMaterial
+Material
 {
   name: "Metal042A"
   metalness: 1
@@ -41,6 +38,13 @@ Scene
     ambient: DarkGray
     // texture: Get("je_gray_park_4k")
   }
+  view:
+  {
+    // position: (2 3.8 5.8)
+    // rotation: (-29 16 -0.0011)
+    position: (3 2.9 3.5)
+    rotation: (-34 20 -0.0012)
+  }
   objects:
   [
     {
@@ -50,24 +54,7 @@ Scene
         position: (0 -0.4 0)
         scale: (10 0.4 10)
       }
-      // mesh: { name: "Box" }
-    }
-
-    {
-      name: "Tube"
-      surface:
-      {
-        model: Surface { name: "Tube"  file: "../surfaces/tube.se" }
-      }
-    }
-
-    {
-      name: "Dice"
-      transform: { position: (-5 0.5 -0.5) }
-      surface:
-      {
-        model: Surface { name: "Dice"  file: "../surfaces/dice16.se" }
-      }
+      mesh: { name: "Box" }
     }
 
     {
@@ -124,24 +111,23 @@ Scene
         }
       ]
     }
-
     {
       name: "Teaset"
       objects:
       [
-        // {
-        //   name: "Teapot"
-        //   transform:
-        //   {
-        //     rotation: (-90 0 0)
-        //     scale: (0.5 0.5 0.5)
-        //   }
-        //   surface:
-        //   {
-        //     model: Get("teapot")
-        //     // material: Get("Metal042A")
-        //   }
-        // }
+        {
+          name: "Teapot"
+          transform:
+          {
+            rotation: (-90 0 0)
+            scale: (0.5 0.5 0.5)
+          }
+          surface:
+          {
+            model: Get("teapot")
+            // material: Get("Metal042A")
+          }
+        }
         {
           name: "Teacup"
           transform:
@@ -158,7 +144,9 @@ Scene
           name: "Teaspoon"
           transform:
           {
-            position: (3.5 1 0)
+            // position: (3.5 1 0)
+            position: (3.7 0.1 0)
+            rotation: (-90 0 0)
           }
           surface:
           {
