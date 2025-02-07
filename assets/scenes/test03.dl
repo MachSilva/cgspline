@@ -1,0 +1,275 @@
+let f0 = (0.04 0.04 0.04)
+let Gold = (0.8 0.498039 0.196078)
+let Copper = (0.72 0.45 0.20)
+let Bronze = (0.55 0.47 0.14)
+let Silver = (0.90 0.91 0.98)
+let DarkGray = (0.025 0.025 0.025)
+let SkyBlue = (0.2422812 0.61720675 0.8307701) // From_sRGB(135 206 235)
+let Views =
+{
+  GroundClose: { position:(3.5 2.8 14) rotation:(-15 16 -0.00096) }
+  Up: { position:(3 2.9 3.5) rotation:(-34 20 -0.0012) }
+  HighUp: { position:(10 13 13) rotation:(-40 36 -0.0012) }
+}
+Material { name:"Silver" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Silver }
+Material { name:"Gold" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Gold }
+Material { name:"Bronze" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Bronze }
+Material { name:"Red" metalness:0.1 roughness: 0.8 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
+Material { name:"Blueish" metalness:0.3 roughness: 0.55 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
+Material { name:"CeramicWhite" metalness:0.4 roughness:0.11 diffuse:(0.82 0.82 0.82) specular:(0.82 0.82 0.82) }
+Surface { name:"teacup" file:"../bezier/teacup" }
+Surface { name:"teapot" file:"../bezier/teapot" }
+Surface { name:"teaspoon" file:"../bezier/teaspoon" }
+Surface { name:"longwave" file:"../bezier/longwave" }
+Scene
+{
+  environment:{ background:(0.18 0.18 0.2) ambient:DarkGray }
+  view:Views.HighUp
+  objects:
+  [
+    { name:"Floor" mesh:{name:"Box" material:Get("CeramicWhite")} transform:{position:(0 -0.1 0) scale:(20 0.1 20)} }
+    {
+      name:"Lights"
+      objects:
+      [
+        {name:"Sun" light:{color:*(1.2e5 (1 0.95 0.8))} transform:{position:(68.404 346.4102 187.9385)}}
+{name:"Light 1 (S1 R1)" light:{color:*(0.7 (1 1 1))} transform:{position:(2.9402 4.0 0.596)}}
+{name:"Light 2 (S1 R2)" light:{color:*(0.7 (1 1 1))} transform:{position:(-2.3933 4.0 1.8089)}}
+{name:"Light 3 (S1 R3)" light:{color:*(0.7 (1 1 1))} transform:{position:(0.229 4.0 -2.9912)}}
+{name:"Light 4 (S2 R1)" light:{color:*(0.7 (1 1 1))} transform:{position:(5.8804 4.0 1.192)}}
+{name:"Light 5 (S2 R2)" light:{color:*(0.7 (1 1 1))} transform:{position:(-0.5144 4.0 5.9779)}}
+{name:"Light 6 (S2 R3)" light:{color:*(0.7 (1 1 1))} transform:{position:(-5.9976 4.0 0.1699)}}
+{name:"Light 7 (S2 R4)" light:{color:*(0.7 (1 1 1))} transform:{position:(-0.852 4.0 -5.9392)}}
+{name:"Light 8 (S2 R5)" light:{color:*(0.7 (1 1 1))} transform:{position:(5.8035 4.0 -1.523)}}
+{name:"Light 9 (S3 R1)" light:{color:*(0.7 (1 1 1))} transform:{position:(8.8206 4.0 1.788)}}
+{name:"Light 10 (S3 R2)" light:{color:*(0.7 (1 1 1))} transform:{position:(2.4283 4.0 8.6662)}}
+{name:"Light 11 (S3 R3)" light:{color:*(0.7 (1 1 1))} transform:{position:(-6.6073 4.0 6.111)}}
+{name:"Light 12 (S3 R4)" light:{color:*(0.7 (1 1 1))} transform:{position:(-8.4506 4.0 -3.0962)}}
+{name:"Light 13 (S3 R5)" light:{color:*(0.7 (1 1 1))} transform:{position:(-1.0953 4.0 -8.9331)}}
+{name:"Light 14 (S3 R6)" light:{color:*(0.7 (1 1 1))} transform:{position:(7.4523 4.0 -5.046)}}
+{name:"Light 15 (S3 R7)" light:{color:*(0.7 (1 1 1))} transform:{position:(7.8879 4.0 4.3338)}}
+{name:"Light 16 (S4 R1)" light:{color:*(0.7 (1 1 1))} transform:{position:(11.7608 4.0 2.384)}}
+{name:"Light 17 (S4 R2)" light:{color:*(0.7 (1 1 1))} transform:{position:(5.4631 4.0 10.6843)}}
+{name:"Light 18 (S4 R3)" light:{color:*(0.7 (1 1 1))} transform:{position:(-4.953 4.0 10.9302)}}
+{name:"Light 19 (S4 R4)" light:{color:*(0.7 (1 1 1))} transform:{position:(-11.6352 4.0 2.9363)}}
+{name:"Light 20 (S4 R5)" light:{color:*(0.7 (1 1 1))} transform:{position:(-9.5462 4.0 -7.2712)}}
+{name:"Light 21 (S4 R6)" light:{color:*(0.7 (1 1 1))} transform:{position:(-0.2607 4.0 -11.9972)}}
+{name:"Light 22 (S4 R7)" light:{color:*(0.7 (1 1 1))} transform:{position:(9.2213 4.0 -7.679)}}
+{name:"Light 23 (S4 R8)" light:{color:*(0.7 (1 1 1))} transform:{position:(11.7518 4.0 2.428)}}
+{name:"Light 24 (S4 R9)" light:{color:*(0.7 (1 1 1))} transform:{position:(5.4232 4.0 10.7046)}}
+      ]
+    }
+{name:"teapot" transform:{rotation:(-90 0 0)} surface:{model:Get("teapot") material:Get("Silver")}}
+{ name:"Set 1" transform:{ rotation:(0 0.0 0) } objects:[
+{ name:"1-1"
+  transform:{ position:(3.0 0.0 0.0) rotation:(0.0 0.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Silver") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+] }
+{ name:"1-2"
+  transform:{ position:(0.9271 0.0 2.8532) rotation:(0.0 72.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+{ name:"1-3"
+  transform:{ position:(-2.4271 0.0 1.7634) rotation:(0.0 144.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"1-4"
+  transform:{ position:(-2.4271 0.0 -1.7634) rotation:(0.0 216.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+{ name:"1-5"
+  transform:{ position:(0.9271 0.0 -2.8532) rotation:(0.0 288.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+]}
+{ name:"Set 2" transform:{ rotation:(0 0.0 0) } objects:[
+{ name:"2-1"
+  transform:{ position:(5.5 0.0 0.0) rotation:(0.0 0.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"2-2"
+  transform:{ position:(3.8891 0.0 3.8891) rotation:(0.0 45.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+{ name:"2-3"
+  transform:{ position:(0.0 0.0 5.5) rotation:(0.0 90.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+{ name:"2-4"
+  transform:{ position:(-3.8891 0.0 3.8891) rotation:(0.0 135.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Silver") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+] }
+{ name:"2-5"
+  transform:{ position:(-5.5 0.0 0.0) rotation:(0.0 180.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+{ name:"2-6"
+  transform:{ position:(-3.8891 0.0 -3.8891) rotation:(0.0 225.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"2-7"
+  transform:{ position:(-0.0 0.0 -5.5) rotation:(0.0 270.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+{ name:"2-8"
+  transform:{ position:(3.8891 0.0 -3.8891) rotation:(0.0 315.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+]}
+{ name:"Set 3" transform:{ rotation:(0 17.0 0) } objects:[
+{ name:"3-1"
+  transform:{ position:(8.0 0.0 0.0) rotation:(0.0 0.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+{ name:"3-2"
+  transform:{ position:(5.6569 0.0 5.6569) rotation:(0.0 45.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Silver") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+] }
+{ name:"3-3"
+  transform:{ position:(0.0 0.0 8.0) rotation:(0.0 90.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+{ name:"3-4"
+  transform:{ position:(-5.6569 0.0 5.6569) rotation:(0.0 135.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"3-5"
+  transform:{ position:(-8.0 0.0 0.0) rotation:(0.0 180.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+{ name:"3-6"
+  transform:{ position:(-5.6569 0.0 -5.6569) rotation:(0.0 225.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+{ name:"3-7"
+  transform:{ position:(-0.0 0.0 -8.0) rotation:(0.0 270.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Silver") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+] }
+{ name:"3-8"
+  transform:{ position:(5.6569 0.0 -5.6569) rotation:(0.0 315.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+]}
+{ name:"Set 4" transform:{ rotation:(0 -4.5 0) } objects:[
+{ name:"4-1"
+  transform:{ position:(9.0 0.0 0.0) rotation:(0.0 0.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+{ name:"4-2"
+  transform:{ position:(6.364 0.0 6.364) rotation:(0.0 45.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"4-3"
+  transform:{ position:(0.0 0.0 9.0) rotation:(0.0 90.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+{ name:"4-4"
+  transform:{ position:(-6.364 0.0 6.364) rotation:(0.0 135.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Bronze") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Bronze") } }
+] }
+{ name:"4-5"
+  transform:{ position:(-9.0 0.0 0.0) rotation:(0.0 180.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Silver") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Silver") } }
+] }
+{ name:"4-6"
+  transform:{ position:(-6.364 0.0 -6.364) rotation:(0.0 225.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Gold") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Gold") } }
+] }
+{ name:"4-7"
+  transform:{ position:(-0.0 0.0 -9.0) rotation:(0.0 270.0 0.0) scale:(0.9 0.9 0.9) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Blueish") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Blueish") } }
+] }
+{ name:"4-8"
+  transform:{ position:(6.364 0.0 -6.364) rotation:(0.0 315.0 0.0) scale:(0.8 0.8 0.8) }
+  objects:[
+  { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("Red") } }
+  { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+  { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("Red") } }
+] }
+]}
+  ]
+}

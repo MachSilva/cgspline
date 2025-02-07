@@ -30,7 +30,7 @@ fr(e) = round(e, digits=4)
 p(x,y,z) = "($(fr(x)) $(fr(y)) $(fr(z)))"
 p(v::Vec3) = p(v...)
 
-let io = open("assets/scenes/test02.dl", "w+")
+begin
   sun = spherical2xz_y(400, deg2rad(30), deg2rad(70))
   preamble =
   """
@@ -82,39 +82,89 @@ let io = open("assets/scenes/test02.dl", "w+")
   """
   materials = ["Gold","Silver","Bronze","Red","Blueish"]
 
-  print(io, preamble)
+  let io = open("assets/scenes/test02.dl", "w+")
+    print(io, preamble)
 
-  for i in 1:1
-    print(io, "{name:\"Light $i\" light:{} transform:{position:(0 10 0)}}\n")
-  end
-
-  print(io, afterlights)
-
-  print(io, "{name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Gold\")}}")
-
-  c = [5, 8, 8, 8] # count
-  r = [3, 5.5, 8, 9] # radii
-  θ = [0, 0, 17, -4.5]
-  for i in eachindex(r)
-    print(io, "{ name:\"Set $i\" transform:{ rotation:(0 $(θ[i]) 0) } objects:[\n")
-    for j in 1:c[i]
-      φ = (2π / c[i]) * (j-1)
-      a = rad2deg(φ)
-      z, x = r[i] .* sincos(φ)
-
-      name = "teacup"
-      m = materials[mod1(47j + 13i, length(materials))]
-      print(io, "{ name:\"$name $i-$j\"",
-        " transform:{ position:$(p(x,0,z)) rotation:$(p(0,a,0)) }",
-        " surface:{ model:Get(\"$name\") material:Get(\"$m\") } }\n")
+    for i in 1:1
+      print(io, "{name:\"Light $i\" light:{} transform:{position:(0 10 0)}}\n")
     end
-    print(io, "]}\n")
+
+    print(io, afterlights)
+
+    print(io, "{name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Gold\")}}")
+
+    c = [5, 8, 8, 8] # count
+    r = [3, 5.5, 8, 9] # radii
+    θ = [0, 0, 17, -4.5]
+    for i in eachindex(r)
+      print(io, "{ name:\"Set $i\" transform:{ rotation:(0 $(θ[i]) 0) } objects:[\n")
+      for j in 1:c[i]
+        φ = (2π / c[i]) * (j-1)
+        a = rad2deg(φ)
+        z, x = r[i] .* sincos(φ)
+
+        name = "teacup"
+        m = materials[mod1(47j + 13i, length(materials))]
+        print(io, "{ name:\"$name $i-$j\"",
+          " transform:{ position:$(p(x,0,z)) rotation:$(p(0,a,0)) }",
+          " surface:{ model:Get(\"$name\") material:Get(\"$m\") } }\n")
+      end
+      print(io, "]}\n")
+    end
+
+    print(io, prologue)
+    close(io)
   end
 
-  print(io, prologue)
-  close(io)
+  let io = open("assets/scenes/test03.dl", "w+")
+    print(io, preamble)
 
-  # test03
-  io = open("assets/scenes/test03.dl", "w+")
-  close(io)
+    r = collect(3:3:12) # radii
+
+    nlights = 0
+    for i in eachindex(r)
+      c = 2i + 1
+      for j in 1:c
+        φ = (2π / c) * (j-1) + 0.2j
+        z, x = r[i] .* sincos(φ)
+    
+        nlights += 1
+        print(io, "{name:\"Light $nlights (S$i R$j)\" light:{color:*(0.7 (1 1 1))} transform:{position:$(p(x,4,z))}}\n")
+      end
+    end
+
+    print(io, afterlights)
+
+    print(io, "{name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Silver\")}}\n")
+
+    c = [5, 8, 8, 8] # count
+    r = [3, 5.5, 8, 9] # radii
+    θ = [0, 0, 17, -4.5]
+    scales = Vec3[(0.9,0.9,0.9), (0.8,0.8,0.8)]
+    for i in eachindex(r)
+      print(io, "{ name:\"Set $i\" transform:{ rotation:(0 $(θ[i]) 0) } objects:[\n")
+      for j in 1:c[i]
+        φ = (2π / c[i]) * (j-1)
+        a = rad2deg(φ)
+        z, x = r[i] .* sincos(φ)
+
+        k = 29j + 13i # pseudo random-like number
+        m = materials[mod1(k, length(materials))]
+        s = scales[mod1(k, length(scales))]
+        print(io,
+        """
+        { name:"$i-$j"
+          transform:{ position:$(p(x,0,z)) rotation:$(p(0,a,0)) scale:$(p(s)) }
+          objects:[
+          { name:"teacup" transform:{} surface:{ model:Get("teacup") material:Get("$m") } }
+          { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("$m") } }
+          { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("$m") } }
+        ] }\n""")
+      end
+      print(io, "]}\n")
+    end
+
+    print(io, prologue)
+    close(io)
+  end
 end

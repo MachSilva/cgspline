@@ -39,14 +39,14 @@ void MainWindow::gui()
             .h = framebufferHeight
         };
 
-    mainMenu();
+    // mainMenu();
     assetWindow();
     hierarchyWindow();
     inspectorWindow();
     editorView();
     controlWindow();
     workbenchWindow();
-    ImGui::ShowMetricsWindow();
+    // ImGui::ShowMetricsWindow();
 }
 
 void MainWindow::cpuRayTracerStatusWindow()
@@ -263,9 +263,9 @@ void MainWindow::fileMenu()
 }
 
 inline
-void MainWindow::openSceneMenu(std::string_view label)
+void MainWindow::openSceneMenu(const char* label)
 {
-    if (ImGui::BeginMenu("Open", !_sceneFileList.empty()))
+    if (ImGui::BeginMenu(label, !_sceneFileList.empty()))
     {
         for (auto& file : _sceneFileList)
             if (ImGui::MenuItem(file.filename().string().c_str()))
@@ -433,6 +433,10 @@ void MainWindow::assetWindow()
 void MainWindow::controlWindow()
 {
     ImGui::Begin("Control Window");
+
+    openSceneMenu("Open Scene");
+    ImGui::Checkbox("Render on central node", &_state.renderOnCentralNode);
+    ImGui::Separator();
 
     auto& vp = _state.renderViewport;
     ImGui::Text("Render viewport: %dx%d", vp.w, vp.h);

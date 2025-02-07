@@ -133,7 +133,7 @@ protected:
     void workbenchWindow();
     void fileMenu();
     void mainMenu();
-    void openSceneMenu(std::string_view label);
+    void openSceneMenu(const char* label);
     void viewMenu();
     void helpMenu();
     static void inspectLight(MainWindow&, graph::LightProxy&);

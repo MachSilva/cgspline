@@ -382,7 +382,6 @@ static void parseTransform(graph::SceneObject* obj, const Dict* props)
 
 void SceneReader::createSceneObject(const Dict* props, graph::SceneObject* parent)
 {
-    // auto obj = Ref(graph::SceneObject::New(*_scene));
     auto obj = graph::SceneObject::New(*_scene);
 
     if (auto p = props->get_ptr("name"))
@@ -391,9 +390,6 @@ void SceneReader::createSceneObject(const Dict* props, graph::SceneObject* paren
         obj->setName("Object %d", ++_objectId);
 
     obj->setParent(parent);
-
-    if (auto p = props->get_ptr("transform"))
-        parseTransform(obj, p->castTo<Dict>());
 
     if (auto p = props->get_ptr("light"))
         obj->addComponent(createLight(p->castTo<Dict>()).get());
@@ -412,7 +408,9 @@ void SceneReader::createSceneObject(const Dict* props, graph::SceneObject* paren
             createSceneObject(e.castTo<Dict>(), obj);
         }
     }
-    // return obj;
+
+    if (auto p = props->get_ptr("transform"))
+        parseTransform(obj, p->castTo<Dict>());
 }
 
 Value SceneReader::readScene(const List& args)
