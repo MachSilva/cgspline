@@ -7,34 +7,34 @@ let Silver      = (0.90 0.91 0.98)
 let Black       = (0 0 0)
 let White       = (1 1 1)
 let DarkGray    = (0.025 0.025 0.025)
+let SkyBlue = (0.2422812 0.61720675 0.8307701)
+let f0 = (0.04 0.04 0.04)
 
-Texture("je_gray_park_4k" "../textures/je_gray_park_4k.hdr")
-Texture("Metal042A_BaseColor" "../textures/Metal042A_4K-JPG_Color.jpg")
+// Texture("je_gray_park_4k" "../textures/je_gray_park_4k.hdr")
+// Texture("Metal042A_BaseColor" "../textures/Metal042A_4K-JPG_Color.jpg")
 
-Material
-{
-  name:     "SilverSp"
-  diffuse:  Black
-  specular: *(0.5 Silver)
-}
+// Material
+// {
+//   name: "Metal042A"
+//   metalness: 1
+//   roughness: 0
+//   texture: Get("Metal042A_BaseColor")
+// }
 
-Material
-{
-  name: "Metal042A"
-  metalness: 1
-  roughness: 0
-  texture: Get("Metal042A_BaseColor")
-}
+Surface { name:"longwave" file:"../bezier/longwave" }
 
 Surface { name: "teacup"    file: "../bezier/teacup" }
 Surface { name: "teapot"    file: "../bezier/teapot" }
 Surface { name: "teaspoon"  file: "../bezier/teaspoon" }
 
+Material { name:"Bronze" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Bronze }
+Material { name:"Floor" metalness:0.05 roughness: 1.0 diffuse:Silver specular:Silver }
+
 Scene
 {
   environment:
   {
-    background: DarkGray
+    background: (0.9 0.9 0.9)
     ambient: DarkGray
     // texture: Get("je_gray_park_4k")
   }
@@ -51,10 +51,11 @@ Scene
       name: "Floor"
       transform:
       {
-        position: (0 -0.4 0)
-        scale: (10 0.4 10)
+        position: (0 0 0)
+        scale: (10 0.1 10)
       }
-      mesh: { name: "Box" }
+      // mesh: { name: "Box" }
+      surface: { model: Get("longwave") material:Get("Floor") }
     }
 
     {
@@ -69,44 +70,7 @@ Scene
           light:
           {
             type: "point"
-            color: White
-            falloff: 0
-          }
-        }
-        {
-          transform:
-          {
-            position: (-10 5 -5)
-          }
-          light:
-          {
-            type: "point"
-            color: White
-            falloff: 0
-          }
-        }
-        {
-          transform:
-          {
-            position: (5 5 +10)
-          }
-          light:
-          {
-            type: "point"
-            color: White
-            falloff: 0
-          }
-        }
-        {
-          transform:
-          {
-            position: (5 5 -10)
-          }
-          light:
-          {
-            type: "point"
-            color: White
-            falloff: 1
+            color: *(100 White)
           }
         }
       ]
@@ -125,7 +89,7 @@ Scene
           surface:
           {
             model: Get("teapot")
-            // material: Get("Metal042A")
+            material: Get("Bronze")
           }
         }
         {
@@ -137,21 +101,20 @@ Scene
           surface:
           {
             model: Get("teacup")
-            material: Get("SilverSp")
+            material: Get("Bronze")
           }
         }
         {
           name: "Teaspoon"
           transform:
           {
-            // position: (3.5 1 0)
             position: (3.7 0.1 0)
             rotation: (-90 0 0)
           }
           surface:
           {
             model: Get("teaspoon")
-            material: Get("SilverSp")
+            material: Get("Bronze")
           }
         }
       ]

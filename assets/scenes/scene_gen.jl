@@ -2,12 +2,12 @@ using Printf
 using StaticArrays
 
 # Bézier point gen
-#= ys = [0, 1, 0, -1, 0, 1, 0, 1]
+ys = [0, 1, 0, -1, 0, 1, 0, 1]
 for i in CartesianIndices((0:6,0:6))
   a,b = i[1]/6, i[2]/6
   y = 0.5 * (ys[1+i[1]] + ys[2+i[2]])
-  @printf("%2.6f,%2.6f,%2.6f\n", 0.5 - a, y, 0.5 - b)
-end =#
+  @printf("%2.6f,%2.6f,%2.6f\n", 1 - 2a, y, 1 - 2b)
+end
 
 const Vec2 = SVector{2,Float64}
 const Vec3 = SVector{3,Float64}
@@ -43,6 +43,7 @@ begin
   let SkyBlue = (0.2422812 0.61720675 0.8307701) // From_sRGB(135 206 235)
   let Views =
   {
+    GroundCloseB: { position:(-2 1.1 -11) rotation:(-14 -160 -0.00091) }
     GroundClose: { position:(3.5 2.8 14) rotation:(-15 16 -0.00096) }
     Up: { position:(3 2.9 3.5) rotation:(-34 20 -0.0012) }
     HighUp: { position:(10 13 13) rotation:(-40 36 -0.0012) }
@@ -50,8 +51,8 @@ begin
   Material { name:"Silver" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Silver }
   Material { name:"Gold" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Gold }
   Material { name:"Bronze" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Bronze }
-  Material { name:"Red" metalness:0.1 roughness: 0.8 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
-  Material { name:"Blueish" metalness:0.3 roughness: 0.55 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
+  Material { name:"Red" metalness:0.1 roughness: 0.9 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
+  Material { name:"Blueish" metalness:0.3 roughness: 0.9 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
   Material { name:"CeramicWhite" metalness:0.4 roughness:0.11 diffuse:(0.82 0.82 0.82) specular:(0.82 0.82 0.82) }
   Surface { name:"teacup" file:"../bezier/teacup" }
   Surface { name:"teapot" file:"../bezier/teapot" }
@@ -63,7 +64,7 @@ begin
     view:Views.HighUp
     objects:
     [
-      { name:"Floor" mesh:{name:"Box" material:Get("CeramicWhite")} transform:{position:(0 -0.1 0) scale:(20 0.1 20)} }
+      { name:"Floor" surface:{model:Get("longwave") material:Get("CeramicWhite")} transform:{position:(0 -0.1 0) scale:(20 0.1 20)} }
       {
         name:"Lights"
         objects:

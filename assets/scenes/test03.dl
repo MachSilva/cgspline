@@ -14,8 +14,8 @@ let Views =
 Material { name:"Silver" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Silver }
 Material { name:"Gold" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Gold }
 Material { name:"Bronze" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Bronze }
-Material { name:"Red" metalness:0.1 roughness: 0.8 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
-Material { name:"Blueish" metalness:0.3 roughness: 0.55 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
+Material { name:"Red" metalness:0.1 roughness: 0.9 diffuse:(0.98 0.04 0.04) specular:(0.98 0.04 0.04) }
+Material { name:"Blueish" metalness:0.3 roughness: 0.9 diffuse:(0.04 0.6 0.9) specular:(0.04 0.6 0.9) }
 Material { name:"CeramicWhite" metalness:0.4 roughness:0.11 diffuse:(0.82 0.82 0.82) specular:(0.82 0.82 0.82) }
 Surface { name:"teacup" file:"../bezier/teacup" }
 Surface { name:"teapot" file:"../bezier/teapot" }
@@ -27,7 +27,7 @@ Scene
   view:Views.HighUp
   objects:
   [
-    { name:"Floor" mesh:{name:"Box" material:Get("CeramicWhite")} transform:{position:(0 -0.1 0) scale:(20 0.1 20)} }
+    { name:"Floor" surface:{model:Get("longwave") material:Get("CeramicWhite")} transform:{position:(0 0 0) scale:(20 0.1 20)} }
     {
       name:"Lights"
       objects:
