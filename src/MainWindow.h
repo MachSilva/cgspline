@@ -60,7 +60,7 @@ public:
     {
         // bool backgroundTask = false;
         void (MainWindow::*backgroundTaskStatusWindow)() = nullptr;
-        bool renderOnCentralNode = false;
+        bool renderOnCentralNode = true;
         CursorMode cursorMode = CursorMode::Select;
         ShadingMode shadingMode = ShadingMode::CookTorrance;
         Ref<gl::Framebuffer> renderFramebuffer;
@@ -154,6 +154,7 @@ protected:
         int cooldown = 140; // cooldown time between tests (milliseconds) for cache clearing
     } _testOptions;
 
+    bool _saveImages = false;
     std::chrono::steady_clock::time_point _lastRenderStarted;
     std::string _lastRenderInfo;
     rt::ManagedPtr<rt::Frame> _heatMap;

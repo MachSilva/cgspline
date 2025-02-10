@@ -21,8 +21,8 @@ public:
     Ref<gl::Texture> environment;
     struct
     {
-        vec3f position;
-        quatf rotation;
+        vec3f position {};
+        quatf rotation {0, 0, 0, 1};
     } view;
 
 protected:

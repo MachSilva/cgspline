@@ -10,7 +10,7 @@
 #include <utils/Stopwatch.h>
 #include "RayTracer.h"
 
-#define USE_MONTECARLO_SAMPLING
+// #define USE_MONTECARLO_SAMPLING
 
 namespace cg::rt
 {

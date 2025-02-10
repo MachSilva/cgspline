@@ -2,6 +2,7 @@
 
 #include <imgui_internal.h>
 #include "Log.h"
+#include "stb_image_write.h"
 
 namespace cg
 {
@@ -130,6 +131,17 @@ void MainWindow::cudaRayTracerStatusWindow()
     ImGui::End();
 }
 
+static std::string _ImageFilename(std::string_view prefix, std::string_view ext)
+{
+    using std::chrono::system_clock;
+    auto now = system_clock::to_time_t(system_clock::now());
+    auto lt = localtime(&now);
+    return std::format("{}_{}{:02}{:02}_{:02}{:02}{:02}.{}", prefix,
+        lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
+        lt->tm_hour, lt->tm_min, lt->tm_sec,
+        ext);
+}
+
 void MainWindow::whenCPURayTracerEnds()
 {
     _workbench2D["CPU ray traced image"] = _image;
@@ -148,6 +160,16 @@ void MainWindow::whenCPURayTracerEnds()
     glTextureSubImage2D(*_image, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
         _frame->data());
     glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
+
+    if (!_saveImages)
+        return;
+
+    auto f = _ImageFilename("rt_cpu", "png");
+    int rc = stbi_write_png(f.c_str(), w, h, 4, _frame->data(), _frame->stride() * sizeof (rt::Frame::Pixel));
+    if (rc == 0)
+        log::error("Failed to write image \"{}\": {}", f, stbi_failure_reason());
+    else
+        log::info("Image written to \"{}\"", f);
 }
 
 void MainWindow::whenCUDARayTracerEnds()
@@ -191,6 +213,16 @@ void MainWindow::whenCUDARayTracerEnds()
         heatMap->data());
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
+
+    if (!_saveImages)
+        return;
+
+    auto f = _ImageFilename("rt_cuda", "png");
+    int rc = stbi_write_png(f.c_str(), w, h, 4, _frame->data(), _frame->stride() * sizeof (rt::Frame::Pixel));
+    if (rc == 0)
+        log::error("Failed to write image \"{}\": {}", f, stbi_failure_reason());
+    else
+        log::info("Image written to \"{}\"", f);
 }
 
 struct BlitFBCallbackData
@@ -461,6 +493,7 @@ void MainWindow::controlWindow()
         renderScene();
         _state.backgroundTaskStatusWindow = &MainWindow::cudaRayTracerStatusWindow;
     }
+    ImGui::Checkbox("Save image to file", &_saveImages);
 
     ImGui::SeparatorText("CPU Options");
 
@@ -469,35 +502,36 @@ void MainWindow::controlWindow()
     ImGui::DragInt("Number of Samples", &_cpuRTOptions.nSamples, 1.0f, 1, 2048);
     ImGui::DragInt("Recursion Depth", &_cpuRTOptions.recursionDepth, 1.0f, 1, 64);
 
-    ImGui::SeparatorText("Benchmark/Test (blocking)");
-
-    ImGui::DragInt("Number of tests", &_testOptions.count, 1.0f, 1, 32);
-    ImGui::DragInt("Wait time between tests (ms)",
-        &_testOptions.cooldown, 1.0f, 0, 1000);
-
-    using namespace std::chrono_literals;
-    using std::chrono::steady_clock;
-    static steady_clock::time_point lastBlock = steady_clock::now();
-
-    auto t = std::chrono::duration_cast<std::chrono::milliseconds>
-        (steady_clock::now() - lastBlock);
-
-    // Blocking tasks
-    if (ImGui::Button("Render Test CPU"))
+    if (ImGui::CollapsingHeader("Benchmark/Test (blocking)"))
     {
-        if (t > 500ms)
+        ImGui::DragInt("Number of tests", &_testOptions.count, 1.0f, 1, 32);
+        ImGui::DragInt("Wait time between tests (ms)",
+            &_testOptions.cooldown, 1.0f, 0, 1000);
+
+        using namespace std::chrono_literals;
+        using std::chrono::steady_clock;
+        static steady_clock::time_point lastBlock = steady_clock::now();
+
+        auto t = std::chrono::duration_cast<std::chrono::milliseconds>
+            (steady_clock::now() - lastBlock);
+
+        // Blocking tasks
+        if (ImGui::Button("Render Test CPU"))
         {
-            renderTestCPU();
-            lastBlock = steady_clock::now();
+            if (t > 500ms)
+            {
+                renderTestCPU();
+                lastBlock = steady_clock::now();
+            }
         }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Render Test CUDA"))
-    {
-        if (t > 500ms)
+        ImGui::SameLine();
+        if (ImGui::Button("Render Test CUDA"))
         {
-            renderTestCUDA();
-            lastBlock = steady_clock::now();
+            if (t > 500ms)
+            {
+                renderTestCUDA();
+                lastBlock = steady_clock::now();
+            }
         }
     }
 

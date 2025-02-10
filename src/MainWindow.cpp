@@ -877,16 +877,16 @@ void MainWindow::readScene(std::filesystem::path scenefile)
     auto filename = scenefile.filename().string();
     try
     {
+        auto c = editor()->camera();
+        reader.view = { .position = c->position(), .rotation = c->rotation() };
+
         reader.parse(filename, in, scenefile.parent_path());
         if (reader.scene() == nullptr)
             throw std::runtime_error("Scene is null");
         setScene(*reader.scene());
         _sceneRefs.filepath = std::move(scenefile);
-        editor()->camera()->setTransform(
-            reader.view.position,
-            reader.view.rotation
-        );
 
+        c->setTransform(reader.view.position, reader.view.rotation);
         _sceneEnvironment = reader.environment;
     }
     catch (const std::exception& e)

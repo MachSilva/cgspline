@@ -6,7 +6,7 @@
 #include "Scene.h"
 #include "../Ref.h"
 
-#define USE_MONTECARLO_SAMPLING
+// #define USE_MONTECARLO_SAMPLING
 
 namespace cg::rt
 {
