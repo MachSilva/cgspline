@@ -13,9 +13,10 @@
 namespace cg::rt
 {
 
-__managed__ RayTracer::Stats g_RTStats;
+// __managed__ RayTracer::Stats g_RTStats;
 
 __managed__ Frame* g_BezierClippingHeatMap;
+__managed__ int g_Histogram[32];
 
 using curand_state_type = curandStatePhilox4_32_10_t;
 constexpr int c_RandomGridSize = 256;
@@ -131,7 +132,11 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     uint32_t h = frame->height();
 
     g_BezierClippingHeatMap = options.heatMap;
-    g_RTStats = {};
+    // g_RTStats = {};
+
+    histogram = g_Histogram;
+    for (int i = 0; i < std::size(g_Histogram); i++)
+        g_Histogram[i] = 0;
 
     {
         Context ctx;
@@ -379,7 +384,12 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     const auto p = this->scene->objects.get<Key::ePrimitive>(object);
     const auto& m = this->scene->objects.get<Key::eMaterial>(object);
     const auto& M_1 = this->scene->objects.get<Key::eWorld2LocalMatrix>(object);
+    const auto diffuse = (1 - m.metalness) * BRDF_diffuse(m);
+#ifdef USE_MONTECARLO_SAMPLING
     vec3 color {0};
+#else
+    vec3 color {this->scene->ambientLight * diffuse};
+#endif
 
     // From the point to the camera; BRDF uses this vector orientation.
     vec3 V = - payload.ray.direction;
@@ -436,11 +446,7 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
         float dotHL = H.dot(L);
 
         I = lightColor(d, lights[i]);
-        color += I * mix(
-            BRDF_diffuse(m),
-            BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular),
-            m.metalness
-        );
+        color += I * dotNL * (diffuse + m.metalness * BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular));
     }
 
     payload.color += color * std::numbers::pi_v<float> * payload.attenuation;
@@ -503,12 +509,8 @@ bool Context::closestHit(const Intersection& hit, RayPayload& payload, uint32_t 
     vec3 reflectance = schlick(m.specular, dotNV);
     vec3 R = reflect(-V, N, -dotNV);
 
-    float g = G(dotNV, dotNV, m.roughness) * dotNV;
-    vec3 brdf = mix(
-        BRDF_diffuse(m),
-        vec3(reflectance * g),
-        m.metalness
-    ) * (1 - squared(m.roughness));
+    float g = G(dotNV, dotNV, m.roughness);
+    vec3 brdf = dotNV * (diffuse + m.metalness * vec3(reflectance * g)) * squared(1 - m.roughness);
     vec3 a = payload.attenuation * brdf;
     if (a.max() <= c_MinRadiance)
         return false;

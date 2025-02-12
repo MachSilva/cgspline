@@ -155,6 +155,8 @@ void MainWindow::beginInitialize()
             }
         }
 
+    std::sort(_sceneFileList.begin(), _sceneFileList.end());
+
     // _sceneMaterials = Assets::materials();
     // _sceneMeshes = Assets::meshes();
 
@@ -366,6 +368,7 @@ void MainWindow::convertScene()
     auto objCount = _scene->actorCount();
     _rtScene = std::make_unique<rt::Scene>(objCount, memoryResource);
     _rtScene->backgroundColor = vec3(_scene->backgroundColor);
+    _rtScene->ambientLight = vec3(_scene->ambientLight);
 
     auto& lights = _rtScene->lights;
     lights.clear();
@@ -429,10 +432,10 @@ void MainWindow::convertScene()
         {
             .diffuse = vec3(m->diffuse),
             .specular = vec3(m->specular),
-            .transparency = vec3(m->transparency),
+            // .transparency = vec3(m->transparency),
             .metalness = m->metalness,
             .roughness = m->roughness,
-            .refractiveIndex = m->ior,
+            // .refractiveIndex = m->ior,
         };
 
         if (auto p = dynamic_cast<TriangleMeshMapper*>(mapper))

@@ -61,11 +61,11 @@ public:
     Options options;
     cudaEvent_t started, finished;
 
+    int* histogram = nullptr;
+
 private:
     Context* _ctx {nullptr};
     void* _pRandomStates {nullptr};
 };
-
-extern __managed__ RayTracer::Stats g_RTStats;
 
 } // namespace cg::rt

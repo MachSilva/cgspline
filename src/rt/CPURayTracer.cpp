@@ -294,7 +294,12 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     const auto p = _scene->objects.get<Key::ePrimitive>(object);
     const auto& m = _scene->objects.get<Key::eMaterial>(object);
     const auto& M_1 = _scene->objects.get<Key::eWorld2LocalMatrix>(object);
+    const auto diffuse = (1 - m.metalness) * BRDF_diffuse(m); // precalc
+#ifdef USE_MONTECARLO_SAMPLING
     vec3 color {0};
+#else
+    vec3 color {_scene->ambientLight * diffuse};
+#endif
 
     // From the point to the camera; BRDF uses this vector orientation.
     vec3 V = - ray.direction;
@@ -337,11 +342,7 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
         float dotHL = H.dot(L);
 
         I = lightColor(d, lights[i]);
-        color += I * mix(
-            BRDF_diffuse(m),
-            BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular),
-            m.metalness
-        );
+        color += I * dotNL * (diffuse + m.metalness * BRDF_specular(dotHL, dotHN, dotNV, dotNL, m.roughness, m.specular));
     }
 
     color *= std::numbers::pi_v<float> * attenuation;
@@ -407,12 +408,8 @@ vec3 CPURayTracer::closestHit(const Intersection& hit, const Ray& ray,
     vec3 reflectance = schlick(m.specular, dotNV);
     vec3 R = reflect(-V, N, -dotNV);
 
-    float g = G(dotNV, dotNV, m.roughness) * dotNV;
-    vec3 brdf = mix(
-        BRDF_diffuse(m),
-        vec3(reflectance * g),
-        m.metalness
-    ) * (1 - squared(m.roughness));
+    float g = G(dotNV, dotNV, m.roughness);
+    vec3 brdf = dotNV * (diffuse + m.metalness * vec3(reflectance * g)) * squared(1 - m.roughness);
     vec3 a = attenuation * brdf;
     if (a.max() > c_MinRadiance)
     {

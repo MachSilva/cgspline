@@ -84,14 +84,14 @@ struct Material
     // f0 reflectance for use with Schlick's approximation
     // (derived from refractive indices for each component)
     vec3 specular;
-    vec3 transparency;
+    // vec3 transparency;
     float metalness; // [0,1]
     float roughness; // [0,1]
     // Refractive index for computing refraction angle.
     // In real life, the refractive index is defined per wavelength and defines
     // the color appearance of the object, making the field "specular"
     // unnecessary.
-    float refractiveIndex;
+    // float refractiveIndex;
 };
 
 struct Scene
@@ -116,6 +116,7 @@ struct Scene
     Array<BVH> bvhs {};
     BVH topLevelBVH {};
     vec3 backgroundColor {0.1f, 0.1f, 0.1f};
+    vec3 ambientLight {0.1f, 0.1f, 0.1f};
 
     Scene() = default;
     Scene(uint32_t capacity, std::pmr::memory_resource* mr)
