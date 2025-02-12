@@ -2,12 +2,26 @@ using Printf
 using StaticArrays
 
 # Bézier point gen
-ys = [0, 1, 0, -1, 0, 1, 0, 1]
+#= ys = [0, 1, 0, -1, 0, 1, 0, 1]
 for i in CartesianIndices((0:6,0:6))
   a,b = i[1]/6, i[2]/6
   y = 0.5 * (ys[1+i[1]] + ys[2+i[2]])
   @printf("%2.6f,%2.6f,%2.6f\n", 1 - 2a, y, 1 - 2b)
-end
+end =#
+
+#= let
+  # xs = [-1, -0.4, 0.4, 1]
+  # ys = [0, 1, 2, 3]
+  # zs = [0, 1, 1, 0]
+  xs = collect(range(-1, 1, length=7))
+  ys = [0, 1, 2, 3]
+  zs = repeat([0, 1], 4)
+  for I in CartesianIndices((4:7,1:4))
+    i, j = Tuple(I)
+    x, y, z = xs[i], ys[j], zs[i]
+    println("$x,$y,$z")
+  end
+end =#
 
 const Vec2 = SVector{2,Float64}
 const Vec3 = SVector{3,Float64}
@@ -30,14 +44,14 @@ fr(e) = round(e, digits=4)
 p(x,y,z) = "($(fr(x)) $(fr(y)) $(fr(z)))"
 p(v::Vec3) = p(v...)
 
-begin
+function gen_test(nsets)
   sun = spherical2xz_y(400, deg2rad(30), deg2rad(70))
   preamble =
   """
   let f0 = (0.04 0.04 0.04)
-  let Gold = (0.8 0.498039 0.196078)
-  let Copper = (0.72 0.45 0.20)
-  let Bronze = (0.55 0.47 0.14)
+  let Bronze      = (0.8  0.498039    0.196078)
+  let Copper      = (0.72 0.45 0.20)
+  let Gold        = (0.55 0.47 0.14)
   let Silver = (0.90 0.91 0.98)
   let DarkGray = (0.025 0.025 0.025)
   let SkyBlue = (0.2422812 0.61720675 0.8307701) // From_sRGB(135 206 235)
@@ -83,68 +97,45 @@ begin
   """
   materials = ["Gold","Silver","Bronze","Red","Blueish"]
 
-  let io = open("assets/scenes/test02.dl", "w+")
+  initialobjs = 1 + 1 # floor and central teapot
+  # nsets = 34
+  objcount = initialobjs + 3nsets
+  let io = open("assets/scenes/Test$objcount.dl", "w+")
     print(io, preamble)
 
-    for i in 1:1
-      print(io, "{name:\"Light $i\" light:{} transform:{position:(0 10 0)}}\n")
-    end
-
-    print(io, afterlights)
-
-    print(io, "{name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Gold\")}}")
-
-    c = [5, 8, 8, 8] # count
-    r = [3, 5.5, 8, 9] # radii
-    θ = [0, 0, 17, -4.5]
-    for i in eachindex(r)
-      print(io, "{ name:\"Set $i\" transform:{ rotation:(0 $(θ[i]) 0) } objects:[\n")
-      for j in 1:c[i]
-        φ = (2π / c[i]) * (j-1)
-        a = rad2deg(φ)
-        z, x = r[i] .* sincos(φ)
-
-        name = "teacup"
-        m = materials[mod1(47j + 13i, length(materials))]
-        print(io, "{ name:\"$name $i-$j\"",
-          " transform:{ position:$(p(x,0,z)) rotation:$(p(0,a,0)) }",
-          " surface:{ model:Get(\"$name\") material:Get(\"$m\") } }\n")
-      end
-      print(io, "]}\n")
-    end
-
-    print(io, prologue)
-    close(io)
-  end
-
-  let io = open("assets/scenes/test03.dl", "w+")
-    print(io, preamble)
-
-    r = collect(3:3:12) # radii
-
-    nlights = 0
-    for i in eachindex(r)
-      c = 2i + 1
+    nlights = nsets
+    layer = 0
+    i = 0
+    while i < nlights
+      layer += 1
+      c = 3layer
       for j in 1:c
+        i ≥ nlights && break
+
         φ = (2π / c) * (j-1) + 0.2j
-        z, x = r[i] .* sincos(φ)
+        z, x = c .* sincos(φ)
     
-        nlights += 1
-        print(io, "{name:\"Light $nlights (S$i R$j)\" light:{color:*(0.7 (1 1 1))} transform:{position:$(p(x,4,z))}}\n")
+        i += 1
+        print(io, "{name:\"Light $i (S$layer R$j)\" light:{color:*(0.7 (1 1 1))} transform:{position:$(p(x,4,z))}}\n")
       end
     end
+    println("light count = $(i+1)") # plus sun
 
     print(io, afterlights)
 
-    print(io, "{name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Silver\")}}\n")
+    print(io, "{ name:\"teapot\" transform:{rotation:(-90 0 0)} surface:{model:Get(\"teapot\") material:Get(\"Silver\")} }\n")
 
-    c = [5, 8, 8, 8] # count
-    r = [3, 5.5, 8, 9] # radii
-    θ = [0, 0, 17, -4.5]
+    c = [5, 8, 8, 10, 12, 14, 17] # layer object count
+    r = [3, 5.5, 8, 10, 12, 14] # layers radii
+    θ = [0, 0, 17, -4.5, -17, 34, -34] # layer start offsets
     scales = Vec3[(0.9,0.9,0.9), (0.8,0.8,0.8)]
-    for i in eachindex(r)
+    n = 0
+    i = 1 # layer
+    while n < nsets
       print(io, "{ name:\"Set $i\" transform:{ rotation:(0 $(θ[i]) 0) } objects:[\n")
       for j in 1:c[i]
+        # println("n=$n, i=$i, j=$j")
+        n ≥ nsets && break
         φ = (2π / c[i]) * (j-1)
         a = rad2deg(φ)
         z, x = r[i] .* sincos(φ)
@@ -161,11 +152,16 @@ begin
           { name:"teaspoon-l" transform:{ position:(0 0.09 1.6) rotation:(-85 40 60) } surface:{ model:Get("teaspoon") material:Get("$m") } }
           { name:"teaspoon-r" transform:{ position:(1.2 0.09 -0.5) rotation:(-85 40 180) } surface:{ model:Get("teaspoon") material:Get("$m") } }
         ] }\n""")
+        n += 1
       end
       print(io, "]}\n")
+      i += 1
     end
-
+    
     print(io, prologue)
     close(io)
+    println("n sets = $n, objcount = $objcount")
   end
 end
+
+gen_test.(10:8:48)
