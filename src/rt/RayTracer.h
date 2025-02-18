@@ -5,18 +5,10 @@
 #include "Frame.h"
 #include "Scene.h"
 #include "../Ref.h"
-
-// #define USE_MONTECARLO_SAMPLING
+#include "StaticConfig.h"
 
 namespace cg::rt
 {
-
-enum struct Counter
-{
-    Threads = 0,
-    Rays = 1,
-    ShadowRays,
-};
 
 class RayTracer : public SharedObject
 {
@@ -61,7 +53,18 @@ public:
     Options options;
     cudaEvent_t started, finished;
 
-    int* histogram = nullptr;
+    union Counters
+    {
+        int _data[128];
+        struct
+        {
+            int lightrays, shadowrays;
+            int depthHistogram[32];
+            int iterationHistogram[64];
+        };
+    };
+
+    Counters* counters = nullptr;
 
 private:
     Context* _ctx {nullptr};

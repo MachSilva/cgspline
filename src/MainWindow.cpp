@@ -524,8 +524,8 @@ void MainWindow::renderTestCPU()
 
     auto n = _testOptions.count;
     auto out = std::ostream_iterator<char>(std::cout);
-    std::format_to(out, "CPU ray tracing ({},{}) - {} tests - {} threads\n",
-        v.w, v.h, n, _cpuRTOptions.threads);
+    std::format_to(out, "CPU ray tracing ({},{}) - {} runs - {} threads - Scene `{}`\n",
+        v.w, v.h, n, _cpuRTOptions.threads, _sceneRefs.filepath.filename().string());
 
     for (int i = 0; i < n; i++)
     {
@@ -546,8 +546,9 @@ void MainWindow::renderTestCPU()
         std::chrono::duration<double,std::milli>
             duration = s->finished - s->started;
         auto total = s->rays + s->shadowRays;
-        std::format_to(out, ":: {}, {} rays, {} shadow rays, total={}\n",
-            duration, s->rays.load(), s->shadowRays.load(), total);
+        // std::format_to(out, ":: {}, {} rays, {} shadow rays, total={}\n",
+        //     duration, s->rays.load(), s->shadowRays.load(), total);
+        std::format_to(out, ":: {}, total rays={}\n", duration.count(),total);
     }
 }
 
@@ -567,7 +568,8 @@ void MainWindow::renderTestCUDA()
 
     auto n = _testOptions.count;
     auto out = std::ostream_iterator<char>(std::cout);
-    std::format_to(out, "CUDA ray tracing ({},{}) - {} tests\n", v.w, v.h, n);
+    std::format_to(out, "CUDA ray tracing ({},{}) - {} runs - Scene `{}`\n",
+        v.w, v.h, n, _sceneRefs.filepath.filename().string());
 
     for (int i = 0; i < n; i++)
     {
@@ -591,7 +593,7 @@ void MainWindow::renderTestCUDA()
         CUDA_CHECK(cudaEventElapsedTime(&elapsed, _rayTracer->started,
             _rayTracer->finished));
 
-        std::format_to(out, ":: {}ms\n", elapsed);
+        std::format_to(out, ":: {}\n", elapsed);
     }
 }
 

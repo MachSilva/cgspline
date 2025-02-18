@@ -13,10 +13,12 @@
 namespace cg::rt
 {
 
-// __managed__ RayTracer::Stats g_RTStats;
-
 __managed__ Frame* g_BezierClippingHeatMap;
-__managed__ int g_Histogram[32];
+__managed__ int g_Counters[128];
+
+#ifdef RT_ENABLE_COUNTERS
+__shared__ int s_Counters[128];
+#endif
 
 using curand_state_type = curandStatePhilox4_32_10_t;
 constexpr int c_RandomGridSize = 256;
@@ -132,11 +134,9 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
     uint32_t h = frame->height();
 
     g_BezierClippingHeatMap = options.heatMap;
-    // g_RTStats = {};
-
-    histogram = g_Histogram;
-    for (int i = 0; i < std::size(g_Histogram); i++)
-        g_Histogram[i] = 0;
+    counters = (Counters*)g_Counters;
+    for (auto &c : g_Counters)
+        c = 0;
 
     {
         Context ctx;
@@ -168,7 +168,7 @@ void RayTracer::render(Frame* frame, const Camera* camera, const Scene* scene,
             cudaMemcpyHostToDevice, stream));
     }
 
-    constexpr dim3 threadsPerBlock (8, 16);
+    constexpr dim3 threadsPerBlock (8, 8);
     dim3 blocksPerGrid
     {
         (w / threadsPerBlock.x) + (w % threadsPerBlock.x ? 1 : 0),
@@ -191,7 +191,7 @@ void random_state_init(curand_state_type* p)
     curand_init(42, k, 0, p+k);
 }
 
-__global__ //__launch_bounds__(64)
+__global__ __launch_bounds__(64)
 void render(Context* ctx)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -199,7 +199,12 @@ void render(Context* ctx)
     if (i >= ctx->frame->width() || j >= ctx->frame->height())
         return;
 
-    // __prof_trigger((int)Counter::Threads);
+#ifdef RT_ENABLE_COUNTERS
+    if (auto k = threadIdx.x + blockDim.x*threadIdx.y;
+        k < cuda::std::size(s_Counters))
+        s_Counters[k] = 0;
+    __syncthreads();
+#endif
 
     RayPayload payload;
     payload.color = vec3(0);
@@ -259,6 +264,13 @@ void render(Context* ctx)
     c.y = __saturatef(c.y);
     c.z = __saturatef(c.z);
     ctx->frame->at(i, j) = pack_sRGB(c.x, c.y, c.z);
+
+#ifdef RT_ENABLE_COUNTERS
+    __syncthreads();
+    if (auto k = threadIdx.x + blockDim.x*threadIdx.y;
+        k < cuda::std::size(s_Counters))
+        atomicAdd(&g_Counters[k], s_Counters[k]);
+#endif
 }
 
 __device__
@@ -329,7 +341,9 @@ int Context::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
-    // __prof_trigger((int)Counter::Rays);
+#ifdef RT_ENABLE_COUNTERS
+    atomicAdd(s_Counters+0, 1);
+#endif
     this->scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
@@ -362,7 +376,9 @@ bool Context::intersect(const Ray& ray0) const
             __builtin_unreachable();
         }
     };
-    // __prof_trigger((int)Counter::ShadowRays);
+#ifdef RT_ENABLE_COUNTERS
+    atomicAdd(s_Counters+1, 1);
+#endif
     return this->scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 

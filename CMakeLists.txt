@@ -38,7 +38,8 @@ add_executable(cgspline
     src/RayTracer.cpp
     # src/SceneReaderExt.cpp
     src/Spline_BezierClipping.cu
-    src/Spline_Subdivision.cpp
+    # src/Spline_Subdivision.cpp
+    src/Spline_Subdivision.cu
     src/Spline.cu
     src/SplRenderer.cpp
     src/Texture.cpp
@@ -72,7 +73,7 @@ elseif(${CMAKE_BUILD_TYPE} MATCHES "RelWithDebInfo")
     >)
 else()
     target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-        -lineinfo -rdc=true -maxrregcount=168
+        -rdc=true -maxrregcount=168
         --generate-code arch=compute_75,code=lto_75
         -Xptxas=-v -Xnvlink=-dlto
     >)
@@ -81,6 +82,8 @@ endif()
 if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Release")
     target_compile_definitions(cgspline PRIVATE CG_GL_DEBUG)
 endif()
+
+target_compile_options(cgspline PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 
 target_link_libraries(cgspline cgcuda stb)
 

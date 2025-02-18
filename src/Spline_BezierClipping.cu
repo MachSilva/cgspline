@@ -6,9 +6,8 @@
 #include <cuda/std/limits>
 #include <cuda/std/utility>
 #include "rt/Frame.h"
+#include "rt/StaticConfig.h"
 #include "SplineMat.h"
-
-// #define SPL_BC_HEATMAP
 
 namespace cg::rt
 {
@@ -541,7 +540,6 @@ bool doBezierClipping2D_host(std::predicate<vec2> auto onHit,
     return found;
 }
 
-
 constexpr DEVICE
 void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
 {
@@ -573,12 +571,10 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 
 #ifdef SPL_BC_HEATMAP
     int maxDepth = 1; // we already start with one element
+    int iterations = 0;
 #endif
-    // bool spilled = false;
     bool found = false;
     int cutsideStack = 0;
-    // State localStack[32];
-    // ArrayAdaptor<State> S (localStack, 32); // a stack
     ArrayAdaptor<State> S ((State*)alloca(32 * sizeof (State)), 32); // a stack
 
     S.push_back({ .min = {0,0}, .max = {1,1} });
@@ -594,6 +590,9 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 
     do
     {
+#ifdef SPL_BC_HEATMAP
+        iterations++;
+#endif
         auto &e = S.back();
         const vec2 csize = e.max - e.min;
         const bool cutside = cutsideStack & 1;
@@ -701,23 +700,14 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
             }
         }
 
-        // TODO Improve this step
-        if (lower <= upper)
-        { // preventing the algorithm from creating long and narrow subpatches
-            constexpr float minspan = 0.01f;
-            auto mid = 0.5f * (lower + upper);
-            if (upper - lower < minspan)
-            {
-                lower = fmax(0.0f, mid - 0.5f * minspan);
-                upper = fmin(1.0f, mid + 0.5f * minspan);
-            }
-        }
-
-        float delta = upper - lower;
-        __builtin_assume (delta <= 1.0f);
         __builtin_assume (lower >= 0.0f);
         __builtin_assume (upper <= 1.0f);
+                
+        // preventing the algorithm from creating long and narrow subpatches
+        lower = lower * 0x0FFp-8f;
+        upper = upper * 0x101p-8f;
 
+        float delta = upper - lower;
         if (delta < 0)
         { // no intersection
             cutsideStack >>= 1;
@@ -741,7 +731,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 // e.min.x = e.min.x;
                 cutsideStack <<= 1;
                 cutsideStack |= 3;
-                // subpatchU(buffer2, 0.0, 0.5);
+                // subpatchU(buffer, 0.0f, 0.5f);
                 subpatchU(buffer, 0.5f, 1.0f);
             }
             else // Side::eV
@@ -754,7 +744,7 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 // e.min.y = e.min.y;
                 cutsideStack <<= 1;
                 cutsideStack &= ~3;
-                // subpatchV(buffer2, 0.0, 0.5);
+                // subpatchV(buffer, 0.0f, 0.5f);
                 subpatchV(buffer, 0.5f, 1.0f);
             }
             // if (__builtin_expect (S.size() >= S.capacity() && !spilled, 0))
@@ -770,7 +760,8 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
             S.push_back(s1);
 
 #ifdef SPL_BC_HEATMAP
-            maxDepth = std::max(maxDepth, (int) S.size());         
+            if (int n = S.size(); maxDepth < n)
+                maxDepth = n;
 #endif
         }
         else
@@ -799,11 +790,19 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
     while (!S.empty());
 
 #ifdef SPL_BC_HEATMAP
-    if (auto m = rt::g_BezierClippingHeatMap)
     {
-        auto i = blockIdx.x * blockDim.x + threadIdx.x;
-        auto j = blockIdx.y * blockDim.y + threadIdx.y;
-        m->at(i, j) = std::max(m->at(i, j), (uint32_t) maxDepth);
+        int d = maxDepth-1;
+        atomicAdd(&rt::s_Counters[d+2], 1);
+        iterations = min(63, iterations-1);
+        atomicAdd(rt::s_Counters+34+iterations, 1);
+
+        if (auto m = rt::g_BezierClippingHeatMap)
+        {
+            auto i = blockIdx.x * blockDim.x + threadIdx.x;
+            auto j = blockIdx.y * blockDim.y + threadIdx.y;
+            if (m->at(i, j) < d)
+                m->at(i, j) = d;
+        }
     }
 #endif
 

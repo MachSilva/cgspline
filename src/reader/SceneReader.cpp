@@ -68,6 +68,10 @@ Value SceneReader::createMaterial(const List& args)
 
     insertAsset(m->name(), m);
 
+    if (auto p = props->get_ptr("ambient"))
+    {
+        m->ambient = p->getColor();
+    }
     if (auto p = props->get_ptr("diffuse"))
     {
         m->diffuse = p->getColor();

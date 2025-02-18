@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <fstream>
 #include <imgui_internal.h>
 #include "Log.h"
 #include "stb_image_write.h"
@@ -164,7 +165,8 @@ void MainWindow::whenCPURayTracerEnds()
     if (!_saveImages)
         return;
 
-    auto f = _ImageFilename("rt_cpu", "png");
+    auto stem = _sceneRefs.filepath.stem().string() + "_rt_cpu";
+    auto f = _ImageFilename(stem, "png");
     int rc = stbi_write_png(f.c_str(), w, h, 4, _frame->data(), _frame->stride() * sizeof (rt::Frame::Pixel));
     if (rc == 0)
         log::error("Failed to write image \"{}\": {}", f, stbi_failure_reason());
@@ -202,6 +204,33 @@ void MainWindow::whenCUDARayTracerEnds()
     Ref<gl::Texture> tex = new gl::Texture(gl::Format::sRGB, w, h);
     _workbench2D["Bezier Clipping Heat Map"] = tex;
 
+#ifdef RT_ENABLE_COUNTERS
+    {
+        std::fstream io ("clipping_stats.raw", std::ios::binary | std::ios::trunc | std::ios::out);
+        int s = heatMap->stride();
+        io << ".raw";
+        io.write((char*)&w, 4);
+        io.write((char*)&h, 4);
+        io.write((char*)&s, 4);
+        io.write((char*)heatMap->data(), heatMap->size_bytes());
+        io.close();
+    }
+
+    auto counters = _rayTracer->counters;
+    std::cout << "Rays traced: " << (counters->lightrays + counters->shadowrays)
+        << "\nDepth histogram: [";
+    for (int i = 0; i < 32; i++)
+    {
+        std::cout << counters->depthHistogram[i] << ',';
+    }
+    std::cout << "]\nIteration histogram: [";
+    for (int i = 0; i < 64; i++)
+    {
+        std::cout << counters->iterationHistogram[i] << ',';
+    }
+    std::cout << "]\n";
+#endif
+
     // Convert counters to colors
     for (auto i = 0U; i < heatMap->size(); i++)
     {
@@ -217,7 +246,8 @@ void MainWindow::whenCUDARayTracerEnds()
     if (!_saveImages)
         return;
 
-    auto f = _ImageFilename("rt_cuda", "png");
+    auto stem = _sceneRefs.filepath.stem().string() + "_rt_cuda";
+    auto f = _ImageFilename(stem, "png");
     int rc = stbi_write_png(f.c_str(), w, h, 4, _frame->data(), _frame->stride() * sizeof (rt::Frame::Pixel));
     if (rc == 0)
         log::error("Failed to write image \"{}\": {}", f, stbi_failure_reason());

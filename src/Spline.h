@@ -499,6 +499,14 @@ bool doSubdivision(Intersection& hit,
     const uint32_t patch[16],
     float threshold = 0x1p-4f);
 
+
+DEVICE
+bool doSubdivision_device(Intersection& hit,
+    const Ray3f& ray,
+    const vec4 buffer[],
+    const uint32_t patch[16],
+    float tol = 0x1p-12f);
+
 /**
  * Generic (template) definitions that deals with higher and arbitrary
  * surface degrees.
