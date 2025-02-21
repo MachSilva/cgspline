@@ -252,7 +252,7 @@ int CPURayTracer::intersect(Intersection& hit0, const Ray& ray0) const
         }
         return false;
     };
-    _status.rays.fetch_add(1, std::memory_order_relaxed);
+    // _status.rays.fetch_add(1, std::memory_order_relaxed);
     _scene->topLevelBVH.hashIntersect(hit0, ray0, fn);
     return nearestObject;
 }
@@ -274,7 +274,7 @@ bool CPURayTracer::intersect(const Ray& ray0) const
         localRay.direction *= d;
         return p->intersect(localRay);
     };
-    _status.shadowRays.fetch_add(1, std::memory_order_relaxed);
+    // _status.shadowRays.fetch_add(1, std::memory_order_relaxed);
     return _scene->topLevelBVH.hashIntersect(ray0, fn);
 }
 

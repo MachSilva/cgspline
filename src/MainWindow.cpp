@@ -545,10 +545,10 @@ void MainWindow::renderTestCPU()
 
         std::chrono::duration<double,std::milli>
             duration = s->finished - s->started;
-        auto total = s->rays + s->shadowRays;
+        // auto total = s->rays + s->shadowRays;
         // std::format_to(out, ":: {}, {} rays, {} shadow rays, total={}\n",
         //     duration, s->rays.load(), s->shadowRays.load(), total);
-        std::format_to(out, ":: {}, total rays={}\n", duration.count(),total);
+        std::format_to(out, ":: {}\n", duration.count());
     }
 }
 

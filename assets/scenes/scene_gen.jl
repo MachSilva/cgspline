@@ -57,10 +57,10 @@ function gen_test(nsets)
   let SkyBlue = (0.2422812 0.61720675 0.8307701) // From_sRGB(135 206 235)
   let Views =
   {
-    GroundCloseB: { position:(-2 1.1 -11) rotation:(-14 -160 -0.00091) }
     GroundClose: { position:(3.5 2.8 14) rotation:(-15 16 -0.00096) }
     Up: { position:(3 2.9 3.5) rotation:(-34 20 -0.0012) }
     HighUp: { position:(10 13 13) rotation:(-40 36 -0.0012) }
+    CameraB: { position:(4.2 1.9 -1.6) rotation:(-20 120 -0.001) }
   }
   Material { name:"Silver" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Silver }
   Material { name:"Gold" metalness:0.99 roughness: 0.01 diffuse:f0 specular:Gold }
@@ -164,4 +164,4 @@ function gen_test(nsets)
   end
 end
 
-gen_test.(10:8:48)
+gen_test.(10:8:54)

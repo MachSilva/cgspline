@@ -162,7 +162,7 @@ protected:
     Ref<rt::Frame> _frame;
     Ref<rt::RayTracer> _rayTracer;
     Ref<rt::CPURayTracer> _cpuRayTracer;
-    rt::CPURayTracer::Options _cpuRTOptions { .threads = 4 };
+    rt::CPURayTracer::Options _cpuRTOptions {};
     std::unique_ptr<rt::Scene> _rtScene;
     rt::Camera _rtCamera;
 
