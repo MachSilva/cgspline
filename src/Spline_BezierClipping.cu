@@ -145,9 +145,9 @@ bool doBezierClipping(Intersection& hit,
 
 /**
  * @brief Find where does the x-axis intersects with points @a A and @a B
- *        and store the result in @a s.
+ *        and store the result in @a result.
  * 
- * @note If A.x <= B.x then s.x <= s.y.
+ * @note result.x <= result.y.
  * @param result The range of the intersection relative to the x-axis.
  * @param A Point A
  * @param B Point B
@@ -178,7 +178,8 @@ bool xAxisIntersection(vec2& result, const vec2 A, const vec2 B)
     }
     else if (fabs(A.y) <= eps)
     {
-        result = {A.x, B.x};
+        result = {fmin(A.x, B.x), fmax(A.x, B.x)};
+        // result = 0.5f*A.x + 0.5f*B.x;
         return true;
     }
     return false;
@@ -426,11 +427,8 @@ bool doBezierClipping2D_host(std::predicate<vec2> auto onHit,
         {
             vec2 A = hull[i-1];
             vec2 B = hull[i];
-            vec2 s;
-            if (xAxisIntersection(s, A, B))
+            if (vec2 s; xAxisIntersection(s, A, B))
             {
-                if (s.x > s.y)
-                    std::swap(s.x, s.y);
                 lower = fmin(lower, s.x);
                 upper = fmax(upper, s.y);
             }
@@ -784,8 +782,8 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                         if (vec2 s; xAxisIntersection(s, P1, P2))
                         {
                             // so far, performed better than plain ifs
-                            lower = fmin(lower, fmin(s.x, s.y));
-                            upper = fmax(upper, fmax(s.x, s.y));
+                            lower = fmin(lower, s.x);
+                            upper = fmax(upper, s.y);
                         }
                         P1 = P2;
                     }
@@ -793,8 +791,8 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
                 }
                 if (vec2 s; xAxisIntersection(s, P1, P2))
                 {
-                    lower = fmin(lower, fmin(s.x, s.y));
-                    upper = fmax(upper, fmax(s.x, s.y));
+                    lower = fmin(lower, s.x);
+                    upper = fmax(upper, s.y);
                 }
             }
 
