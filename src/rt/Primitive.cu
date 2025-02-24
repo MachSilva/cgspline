@@ -230,11 +230,11 @@ HOST DEVICE bool intersect(const BezierSurface& s, Intersection& hit0, const Ray
         anotherRay.tMin = 1;
         anotherRay.tMax = ray.max;
         const uint32_t* patch = s.indices + 16*index;
-#ifdef __CUDA_ARCH__
-        if (spline::doSubdivision_device(anotherHit, anotherRay, s.vertices, patch))
-#else
-        if (spline::doSubdivision(anotherHit, anotherRay, s.vertices, patch))
-#endif
+// #ifdef __CUDA_ARCH__
+        if (spline::doBezierClipping(anotherHit, anotherRay, s.vertices, patch))
+// #else
+//         if (spline::doSubdivision(anotherHit, anotherRay, s.vertices, patch))
+// #endif
         {
             hit.index = index;
             hit.object = &s;
@@ -256,13 +256,13 @@ HOST DEVICE bool intersect(const BezierSurface& s, const Ray& ray0)
         anotherRay.tMin = 1;
         anotherRay.tMax = ray.max;
         const uint32_t* patch = s.indices + 16*index;
-#ifdef __CUDA_ARCH__
-        return spline::doSubdivision_device(
+// #ifdef __CUDA_ARCH__
+        return spline::doBezierClipping(
             anotherHit, anotherRay, s.vertices, patch);
-#else
-        return spline::doSubdivision(
-            anotherHit, anotherRay, s.vertices, patch);
-#endif
+// #else
+//         return spline::doSubdivision(
+//             anotherHit, anotherRay, s.vertices, patch);
+// #endif
     };
     return s.bvh->hashIntersect(ray0, fn);
 }

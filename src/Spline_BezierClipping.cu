@@ -550,6 +550,106 @@ void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
     mat::subpatchV(q, cmin.y, cmax.y);
 }
 
+static_assert(numeric_limits<float>::is_iec559);
+
+_SPL_CONSTEXPR
+uint8_t get_f32_biased_exp(float f) noexcept
+{
+    auto k = reinterpret_cast<uint32_t&>(f);
+    return uint8_t(k >> 23);
+}
+
+/**
+ * Positive interval in an uint16_t
+ * 
+ * Bits [0-4]: interval length float (no sign)
+ * - [0-4] exponent, bias = 31 (no nans, no infinities)
+ *   - uint 0 => zero
+ *   - uint 1 to 31 => 2^-30 to 2^0
+ * Bits [5-15]: interval mid point, 11 bits
+ * - normalized unsigned integer: 0x0 to 0x0800 => 0.0 to 1.0
+ */
+_SPL_CONSTEXPR
+uint16_t range16_from_midpoint(float midpoint, float length) noexcept
+{
+    auto e = (uint16_t)get_f32_biased_exp(length);
+    if (e != 0)
+        e += 31 - 127;
+
+    uint16_t m = round(midpoint * 0x0400);
+    return (m << 5) | e & 0x1F;
+}
+
+_SPL_CONSTEXPR
+void range16_extract(uint16_t value, float& midpoint, float& length) noexcept
+{
+    if (auto e = value & 0x1F; e == 0)
+        length = 0;
+    else
+        length = exp2f(e - 31);
+
+    midpoint = 0x1p-11f * (value >> 5);
+}
+
+/**
+ * Positive interval in an uint16_t
+ * 
+ * Bits [0-5]: interval length float (no sign)
+ * - [0-5] exponent, bias = 63 (no nans, no infinities)
+ *   - uint 0 => zero
+ *   - uint 1 to 63 => 2^-62 to 2^0
+ * Bits [6-15]: interval mid point
+ * - [6-10] exponent, bias = 31 (no nans, no infinities)
+ *   - uint 0 => zero
+ *   - uint 1 to 31 => 2^-30 to 2^0
+ * - [11-15] mantissa (with implicit leading bit), 5 bits
+ */
+// constexpr int c_Range16_LengthExpBias = 63;
+// constexpr int c_Range16_MidExpBias = 63;
+// _SPL_CONSTEXPR
+// uint16_t range16_from_midpoint(float midpoint, float length) noexcept
+// {
+//     auto e = (uint16_t)get_f32_biased_exp(length);
+//     if (e != 0)
+//     {
+//         e += c_Range16_LengthExpBias - 127;
+
+//         // if the mantissa is too high (two higher bits), then round up
+//         // auto m = reinterpret_cast<uint32_t&>(length);
+//         // if (m & 0x00400000)
+//         //     ++e;
+//     }
+//     auto e2 = (uint16_t)get_f32_biased_exp(midpoint);
+//     if (e2 != 0)
+//         e2 += c_Range16_MidExpBias - 127;
+//     auto m = reinterpret_cast<uint32_t&>(midpoint) & 0x007FFFFF;
+//     uint16_t r = (m >> 7) & 0xF000;
+//     return r | ((e2 & 0x3F) << 6) | (e & 0x3F);
+// }
+
+// _SPL_CONSTEXPR
+// void range16_extract(uint16_t value, float& midpoint, float& length) noexcept
+// {
+//     if (auto e = value & 0x3F; e == 0)
+//         length = 0;
+//     else
+//         length = exp2f(e - c_Range16_LengthExpBias);
+//     if (auto e = (value >> 6) & 0x3F; e == 0)
+//         midpoint = 0;
+//     else
+//     {
+//         // auto m = (value >> 11) | 0x20;
+//         auto m = (value >> 12) | 0x10;
+//         midpoint = ldexpf(m, e - c_Range16_MidExpBias - 4);
+//     }
+// }
+
+#define SPL_STACK_TYPE_NORMAL 0
+#define SPL_STACK_TYPE_HALF 1
+#define SPL_STACK_TYPE_RANGE16 2
+
+#define SPL_STACK_TYPE SPL_STACK_TYPE_HALF
+
 static DEVICE
 bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
     const vec2 patch[16],
@@ -569,18 +669,27 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         eV = 1
     };
 
-#ifdef SPL_BC_HEATMAP
-    int maxDepth = 1; // we already start with one element
-    int iterations = 0;
-#endif
     bool found = false;
     int cutsideStack = 0;
+#if SPL_STACK_TYPE == SPL_STACK_TYPE_NORMAL
     ArrayAdaptor<State> S ((State*)alloca(32 * sizeof (State)), 32); // a stack
-
     S.push_back({ .min = {0,0}, .max = {1,1} });
+    
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_HALF
+    struct State4
+    {
+        half2 mid, len;
+    };
+    auto S = (State4*)alloca(32 * sizeof (State4)); // a stack
+    int S_len = 0;
 
-    float distancePatch[16];
-    Patch d (distancePatch);
+    State e { .min = {0,0}, .max = {1,1} };
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_RANGE16
+    auto S = (uint32_t*)alloca(32 * sizeof (uint32_t)); // a stack
+    int S_len = 0;
+
+    State e { .min = {0,0}, .max = {1,1} };
+#endif
 
     vec2 buffer[16];
     Patch p (buffer);
@@ -590,11 +699,9 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
 
     do
     {
-#ifdef SPL_BC_HEATMAP
-        iterations++;
-#endif
+#if SPL_STACK_TYPE == SPL_STACK_TYPE_NORMAL
         auto &e = S.back();
-        const vec2 csize = e.max - e.min;
+#endif
         const bool cutside = cutsideStack & 1;
     
         // check tolerance
@@ -602,208 +709,225 @@ bool doBezierClipping2D_device(std::predicate<vec2> auto onHit,
         float d1 = (p.point(3,3) - p.point(0,0)).length();
         if (d0 < tol && d1 < tol)
         {
-            found |= approximateIntersection(onHit, p, e.min, e.max, csize);
-            cutsideStack >>= 1;
-            S.pop_back();
-            if (!S.empty())
-            {
-                State s = S.back();
-                patchCopy(buffer, patch, s.min, s.max);
-            }
-            continue;
-        }
-
-        vec2 L0, L1;
-        // find line L
-        if (cutside == Side::eU)
-        {
-            L0 = p.point(0,3) - p.point(0,0);
-            L1 = p.point(3,3) - p.point(3,0);
-        }
-        else // Side::eV
-        {
-            L0 = p.point(3,0) - p.point(0,0);
-            L1 = p.point(3,3) - p.point(0,3);
-        }
-        // vector parallel to the line L
-        const vec2 L = (L0 + L1).versor();
-        // vector perpendicular to the line L
-        const vec2 N = {-L.y, L.x};
-
-        // compute the distance patch
-        for (int i = 0; i < 16; i++)
-            d[i] = N.dot(p[i]);
-
-        // find regions to clip
-        constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
-        float lower = 1.0f, upper = 0.0f;
-        // compute where does the convex hull intersect the x-axis
-        float ytop[4]; // y top
-        float ybot[4]; // y bottom
-        for (int i = 0; i < 4; i++)
-        {
-            ybot[i] = ytop[i] = cutside == Side::eU ? d.point(i,0) : d.point(0,i);
-            for (int k = 1; k < 4; k++)
-            {
-                float y = cutside == Side::eU ? d.point(i,k) : d.point(k,i);
-                ytop[i] = fmax(ytop[i], y);
-                ybot[i] = fmin(ybot[i], y);
-            }
-        }
-        // find convex hull and its intersection
-        // graham scan
-        {
-            vec2 hull[9];
-            int len = 0;
-            // first and second points
-            hull[len++] = {over3[0], ybot[0]};
-            hull[len++] = {over3[1], ybot[1]};
-            // bottom points
-            for (int i = 2; i < 4; i++)
-            {
-                vec2 P3 {over3[i], ybot[i]};
-                auto& P2 = hull[len-1];
-                auto& P1 = hull[len-2];
-                if (isCCW(P2 - P1, P3 - P1) >= 0)
-                    hull[len++] = P3;
-                else
-                    hull[len-1] = P3;
-            }
-            // first top point (right to left)
-            hull[len++] = {over3[3], ytop[3]};
-            // top points
-            for (int i = 2; i >= 0; i--)
-            {
-                vec2 P3 = {over3[i], ytop[i]};
-                auto& P2 = hull[len-1];
-                auto& P1 = hull[len-2];
-                if (isCCW(P2 - P1, P3 - P1) >= 0)
-                    hull[len++] = P3;
-                else
-                    hull[len-1] = P3;
-            }
-            // duplicate the first point to close the cycle
-            hull[len++] = hull[0];
-            // find intersection and the clip range
-            for (int i = 1; i < len; i++)
-            {
-                vec2 A = hull[i-1];
-                vec2 B = hull[i];
-                vec2 s;
-                if (xAxisIntersection(s, A, B))
-                {
-                    if (s.x > s.y)
-                        std::swap(s.x, s.y);
-                    lower = fmin(lower, s.x);
-                    upper = fmax(upper, s.y);
-                }
-            }
-        }
-
-        __builtin_assume (lower >= 0.0f);
-        __builtin_assume (upper <= 1.0f);
-                
-        // preventing the algorithm from creating long and narrow subpatches
-        lower = lower * 0x0FFp-8f;
-        upper = upper * 0x101p-8f;
-
-        float delta = upper - lower;
-        if (delta < 0)
-        { // no intersection
-            cutsideStack >>= 1;
-            S.pop_back();
-            if (!S.empty())
-            {
-                State s = S.back();
-                patchCopy(buffer, patch, s.min, s.max);
-            }
-        }
-        else if (delta > 0.8f)
-        { // clipping too small; thus, subdivide
-            State s1;
-            if (cutside == Side::eU)
-            {
-                float hs = 0.5f * csize.x;
-                float hx = e.min.x + hs;
-                s1.max = e.max;
-                s1.min = { hx, e.min.y };
-                e.max.x = hx;
-                // e.min.x = e.min.x;
-                cutsideStack <<= 1;
-                cutsideStack |= 3;
-                // subpatchU(buffer, 0.0f, 0.5f);
-                subpatchU(buffer, 0.5f, 1.0f);
-            }
-            else // Side::eV
-            {
-                float hs = 0.5f * csize.y;
-                float hy = e.min.y + hs;
-                s1.max = e.max;
-                s1.min = { e.min.x, hy };
-                e.max.y = hy;
-                // e.min.y = e.min.y;
-                cutsideStack <<= 1;
-                cutsideStack &= ~3;
-                // subpatchV(buffer, 0.0f, 0.5f);
-                subpatchV(buffer, 0.5f, 1.0f);
-            }
-            // if (__builtin_expect (S.size() >= S.capacity() && !spilled, 0))
-            // {
-            //     constexpr int n = 32;
-            //     auto s = S.size();
-            //     auto p = alloca(n * sizeof (State));
-            //     spilled = true;
-            //     S = ArrayAdaptor<State>((State*) p, n);
-            //     for (int i = 0; i < s; i++)
-            //         S.push_back(localStack[i]);
-            // }
-            S.push_back(s1);
-
-#ifdef SPL_BC_HEATMAP
-            if (int n = S.size(); maxDepth < n)
-                maxDepth = n;
-#endif
+            found |= approximateIntersection(onHit, p, e.min, e.max, e.max - e.min);
         }
         else
-        { // clip
-            if (cutside == Side::eU)
-            {
-                float u0 = e.min.x + csize.x * lower;
-                float u1 = e.max.x - csize.x * (1.0f - upper);
-                subpatchU(buffer, lower, upper);
-                e.min.x = u0;
-                e.max.x = u1;
-                // e.cutside = Side::eV;
-            }
-            else // Side::eV
-            {
-                float v0 = e.min.y + csize.y * lower;
-                float v1 = e.max.y - csize.y * (1.0f - upper);
-                subpatchV(buffer, lower, upper);
-                e.min.y = v0;
-                e.max.y = v1;
-                // e.cutside = Side::eU;
-            }
-            cutsideStack ^= 1; // switch
-        }
-    }
-    while (!S.empty());
-
-#ifdef SPL_BC_HEATMAP
-    {
-        int d = maxDepth-1;
-        atomicAdd(&rt::s_Counters[d+2], 1);
-        iterations = min(63, iterations-1);
-        atomicAdd(rt::s_Counters+34+iterations, 1);
-
-        if (auto m = rt::g_BezierClippingHeatMap)
         {
-            auto i = blockIdx.x * blockDim.x + threadIdx.x;
-            auto j = blockIdx.y * blockDim.y + threadIdx.y;
-            if (m->at(i, j) < d)
-                m->at(i, j) = d;
+            // find regions to clip
+            constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
+            float lower = 1.0f, upper = 0.0f;
+            // compute where does the convex hull intersect the x-axis
+            float ytop[4]; // y top
+            float ybot[4]; // y bottom
+
+            {
+                float distancePatch[16];
+                Patch d (distancePatch);
+
+                {
+                    // find line L
+                    // vector parallel to the line L
+                    vec2 L = p.point(3,3) - p.point(0,0);
+                    // optimized calculation
+                    vec2 D = p.point(0,3) - p.point(3,0);
+                    if (cutside == Side::eU)
+                        L += D;
+                    else // Side::eV
+                        L -= D;
+                    L.normalize();
+
+                    // vector perpendicular to the line L
+                    const vec2 N = {-L.y, L.x};
+
+                    // compute the distance patch
+                    for (int i = 0; i < 16; i++)
+                        d[i] = N.dot(p[i]);
+                }
+
+                for (int i = 0; i < 4; i++)
+                {
+                    float y[]
+                    {
+                        cutside == Side::eU ? d.point(i,0) : d.point(0,i),
+                        cutside == Side::eU ? d.point(i,1) : d.point(1,i),
+                        cutside == Side::eU ? d.point(i,2) : d.point(2,i),
+                        cutside == Side::eU ? d.point(i,3) : d.point(3,i)
+                    };
+                    ybot[i] = fmin(fmin(y[0],y[1]),fmin(y[2],y[3]));
+                    ytop[i] = fmax(fmax(y[0],y[1]),fmax(y[2],y[3]));
+                }
+            }
+
+            // find convex hull and its intersection
+            // graham scan
+            {
+                const vec2 hull[]
+                {
+                    // bottom points
+                    {over3[2], ybot[2]},
+                    {over3[3], ybot[3]},
+                    // top points (right to left)
+                    {over3[3], ytop[3]},
+                    {over3[2], ytop[2]},
+                    {over3[1], ytop[1]},
+                    {over3[0], ytop[0]},
+                    // duplicate the first point to close the cycle
+                    {over3[0], ybot[0]}
+                };
+                // first and second points
+                vec2 P1 {over3[0], ybot[0]};
+                vec2 P2 {over3[1], ybot[1]};
+                for (const vec2& P3 : hull)
+                {
+                    if (isCCW(P2 - P1, P3 - P1) >= 0)
+                    {
+                        if (vec2 s; xAxisIntersection(s, P1, P2))
+                        {
+                            // so far, performed better than plain ifs
+                            lower = fmin(lower, fmin(s.x, s.y));
+                            upper = fmax(upper, fmax(s.x, s.y));
+                        }
+                        P1 = P2;
+                    }
+                    P2 = P3;
+                }
+                if (vec2 s; xAxisIntersection(s, P1, P2))
+                {
+                    lower = fmin(lower, fmin(s.x, s.y));
+                    upper = fmax(upper, fmax(s.x, s.y));
+                }
+            }
+
+            __builtin_assume (lower >= 0.0f);
+            __builtin_assume (upper <= 1.0f);
+                    
+            // preventing the algorithm from creating long and narrow subpatches
+            lower = lower * 0x0FFp-8f;
+            // upper = upper * 0x101p-8f;
+            upper = upper + (1 - upper) * 0x001p-8f;
+
+            float delta = upper - lower;
+            if (delta > 0.8f)
+            { // clipping too small; thus, subdivide
+                State s1;
+                if (cutside == Side::eU)
+                {
+                    // float hs = 0.5f * csize.x;
+                    float hx = 0.5f * (e.min.x + e.max.x);
+                    s1.max = e.max;
+                    s1.min = { hx, e.min.y };
+                    e.max.x = hx;
+                    // e.min.x = e.min.x;
+                    cutsideStack <<= 1;
+                    cutsideStack |= 3;
+                    // subpatchU(buffer, 0.0f, 0.5f);
+                    subpatchU(buffer, 0.5f, 1.0f);
+                }
+                else // Side::eV
+                {
+                    // float hs = 0.5f * csize.y;
+                    float hy = 0.5f * (e.min.y + e.max.y);
+                    s1.max = e.max;
+                    s1.min = { e.min.x, hy };
+                    e.max.y = hy;
+                    // e.min.y = e.min.y;
+                    cutsideStack <<= 1;
+                    cutsideStack &= ~3;
+                    // subpatchV(buffer, 0.0f, 0.5f);
+                    subpatchV(buffer, 0.5f, 1.0f);
+                }
+#if SPL_STACK_TYPE == SPL_STACK_TYPE_NORMAL
+                S.push_back(s1);
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_HALF
+                if (S_len >= 32)
+                    __trap();
+
+                State4 s;
+                s.mid.x = 0.5f * (e.max.x + e.min.x);
+                s.mid.y = 0.5f * (e.max.y + e.min.y);
+                s.len.x = e.max.x - e.min.x;
+                s.len.y = e.max.y - e.min.y;
+                S[S_len++] = s;
+
+                e = s1;
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_RANGE16
+                if (S_len >= 32)
+                    __trap();
+
+                auto len = e.max - e.min;
+                uint32_t r0 = range16_from_midpoint(e.min.x + 0.5f*len.x, len.x);
+                uint32_t r1 = range16_from_midpoint(e.min.y + 0.5f*len.y, len.y);
+                S[S_len++] = (r0 << 16) | (r1 & 0xFFFF);
+
+                e = s1;
+#endif
+                continue;
+            }
+            else if (delta > 0)
+            { // clip
+                if (cutside == Side::eU)
+                {
+                    float sx = e.max.x - e.min.x;
+                    float u0 = e.min.x + sx * lower;
+                    float u1 = e.max.x - sx * (1.0f - upper);
+                    subpatchU(buffer, lower, upper);
+                    e.min.x = u0;
+                    e.max.x = u1;
+                    // e.cutside = Side::eV;
+                }
+                else // Side::eV
+                {
+                    float sy = e.max.y - e.min.y;
+                    float v0 = e.min.y + sy * lower;
+                    float v1 = e.max.y - sy * (1.0f - upper);
+                    subpatchV(buffer, lower, upper);
+                    e.min.y = v0;
+                    e.max.y = v1;
+                    // e.cutside = Side::eU;
+                }
+                cutsideStack ^= 1; // switch
+                continue;
+            }
         }
+
+        // pop stack
+        cutsideStack >>= 1;
+#if SPL_STACK_TYPE == SPL_STACK_TYPE_NORMAL
+        S.pop_back();
+        if (!S.empty())
+        {
+            State s = S.back();
+            patchCopy(buffer, patch, s.min, s.max);
+        }
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_HALF
+        if (--S_len >= 0)
+        {
+            auto s = S[S_len];
+            e.min.x = float(s.mid.x) - 0.5f * float(s.len.x);
+            e.max.x = float(s.mid.x) + 0.5f * float(s.len.x);
+            e.min.y = float(s.mid.y) - 0.5f * float(s.len.y);
+            e.max.y = float(s.mid.y) + 0.5f * float(s.len.y);
+            patchCopy(buffer, patch, e.min, e.max);
+        }
+#elif SPL_STACK_TYPE == SPL_STACK_TYPE_RANGE16
+        if (--S_len >= 0)
+        {
+            auto s = S[S_len];
+            float mid, len;
+            range16_extract(s >> 16, mid, len);
+            e.min.x = mid - 0.5f * len;
+            e.max.x = mid + 0.5f * len;
+            range16_extract((uint16_t)s, mid, len);
+            e.min.y = mid - 0.5f * len;
+            e.max.y = mid + 0.5f * len;
+            patchCopy(buffer, patch, e.min, e.max);
+        }
+#endif
     }
+#if SPL_STACK_TYPE == SPL_STACK_TYPE_NORMAL
+    while (!S.empty());
+#else
+    while (S_len >= 0);
 #endif
 
     return found;
