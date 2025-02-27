@@ -4,7 +4,7 @@
 #include <cuda/std/cassert>
 #include <cuda/std/span>
 
-#define _SPL_CONSTEXPR_ATTR __host__ __device__ constexpr
+#include "AlignedTypes.h"
 
 namespace cg
 {
@@ -15,26 +15,26 @@ namespace detail
 {
 
 template<typename T, typename... Args>
-_SPL_CONSTEXPR_ATTR T& construct_at(T* p, Args... args)
+_SPL_CONSTEXPR T& construct_at(T* p, Args... args)
 {
     ::new (p) T(std::forward<Args>(args)...);
 }
 
 template<typename T>
-_SPL_CONSTEXPR_ATTR void destroy_at(T* p) noexcept
+_SPL_CONSTEXPR void destroy_at(T* p) noexcept
 {
     p->~T();
 }
 
 template<typename T>
-_SPL_CONSTEXPR_ATTR void destroy_n(T* p, int n) noexcept
+_SPL_CONSTEXPR void destroy_n(T* p, int n) noexcept
 {
     for (int i = 0; i < n; i++)
         destroy_at(p+i);
 }
 
 template<typename T>
-_SPL_CONSTEXPR_ATTR void destroy(T* p, T* q) noexcept
+_SPL_CONSTEXPR void destroy(T* p, T* q) noexcept
 {
     for (; p < q; p++)
         destroy_at(p);
@@ -47,62 +47,62 @@ public:
     using value_type = T;
     using size_type = SizeT;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void clear()
     {
         detail::destroy_n(_data, _size);
         _size = 0;
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     bool empty() const { return _size == 0; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T& front() const { return _data[0]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T& back() const { return _data[_size - 1]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T& front() { return _data[0]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T& back() { return _data[_size - 1]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T* cbegin() const { return _data; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T* cend() const { return _data + _size; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T* begin() const { return _data; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T* end() const { return _data + _size; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T* begin() { return _data; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T* end() { return _data + _size; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T& operator[] (size_type i) const { return _data[i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T& operator[] (size_type i) { return _data[i]; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     const T* data() const noexcept { return _data; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T* data() noexcept { return _data; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     size_type size() const noexcept { return _size; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     size_type size_bytes() const noexcept { return _size * sizeof (T); }
 
 protected:
@@ -119,13 +119,13 @@ public:
     using value_type = T;
     using size_type = uint32_t;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     FixedArray() = default;
 
-    static _SPL_CONSTEXPR_ATTR
+    static _SPL_CONSTEXPR
     size_type capacity() { return (size_type) extent; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void resize(size_type n)
     {
         if (n > this->_size)
@@ -142,7 +142,7 @@ public:
     }
 
     template<typename... Args>
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T& emplace_back(Args&&... args)
     {
         assert(this->_size+1 <= capacity());
@@ -150,14 +150,14 @@ public:
         return this->back();
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void push_back(const T& t)
     {
         assert(this->_size+1 <= capacity());
         detail::construct_at(this->_data + (this->_size++), t);
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void pop_back()
     {
         detail::destroy_at(this->_data + (--this->_size));
@@ -175,24 +175,24 @@ public:
     using value_type = T;
     using size_type = SizeT;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     ArrayAdaptor() = default;
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     ArrayAdaptor(T* p, size_type max_size)
         : _capacity{max_size} { this->_data = p, this->_size = 0; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     ArrayAdaptor(T* p, size_type n, size_type max_size)
         : _capacity{max_size} { this->_data = p, this->_size = n; }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     size_type capacity() const
     {
         return _capacity;
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void resize(size_type n)
     {
         if (n > this->_size)
@@ -209,7 +209,7 @@ public:
     }
 
     template<typename... Args>
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     T& emplace_back(Args&&... args)
     {
         assert(this->_size+1 <= _capacity);
@@ -217,14 +217,14 @@ public:
         return this->back();
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void push_back(const T& t)
     {
         assert(this->_size+1 <= _capacity);
         new (this->_data + (this->_size++)) T(t);
     }
 
-    _SPL_CONSTEXPR_ATTR
+    _SPL_CONSTEXPR
     void pop_back()
     {
         detail::destroy_at(this->_data + (--this->_size));

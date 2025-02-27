@@ -14,11 +14,9 @@
 #include "ColorMap.h"
 #include "GLSurface.h"
 #include "Framebuffer.h"
-// #include "SceneReaderExt.h"
 #include "Spline.h"
 #include "SplRenderer.h"
 #include "SurfacePipeline.h"
-#include "RayTracer.h"
 #include "rt/CPURayTracer.h"
 #include "rt/RayTracer.h"
 
@@ -139,10 +137,6 @@ protected:
     static void inspectLight(MainWindow&, graph::LightProxy&);
     static void inspectSurface(MainWindow&, SurfaceProxy&);
 
-    void prevRenderScene();
-    Ref<GLImage> _prevImage;
-    Ref<RayTracer> _prevRayTracer;
-
     enum RenderMethod
     {
         eCPU, eCUDA
@@ -151,7 +145,7 @@ protected:
     struct
     {
         int count = 9;
-        int cooldown = 140; // cooldown time between tests (milliseconds) for cache clearing
+        int cooldown = 250; // cooldown time between tests (milliseconds) for cache clearing
     } _testOptions;
 
     bool _saveImages = false;

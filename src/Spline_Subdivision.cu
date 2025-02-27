@@ -13,120 +13,8 @@
 namespace cg::spline
 {
 
-using ::cuda::std::numeric_limits;
-
-/**
- * @brief Computes the distance between a point P and a plane represented by the
- *        normal vector N and origin O.
- * 
- * @param N The plane normal vector (must be unit length)
- * @param O The plane origin point
- * @param P The point whose distance is being measured
- * @return float The computed distance
- */
-_SPL_CONSTEXPR_ATTR
-float distance(const vec3& N, const vec3& O, const vec3& P)
-{
-    return N.dot(P - O);
-}
-
-/**
- * @brief Computes the distance between a point P and a line represented by the
- *        normal vector N and origin O.
- * 
- * @param N The line normal vector (must be unit length)
- * @param O The line origin point
- * @param P The point whose distance is being measured
- * @return float The computed distance
- */
-_SPL_CONSTEXPR_ATTR
-float distance(const vec2& N, const vec2& O, const vec2& P)
-{
-    return N.dot(P - O);
-}
-
-static HOST DEVICE
-bool triangleOriginIntersection(vec2 &coord, vec2 P, vec2 A, vec2 B)
-{
-    vec2 p = A - P;
-    vec2 q = B - P;
-    float det = p.x*q.y - q.x*p.y;
-
-    // `det` will be often small (< 1e-7) but not zero
-    // and the intersection should not be discarded
-    if (fabs(det) < 0x1p-80f) // ~ 1e-24f (not a subnormal number)
-        return false;
-
-    det = 1.0f / det;
-
-    // 2x2 inversion matrix
-    vec2 m0 = vec2( q.y, -q.x); // first line
-    vec2 m1 = vec2(-p.y,  p.x); // second line
-
-    auto u = det * m0.dot(-P);
-    if (u < 0 || u > 1)
-        return false;
-
-    auto v = det * m1.dot(-P);
-    if (v < 0 || u + v > 1)
-        return false;
-
-    coord.set(u, v);
-    return true;
-}
-
-static HOST DEVICE
-bool approximateIntersection(std::predicate<vec2> auto onHit,
-    const Patch<vec2>& p, vec2 pmin, vec2 pmax, vec2 psize)
-{
-    bool found = false;
-    // there are cases where is impossible to clip the patch because
-    // it is already so small that it is a plane and the intersection
-    // has been already found
-    // thus, the infinite subdivision must be stopped
-
-    // intersect triangles to avoid multiple intersection problem
-    auto p00 = p.point(0,0);   // (u,v) = (0,0)
-    auto p10 = p.point(3,0);   // (1,0)
-    auto p01 = p.point(0,3);   // (0,1)
-    auto p11 = p.point(3,3);   // (1,1)
-
-    vec2 coord;
-    if (triangleOriginIntersection(coord, p00, p10, p01))
-    {
-        found |= onHit(pmin + coord * psize);
-    }
-    if (triangleOriginIntersection(coord, p11, p01, p10))
-    {
-        found |= onHit(pmax - coord * psize);
-    }
-    return found;
-}
-
-constexpr DEVICE
-void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
-{
-    for (int i = 0; i < 16; i++)
-        q[i] = patch[i];
-
-    mat::subpatchU(q, cmin.x, cmax.x);
-    mat::subpatchV(q, cmin.y, cmax.y);
-}
-
-constexpr HOST DEVICE
-vec2 min(const vec2 a, const vec2 b)
-{
-    return {fmin(a.x, b.x), fmin(a.y, b.y)};
-}
-
-constexpr HOST DEVICE
-vec2 max(const vec2 a, const vec2 b)
-{
-    return {fmax(a.x, b.x), fmax(a.y, b.y)};
-}
-
 static DEVICE
-bool doSubdivision2D(std::predicate<vec2> auto onHit,
+bool doSubdivision2D_device(std::predicate<vec2> auto onHit,
     const vec2 patch[16],
     float tol)
 {
@@ -273,16 +161,11 @@ bool doSubdivision_device(Intersection& hit,
         }
         return false;
     };
-    return doSubdivision2D(onHit, patch2D, tol);
+    return doSubdivision2D_device(onHit, patch2D, tol);
 }
 
-} // namespace cg::spline
 
-
-namespace cg::spline
-{
-
-bool doSubdivision(Intersection& hit,
+bool doSubdivision_host(Intersection& hit,
     const Ray3f& ray,
     const vec4 buffer[],
     const uint32_t patch[16],
@@ -404,6 +287,19 @@ bool doSubdivision(Intersection& hit,
     return found;
 }
 
+HOST DEVICE
+bool doSubdivision(Intersection& hit,
+    const Ray3f& ray,
+    const vec4 buffer[],
+    const uint32_t patch[16],
+    float threshold)
+{
+#ifndef __CUDA_ARCH__
+    return doSubdivision_host(hit, ray, buffer, patch, threshold);
+#else
+    return doSubdivision_device(hit, ray, buffer, patch, threshold);
+#endif
+}
 
 } // namespace cg::spline
 

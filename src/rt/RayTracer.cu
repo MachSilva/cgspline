@@ -191,7 +191,7 @@ void random_state_init(curand_state_type* p)
     curand_init(42, k, 0, p+k);
 }
 
-__global__ __launch_bounds__(64)
+__global__ // __launch_bounds__(64)
 void render(Context* ctx)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;

@@ -30,36 +30,6 @@ bool g_BezierClippingEnable = true;
 #endif
 
 /**
- * @brief Computes the distance between a point P and a plane represented by the
- *        normal vector N and origin O.
- * 
- * @param N The plane normal vector (must be unit length)
- * @param O The plane origin point
- * @param P The point whose distance is being measured
- * @return float The computed distance
- */
-_SPL_CONSTEXPR_ATTR
-float distance(const vec3& N, const vec3& O, const vec3& P)
-{
-    return N.dot(P - O);
-}
-
-/**
- * @brief Computes the distance between a point P and a line represented by the
- *        normal vector N and origin O.
- * 
- * @param N The line normal vector (must be unit length)
- * @param O The line origin point
- * @param P The point whose distance is being measured
- * @return float The computed distance
- */
-_SPL_CONSTEXPR_ATTR
-float distance(const vec2& N, const vec2& O, const vec2& P)
-{
-    return N.dot(P - O);
-}
-
-/**
  * @brief Performs Bézier clipping on an already projected non-rational patch.
  *        Intersection points lie in the origin (0,0) of the projected space.
  * 
@@ -154,7 +124,7 @@ bool doBezierClipping(Intersection& hit,
  * @return true  Intersection found
  * @return false No intersection
  */
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 bool xAxisIntersection(vec2& result, const vec2 A, const vec2 B)
 {
     constexpr float eps = numeric_limits<float>::epsilon();
@@ -188,75 +158,17 @@ bool xAxisIntersection(vec2& result, const vec2 A, const vec2 B)
 // Returns a positive value if Q is a vector obtained by rotating P counter
 // clockwise by less than 180º; otherwise, returns a negative value; or zero
 // if both vectors are parallel.
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 float isCCW(vec2 P, vec2 Q)
 {
     return P.x*Q.y - P.y*Q.x;
 }
 
 // Returns a vector perpendicular to the segment AB. A and B are points.
-_SPL_CONSTEXPR_ATTR
+_SPL_CONSTEXPR
 vec2 perpendicular(vec2 A, vec2 B)
 {
     return {A.y - B.y, B.x - A.x}; // rotate (B - A) by 90° degrees ccw
-}
-
-static HOST DEVICE
-bool triangleOriginIntersection(vec2 &coord, vec2 P, vec2 A, vec2 B)
-{
-    vec2 p = A - P;
-    vec2 q = B - P;
-    float det = p.x*q.y - q.x*p.y;
-
-    // `det` will be often small (< 1e-7) but not zero
-    // and the intersection should not be discarded
-    if (fabs(det) < 0x1p-80f) // ~ 1e-24f (not a subnormal number)
-        return false;
-
-    det = 1.0f / det;
-
-    // 2x2 inversion matrix
-    vec2 m0 = vec2( q.y, -q.x); // first line
-    vec2 m1 = vec2(-p.y,  p.x); // second line
-
-    auto u = det * m0.dot(-P);
-    if (u < 0 || u > 1)
-        return false;
-
-    auto v = det * m1.dot(-P);
-    if (v < 0 || u + v > 1)
-        return false;
-
-    coord.set(u, v);
-    return true;
-}
-
-static HOST DEVICE
-bool approximateIntersection(std::predicate<vec2> auto onHit,
-    const Patch<vec2>& p, vec2 pmin, vec2 pmax, vec2 psize)
-{
-    bool found = false;
-    // there are cases where is impossible to clip the patch because
-    // it is already so small that it is a plane and the intersection
-    // has been already found
-    // thus, the infinite subdivision must be stopped
-
-    // intersect triangles to avoid multiple intersection problem
-    auto p00 = p.point(0,0);   // (u,v) = (0,0)
-    auto p10 = p.point(3,0);   // (1,0)
-    auto p01 = p.point(0,3);   // (0,1)
-    auto p11 = p.point(3,3);   // (1,1)
-
-    vec2 coord;
-    if (triangleOriginIntersection(coord, p00, p10, p01))
-    {
-        found |= onHit(pmin + coord * psize);
-    }
-    if (triangleOriginIntersection(coord, p11, p01, p10))
-    {
-        found |= onHit(pmax - coord * psize);
-    }
-    return found;
 }
 
 static HOST DEVICE

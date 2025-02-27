@@ -35,10 +35,7 @@ add_executable(cgspline
     src/MainWindow.cpp
     src/MainWindow_UI.cpp
     src/PatchBVH.cpp
-    src/RayTracer.cpp
-    # src/SceneReaderExt.cpp
     src/Spline_BezierClipping.cu
-    # src/Spline_Subdivision.cpp
     src/Spline_Subdivision.cu
     src/Spline.cu
     src/SplRenderer.cpp

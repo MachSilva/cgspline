@@ -706,39 +706,6 @@ void MainWindow::renderScene()
 #endif
 }
 
-void MainWindow::prevRenderScene()
-{
-    if (_viewMode != ViewMode::Renderer)
-        return;
-
-    auto camera = graph::CameraProxy::current();
-    if (!camera)
-        camera = editor()->camera();
-
-    if (_prevImage == nullptr)
-    {
-#if SPL_BC_STATS
-        spline::stats::g_BezierClippingData.clear();
-        spline::stats::g_BezierClippingEnable = false;
-#endif
-
-        // Create task
-        _prevImage = new GLImage(width(), height());
-        if (_prevRayTracer == nullptr)
-            _prevRayTracer = new RayTracer(*scene(), *camera);
-        else
-            _prevRayTracer->setCamera(*camera);
-        // _prevRayTracer->setProgressCallback(progressCallback);
-        _prevRayTracer->setMaxRecursionLevel(6);
-        _prevRayTracer->renderImage(*_prevImage);
-
-#if SPL_BC_STATS
-        spline::stats::g_BezierClippingEnable = true;
-#endif
-    }
-    _prevImage->draw(0, 0);
-}
-
 void MainWindow::drawSelectedObject(const graph::SceneObject& object)
 {
     if (!object.visible()) return;

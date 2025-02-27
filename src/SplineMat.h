@@ -245,4 +245,15 @@ void subpatch(
     subpatchU(patch, umin, umax);
 }
 
+template<typename vec>
+_SPL_CONSTEXPR
+void patchCopy(vec* q, const vec patch[16], vec cmin, vec cmax)
+{
+    for (int i = 0; i < 16; i++)
+        q[i] = patch[i];
+
+    subpatchU(q, cmin.x, cmax.x);
+    subpatchV(q, cmin.y, cmax.y);
+}
+
 } // namespace cg::spline::mat
