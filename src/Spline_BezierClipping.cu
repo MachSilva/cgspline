@@ -247,116 +247,110 @@ bool doBezierClipping2D_host(std::predicate<vec2> auto onHit,
             continue;
         }
 
-        vec2 L0, L1;
-        // find line L
-        if (e.cutside == State::eU)
-        {
-            L0 = p.point(0,3) - p.point(0,0);
-            L1 = p.point(3,3) - p.point(3,0);
-        }
-        else // State::eV
-        {
-            L0 = p.point(3,0) - p.point(0,0);
-            L1 = p.point(3,3) - p.point(0,3);
-        }
-        // vector parallel to the line L
-        const vec2 L = (L0 + L1).versor();
-        // vector perpendicular to the line L
-        const vec2 N = {-L.y, L.x};
-
-        // compute the distance patch
-        for (int i = 0; i < 16; i++)
-            d[i] = N.dot(p[i]);
-
         // find regions to clip
         constexpr float over3[] {0.0f, 1.0f/3.0f, 2.0f/3.0f, 1.0f};
         float lower = 1.0f, upper = 0.0f;
         // compute where does the convex hull intersect the x-axis
         float ytop[4]; // y top
         float ybot[4]; // y bottom
-        // one branch instead of 16
-        if (e.cutside == State::eU)
+
         {
-            for (int i = 0; i < 4; i++)
+            float distancePatch[16];
+            Patch d (distancePatch);
+
             {
-                ybot[i] = ytop[i] = d.point(i,0);
-                for (int k = 1; k < 4; k++)
+                // find line L
+                // vector parallel to the line L
+                vec2 L = p.point(3,3) - p.point(0,0);
+                // optimized calculation
+                vec2 D = p.point(0,3) - p.point(3,0);
+                if (e.cutside == State::eU)
+                    L += D;
+                else // State::eV
+                    L -= D;
+                L.normalize();
+
+                // vector perpendicular to the line L
+                const vec2 N = {-L.y, L.x};
+
+                // compute the distance patch
+                for (int i = 0; i < 16; i++)
+                    d[i] = N.dot(p[i]);
+            }
+
+            // one branch instead of 16
+            if (e.cutside == State::eU)
+            {
+                for (int i = 0; i < 4; i++)
                 {
-                    float y = d.point(i,k);
-                    ytop[i] = fmax(ytop[i], y);
-                    ybot[i] = fmin(ybot[i], y);
+                    ybot[i] = ytop[i] = d.point(i,0);
+                    for (int k = 1; k < 4; k++)
+                    {
+                        float y = d.point(i,k);
+                        ytop[i] = fmax(ytop[i], y);
+                        ybot[i] = fmin(ybot[i], y);
+                    }
+                }
+            }
+            else // State::eV
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    ybot[i] = ytop[i] = d.point(0,i);
+                    for (int k = 1; k < 4; k++)
+                    {
+                        float y = d.point(k,i);
+                        ytop[i] = fmax(ytop[i], y);
+                        ybot[i] = fmin(ybot[i], y);
+                    }
                 }
             }
         }
-        else // State::eV
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                ybot[i] = ytop[i] = d.point(0,i);
-                for (int k = 1; k < 4; k++)
-                {
-                    float y = d.point(k,i);
-                    ytop[i] = fmax(ytop[i], y);
-                    ybot[i] = fmin(ybot[i], y);
-                }
-            }
-        }
+        
         // find convex hull and its intersection
         // graham scan
-        vec2 hull[9];
-        int len = 0;
-        // first and second points
-        hull[len++] = {over3[0], ybot[0]};
-        hull[len++] = {over3[1], ybot[1]};
-        // bottom points
-        for (int i = 2; i < 4; i++)
         {
-            vec2 P3 {over3[i], ybot[i]};
-            auto& P2 = hull[len-1];
-            auto& P1 = hull[len-2];
-            if (isCCW(P2 - P1, P3 - P1) >= 0)
-                hull[len++] = P3;
-            else
-                hull[len-1] = P3;
-        }
-        // first top point (right to left)
-        hull[len++] = {over3[3], ytop[3]};
-        // top points
-        for (int i = 2; i >= 0; i--)
-        {
-            vec2 P3 = {over3[i], ytop[i]};
-            auto& P2 = hull[len-1];
-            auto& P1 = hull[len-2];
-            if (isCCW(P2 - P1, P3 - P1) >= 0)
-                hull[len++] = P3;
-            else
-                hull[len-1] = P3;
-        }
-        // duplicate the first point to close the cycle
-        hull[len++] = hull[0];
-        // find intersection and the clip range
-        for (int i = 1; i < len; i++)
-        {
-            vec2 A = hull[i-1];
-            vec2 B = hull[i];
-            if (vec2 s; xAxisIntersection(s, A, B))
+            const vec2 hull[]
+            {
+                // bottom points
+                {over3[2], ybot[2]},
+                {over3[3], ybot[3]},
+                // top points (right to left)
+                {over3[3], ytop[3]},
+                {over3[2], ytop[2]},
+                {over3[1], ytop[1]},
+                {over3[0], ytop[0]},
+                // duplicate the first point to close the cycle
+                {over3[0], ybot[0]}
+            };
+            // first and second points
+            vec2 P1 {over3[0], ybot[0]};
+            vec2 P2 {over3[1], ybot[1]};
+            for (const vec2& P3 : hull)
+            {
+                if (isCCW(P2 - P1, P3 - P1) >= 0)
+                {
+                    if (vec2 s; xAxisIntersection(s, P1, P2))
+                    {
+                        // so far, performed better than plain ifs
+                        lower = fmin(lower, s.x);
+                        upper = fmax(upper, s.y);
+                    }
+                    P1 = P2;
+                }
+                P2 = P3;
+            }
+            if (vec2 s; xAxisIntersection(s, P1, P2))
             {
                 lower = fmin(lower, s.x);
                 upper = fmax(upper, s.y);
             }
         }
 
-        // TODO Improve this step
-        if (lower <= upper)
-        { // preventing the algorithm from creating long and narrow subpatches
-            constexpr float minspan = 0.01f;
-            auto mid = 0.5f * (lower + upper);
-            if (upper - lower < minspan)
-            {
-                lower = fmax(0.0f, mid - 0.5f * minspan);
-                upper = fmin(1.0f, mid + 0.5f * minspan);
-            }
-        }
+        // preventing the algorithm from creating long and narrow subpatches
+        lower = lower * 0x0FFp-8f;
+        // upper = upper * 0x101p-8f;
+        upper = upper + (1 - upper) * 0x001p-8f;
 
 #if defined(SPL_BC_STATS) && !defined(__CUDA_ARCH__)
         if (searchData)
@@ -448,16 +442,6 @@ bool doBezierClipping2D_host(std::predicate<vec2> auto onHit,
 #endif
 
     return found;
-}
-
-constexpr DEVICE
-void patchCopy(vec2* q, const vec2 patch[16], vec2 cmin, vec2 cmax)
-{
-    for (int i = 0; i < 16; i++)
-        q[i] = patch[i];
-
-    mat::subpatchU(q, cmin.x, cmax.x);
-    mat::subpatchV(q, cmin.y, cmax.y);
 }
 
 static_assert(numeric_limits<float>::is_iec559);
