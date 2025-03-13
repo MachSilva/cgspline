@@ -12,10 +12,13 @@
 namespace cg::rt
 {
 
+using key_t = uint32_t;
+
 struct BVH
 {
-    static constexpr auto EMPTY = uint32_t(-1);
-    static constexpr uint32_t ROOT_KEY = 1;
+    static constexpr int MAX_BITS = 8 * sizeof (key_t);
+    static constexpr auto EMPTY = key_t(-1);
+    static constexpr auto ROOT_KEY = key_t(1);
 
     struct __align__(16) Node
     {
@@ -51,7 +54,7 @@ struct BVH
     std::span<const Node>     nodes() const noexcept { return _nodes; }
     std::span<Node>           nodes() noexcept { return _nodes; }
     std::span<const uint32_t> indices() const noexcept { return _indices; }
-    std::span<const uint32_t> keys() const noexcept { return _keys; }
+    std::span<const key_t>    keys() const noexcept { return _keys; }
 
     void build(std::span<ElementData> elements, uint32_t elementsPerNode = 1);
 
@@ -83,32 +86,38 @@ private:
     PerfectHashFunction _hash;
 
     Array<Node> _nodes;
-    Array<uint32_t> _keys;
+    Array<key_t> _keys;
     Array<uint32_t> _indices;
     Array<uint32_t> _table;
 
-    void link(Node* node, uint32_t sibling);
-    uint32_t split(std::span<ElementData> elements, uint32_t key);
-    uint32_t wrap(std::span<ElementData> elements, uint32_t key);
+    void link(Node* node, key_t sibling);
+    key_t split(std::span<ElementData> elements, key_t key);
+    key_t wrap(std::span<ElementData> elements, key_t key);
 };
 
 namespace binarytree
 {
 
-__host__ __device__
-constexpr uint32_t parent(uint32_t node) { return node >> 1U; }
 
+template<typename T>
 __host__ __device__
-constexpr uint32_t sibling(uint32_t node) { return node ^ 1U; }
+constexpr T parent(T node) { return node >> 1U; }
 
+template<typename T>
 __host__ __device__
-constexpr uint32_t left(uint32_t node) { return node << 1U; }
+constexpr T sibling(T node) { return node ^ 1U; }
 
+template<typename T>
 __host__ __device__
-constexpr uint32_t right(uint32_t node) { return sibling(left(node)); }
+constexpr T left(T node) { return node << 1U; }
 
+template<typename T>
 __host__ __device__
-constexpr uint32_t uncle(uint32_t node) { return sibling(parent(node)); }
+constexpr T right(T node) { return sibling(left(node)); }
+
+template<typename T>
+__host__ __device__
+constexpr T uncle(T node) { return sibling(parent(node)); }
 
 } // namespace binarytree
 
@@ -116,12 +125,22 @@ constexpr uint32_t uncle(uint32_t node) { return sibling(parent(node)); }
  * @brief Count trailing zeros
  */
 static inline __host__ __device__
-int ctz(unsigned int x)
+int ctz(uint32_t x) noexcept
 {
 #if !defined(__CUDA_ARCH__)
     return std::countr_zero(x);
 #else
     return __clz(__brev(x));
+#endif
+}
+
+static inline __host__ __device__
+int ctz(uint64_t x) noexcept
+{
+#if !defined(__CUDA_ARCH__)
+    return std::countr_zero(x);
+#else
+    return __clzll(__brevll(x));
 #endif
 }
 
@@ -162,14 +181,14 @@ bool BVH::hashIntersect(Intersection& hit, const Ray& ray,
 {
     const vec3 D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
-    uint32_t key = BVH::ROOT_KEY;
-    uint32_t postponed = 0;
+    key_t key = BVH::ROOT_KEY;
+    key_t postponed = 0;
     int bits = 0;
     bool result = false;
 
     while (true)
     {
-        assert(bits >= 0 && bits < 32 && "BVH intersect max depth achieved");
+        assert(bits < MAX_BITS && "BVH intersect max depth achieved");
 
         if (!node->isLeaf())
         {
@@ -252,13 +271,13 @@ bool BVH::hashIntersect(const Ray& ray,
 {
     const vec3 D_1 = ray.direction.inverse();
     const Node* node = _nodes.data();
-    uint32_t key = BVH::ROOT_KEY;
-    uint32_t postponed = 0;
+    key_t key = BVH::ROOT_KEY;
+    key_t postponed = 0;
     int bits = 0;
 
     while (true)
     {
-        assert(bits >= 0 && bits < 32 && "BVH intersect max depth achieved");
+        assert(bits < MAX_BITS && "BVH intersect max depth achieved");
         if (!node->isLeaf())
         {
             float L0, L1;

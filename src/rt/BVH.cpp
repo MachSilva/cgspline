@@ -37,10 +37,10 @@ void BVH::buildHashTable(cudaStream_t stream)
     }
 }
 
-uint32_t BVH::split(std::span<ElementData> elements, uint32_t key)
+key_t BVH::split(std::span<ElementData> elements, key_t key)
 {
     auto count = elements.size();
-    if (count <= _elementsPerNode)
+    if (count <= _elementsPerNode || key & (1 << (MAX_BITS-1)))
         return wrap(elements, key);
 
     Bounds3f box {};
@@ -79,7 +79,7 @@ uint32_t BVH::split(std::span<ElementData> elements, uint32_t key)
     return idx;
 }
 
-uint32_t BVH::wrap(std::span<ElementData> elements, uint32_t key)
+key_t BVH::wrap(std::span<ElementData> elements, key_t key)
 {
     auto count = elements.size();
     if (count == 0)
@@ -107,7 +107,7 @@ uint32_t BVH::wrap(std::span<ElementData> elements, uint32_t key)
     return _nodes.size() - 1;
 }
 
-void BVH::link(Node* node, uint32_t sibling)
+void BVH::link(Node* node, key_t sibling)
 {
     if (node->isLeaf())
         return;
